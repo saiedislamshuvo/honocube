@@ -1,0 +1,213 @@
+.hero {
+  padding: 6rem 0;
+  background: transparent !important;
+  text-align: left; /* Left align for desktop */
+}
+
+.hero-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4rem;
+}
+
+.hero-text {
+  flex: 1.2;
+}
+
+.hero-code {
+  flex: 1;
+  min-width: 0; /* Prevents code block from overflowing */
+  text-align: left; /* Ensure code is left aligned */
+}
+
+.hero__title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 4.5rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(315deg, var(--vp-c-orange-dark) 25%, var(--vp-c-orange-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero__logo {
+  width: 4.5rem; /* Match title font size */
+  height: 4.5rem;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.hero__subtitle {
+  font-size: 1.6rem;
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 3rem;
+  line-height: 1.4;
+}
+
+[data-theme='dark'] .hero__subtitle {
+  color: #94a3b8;
+}
+
+.home-code-block {
+  margin-top: 0; /* Reset for flex layout */
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+  font-size: 0.9rem;
+}
+
+/* Target the internal container of the code block specifically on the homepage */
+.home-code-block [class*='codeBlockContainer'] {
+  margin: 1rem !important;
+}
+
+/* Mobile Responsive */
+@media (max-width: 996px) {
+  .hero {
+    text-align: center;
+    padding: 4rem 0;
+  }
+  
+  .hero-container {
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .hero__title {
+    font-size: 3rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .hero__logo {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .hero__subtitle {
+    font-size: 1.25rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-code {
+    width: 100%;
+  }
+}
+
+/* Rest of existing styles... */
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* Exact Hono.dev / VitePress Orange Variants */
+:root {
+  --vp-c-orange-light: #ff861d;
+  --vp-c-orange-lighter: #ff9c24;
+  --vp-c-orange-dark: #e07700;
+
+  --ifm-color-primary: var(--vp-c-orange-dark);
+  --ifm-color-primary-dark: #cc6d00;
+  --ifm-color-primary-darker: #c16600;
+  --ifm-color-primary-darkest: #9f5400;
+  --ifm-color-primary-light: var(--vp-c-orange-light);
+  --ifm-color-primary-lighter: var(--vp-c-orange-lighter);
+  --ifm-color-primary-lightest: #ffa942;
+  
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  
+  /* Layout colors */
+  --ifm-background-color: #ffffff;
+  --ifm-navbar-background-color: rgba(255, 255, 255, 0.7);
+  --ifm-footer-background-color: #f8fafc;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: var(--vp-c-orange-light);
+  --ifm-color-primary-dark: var(--vp-c-orange-dark);
+  --ifm-color-primary-darker: #cc6d00;
+  --ifm-color-primary-darkest: #9f5400;
+  --ifm-color-primary-light: var(--vp-c-orange-lighter);
+  --ifm-color-primary-lighter: #ffa942;
+  --ifm-color-primary-lightest: #ffb661;
+  
+  --ifm-background-color: #0f172a;
+  --ifm-navbar-background-color: rgba(15, 23, 42, 0.7);
+  --ifm-footer-background-color: #0b111e;
+}
+
+/* VitePress-style Navbar */
+.navbar {
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+  box-shadow: none;
+  padding: 0.7rem 1.5rem;
+}
+
+.navbar__title {
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+/* VitePress Buttons */
+.button--lg {
+  padding: 0.8rem 1.5rem;
+  font-weight: 600;
+  border-radius: 2rem;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.button--secondary {
+  background-color: var(--vp-c-orange-dark);
+  color: white !important;
+  border: 1px solid var(--vp-c-orange-dark);
+}
+
+.button--secondary:hover {
+  background-color: var(--vp-c-orange-light);
+  border-color: var(--vp-c-orange-light);
+  transform: translateY(-1px);
+}
+
+.button--outline {
+  background-color: #f1f5f9;
+  border-color: #f1f5f9;
+  color: #1e293b !important;
+}
+
+[data-theme='dark'] .button--outline {
+  background-color: #1e293b;
+  border-color: #1e293b;
+  color: #f1f5f9 !important;
+}
+
+.button--outline:hover {
+  background-color: #e2e8f0;
+  border-color: #e2e8f0;
+}
+
+[data-theme='dark'] .button--outline:hover {
+  background-color: #334155;
+  border-color: #334155;
+}
+
+/* Features Section */
+.features_src-components-Home-styles-module__features {
+  border-top: 1px solid var(--ifm-toc-border-color);
+  padding: 5rem 0;
+}
+
+[data-theme='dark'] .home-code-block {
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
