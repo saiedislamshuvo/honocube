@@ -1,0 +1,9 @@
+node_modules
+.turbo
+dist
+database.sqlite
+database.sqlite-journal
+*.sqlite
+*.sqlite-journal
+*.db
+*.db-journal

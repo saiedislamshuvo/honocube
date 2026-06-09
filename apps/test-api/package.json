@@ -1,0 +1,23 @@
+{
+  "name": "test-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "test:api": "tsx scripts/test-api.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@honocube/api": "*",
+    "hono": "^4.0.0",
+    "@hono/node-server": "^1.13.0",
+    "drizzle-orm": "^0.39.0",
+    "@libsql/client": "^0.14.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
