@@ -28,3 +28,37 @@
     justify-content: center;
   }
 }
+
+.announcement {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 1rem;
+  background-color: #fff7ed;
+  border: 1px solid #ffedd5;
+  border-radius: 2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--vp-c-orange-dark);
+  margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+[data-theme='dark'] .announcement {
+  background-color: rgba(224, 119, 0, 0.1);
+  border-color: rgba(224, 119, 0, 0.2);
+}
+
+.announcement:hover {
+  border-color: var(--vp-c-orange-light);
+}
+
+.announcementTag {
+  background-color: var(--vp-c-orange-dark);
+  color: white;
+  padding: 0.1rem 0.6rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  margin-right: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

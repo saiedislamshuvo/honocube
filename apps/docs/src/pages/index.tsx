@@ -29,6 +29,10 @@ function HomepageHeader() {
     <header className={clsx('hero', styles.heroBanner)}>
       <div className="container hero-container">
         <div className="hero-text">
+          <div className={styles.announcement}>
+            <span className={styles.announcementTag}>New</span>
+            <span>@honocube/admin is coming soon!</span>
+          </div>
           <Heading as="h1" className="hero__title">
             <img 
               src={useBaseUrl('/img/logo.svg')} 
