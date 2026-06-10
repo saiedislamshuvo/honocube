@@ -41,11 +41,14 @@ export function defineResource<
   globalConfig?: AppConfig<Env, AppContext>
 ) {
   const app = new Hono<{ Bindings: Env }>();
-  const adapter = config.adapter ?? globalConfig?.adapter;
-
-  if (!adapter) {
-    throw ApiError.internal(`Adapter not found for resource: ${config.name}. Ensure it is provided in defineResource or createApp.`);
-  }
+  
+  const getAdapter = (c: Context<{ Bindings: Env }>) => {
+    const adapter = config.adapter ?? globalConfig?.adapter;
+    if (!adapter) {
+      throw ApiError.internal(`Adapter not found for resource: ${config.name}. Ensure it is provided in defineResource or createApp.`);
+    }
+    return typeof adapter === 'function' ? adapter(c) : adapter;
+  };
 
   const methods = new Set(config.methods ?? ["list", "detail", "create", "update", "delete"]);
 
@@ -237,6 +240,7 @@ export function defineResource<
 
   if (methods.has("list")) {
     app.get("/", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
 
       await checkRateLimit(c, appContext);
@@ -415,6 +419,7 @@ export function defineResource<
 
   if (methods.has("batch-update")) {
     app.patch("/batch-update", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "batch-update");
@@ -501,6 +506,7 @@ export function defineResource<
 
   if (methods.has("batch-delete")) {
     app.post("/batch-delete", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "batch-delete");
@@ -561,6 +567,7 @@ export function defineResource<
 
   if (methods.has("detail")) {
     app.get("/:id", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
@@ -627,6 +634,7 @@ export function defineResource<
 
   if (methods.has("create")) {
     app.post("/", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "create");
@@ -728,6 +736,7 @@ export function defineResource<
 
   if (methods.has("update")) {
     app.patch("/:id", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
@@ -843,6 +852,7 @@ export function defineResource<
 
   if (methods.has("delete")) {
     app.delete("/:id", async (c) => {
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
@@ -882,7 +892,8 @@ export function defineResource<
   if (config.actions) {
     for (const action of config.actions) {
       app[action.method](action.path, async (c) => {
-        const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+        const adapter = getAdapter(c);
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
         await checkRateLimit(c, appContext);
         let validatedData = undefined;
 

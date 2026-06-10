@@ -68,7 +68,7 @@ export interface ResourceEvent<AppContext = any> {
 }
 
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
-  adapter: DatabaseAdapter<any, any, any>;
+  adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
   schema?: Record<string, any>; // Global schema for convenience
   logger?: AppLogger; // Global framework logger
@@ -94,7 +94,7 @@ export interface ResourceConfig<
   queryKey?: string;
   table: TTable;
   schema?: Record<string, any>; // Scoped schema for performance
-  adapter?: DatabaseAdapter<TTable, TSelect, TInsert>;
+  adapter?: DatabaseAdapter<TTable, TSelect, TInsert> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<TTable, TSelect, TInsert>);
   validator: 
     | z.ZodType<TInsert, any, any> 
     | [z.ZodType<TInsert, any, any>, z.ZodTypeAny]
