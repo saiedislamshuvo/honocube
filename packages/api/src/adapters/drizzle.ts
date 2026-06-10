@@ -172,6 +172,35 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     });
   }
 
+  async batch<T = any>(stmts: any[]): Promise<T[]> {
+    return await this.db.batch(stmts);
+  }
+
+  insertStmt(table: any, data: unknown): any {
+    if (this.dialect === "mysql") {
+      return this.db.insert(table).values(data);
+    }
+    return this.db.insert(table).values(data).returning();
+  }
+
+  updateStmt(table: any, id: string | number, data: any): any {
+    const columns = getTableColumns(table);
+    const idCol = (columns as any).id;
+    if (!idCol) throw new Error("Table must have an 'id' column for updates");
+
+    if (this.dialect === "mysql") {
+      return this.db.update(table).set(data).where(eq(idCol, id as any));
+    }
+    return this.db.update(table).set(data).where(eq(idCol, id as any)).returning();
+  }
+
+  deleteStmt(table: any, id: string | number): any {
+    const columns = getTableColumns(table);
+    const idCol = (columns as any).id;
+    if (!idCol) throw new Error("Table must have an 'id' column for deletion");
+    return this.db.delete(table).where(eq(idCol, id as any));
+  }
+
   getColumnNames(table: any): string[] {
     return Object.keys(getTableColumns(table));
   }

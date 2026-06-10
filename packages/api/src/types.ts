@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { z } from "zod";
-import type { DatabaseAdapter } from "./adapters/base.js";
+import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 
 export type ApiErrorStatus = 400 | 401 | 403 | 404 | 429 | 500;
 
@@ -69,6 +69,7 @@ export interface ResourceEvent<AppContext = any> {
 
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
+  strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
   schema?: Record<string, any>; // Global schema for convenience
   logger?: AppLogger; // Global framework logger

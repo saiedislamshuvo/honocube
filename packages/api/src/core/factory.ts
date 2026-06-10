@@ -3,6 +3,7 @@ import { z } from "zod";
 import { or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
 import { ApiError } from "../utils/errors.js";
+import { DatabaseAdapter } from "../adapters/base.js";
 
 /**
  * Creates the resource framework with global configuration.
@@ -10,6 +11,11 @@ import { ApiError } from "../utils/errors.js";
 export function createApp<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any>(
   globalConfig: AppConfig<Env, AppContext>
 ) {
+  // Set default strategy to batch if not provided
+  if (!globalConfig.strategy) {
+    globalConfig.strategy = "batch";
+  }
+
   // Setup default logger if none provided
   if (!globalConfig.logger) {
     globalConfig.logger = {
@@ -417,6 +423,21 @@ export function defineResource<
     });
   }
 
+  const runTransaction = async <T>(c: Context, cb: (tx: DatabaseAdapter<TTable, TSelect, TInsert>) => Promise<T>): Promise<T> => {
+    const adapter = getAdapter(c) as DatabaseAdapter<TTable, TSelect, TInsert>;
+    const strategy = globalConfig?.strategy ?? "batch";
+
+    if (strategy === "transaction") {
+      return await adapter.transaction(cb);
+    } else if (strategy === "none" || strategy === "batch") {
+      // For batch, we don't wrap in a transaction here because the inner logic 
+      // will call tx.batch() which handles atomicity.
+      return await cb(adapter);
+    } else {
+      return await adapter.transaction(cb);
+    }
+  };
+
   if (methods.has("batch-update")) {
     app.patch("/batch-update", async (c) => {
       const adapter = getAdapter(c);
@@ -454,7 +475,7 @@ export function defineResource<
         validatedData[ts.updated] = new Date().toISOString();
       }
 
-      const record = await adapter.transaction(async (tx) => {
+      const record = await runTransaction(c, async (tx) => {
         // Apply Batch Hook
         if (config.hooks?.beforeBatchUpdate) {
           const hooked = await config.hooks.beforeBatchUpdate(targetIds, validatedData, c, tx, appContext);
@@ -519,7 +540,7 @@ export function defineResource<
       const parsed = schema.parse(body);
       let targetIds = parsed.ids;
 
-      await adapter.transaction(async (tx) => {
+      await runTransaction(c, async (tx) => {
         // Apply Batch Hook
         if (config.hooks?.beforeBatchDelete) {
           const hookedIds = await config.hooks.beforeBatchDelete(targetIds, c, tx, appContext);
@@ -635,6 +656,7 @@ export function defineResource<
   if (methods.has("create")) {
     app.post("/", async (c) => {
       const adapter = getAdapter(c);
+      const strategy = globalConfig?.strategy ?? "none";
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "create");
@@ -644,8 +666,9 @@ export function defineResource<
       // 0. Recursive File Upload Processing
       body = await processUploads(body);
 
-      const record = await adapter.transaction(async (tx) => {
+      const record = await runTransaction(c, async (tx) => {
         let data = body;
+        const sql = tx.getSql();
         
         if (config.hooks?.beforeCreate) {
           const hooked = await config.hooks.beforeCreate(data, c, tx, appContext);
@@ -672,42 +695,92 @@ export function defineResource<
           if (ts.updated) validated[ts.updated] = now; // Always update modified time
         }
 
-        // 1. Save Parent
-        const inserted: any = await tx.insert(config.table, validated);
-        const parentId = inserted.id;
+        if (strategy === "batch") {
+          const stmts: any[] = [];
+          
+          // 1. Add Parent Statement
+          stmts.push(tx.insertStmt(config.table, validated));
 
-        // 2. Save Many/Pivot Relations
-        if (config.relations) {
-          // Many Relations
-          if (config.relations.many) {
-            for (const rel of config.relations.many) {
-              const children = data[rel.name];
-              if (Array.isArray(children)) {
-                for (const child of children) {
-                   await tx.insert(rel.table, { ...child, [rel.foreignKey]: parentId });
+          // 2. Add Many/Pivot Relations
+          if (config.relations) {
+            // Many Relations
+            if (config.relations.many) {
+              for (const rel of config.relations.many) {
+                const children = data[rel.name];
+                if (Array.isArray(children)) {
+                  for (const child of children) {
+                    stmts.push(tx.insertStmt(rel.table, { 
+                      ...child, 
+                      [rel.foreignKey]: sql`(SELECT last_insert_rowid())` 
+                    }));
+                  }
+                }
+              }
+            }
+
+            // Pivot Relations
+            if (config.relations.pivots) {
+              for (const rel of config.relations.pivots) {
+                const items = data[rel.name];
+                if (Array.isArray(items)) {
+                  for (const item of items) {
+                    stmts.push(tx.insertStmt(rel.table, { 
+                      ...item, 
+                      [rel.foreignKey]: sql`(SELECT last_insert_rowid())` 
+                    }));
+                  }
                 }
               }
             }
           }
 
-          // Pivot Relations
-          if (config.relations.pivots) {
-            for (const rel of config.relations.pivots) {
-              const items = data[rel.name];
-              if (Array.isArray(items)) {
-                for (const item of items) {
-                  await tx.insert(rel.table, { ...item, [rel.foreignKey]: parentId });
+          const results = await tx.batch(stmts);
+          const inserted = Array.isArray(results[0]) ? results[0][0] : results[0];
+
+          if (config.hooks?.afterCreate) {
+            await config.hooks.afterCreate(inserted as TSelect, c, tx, appContext);
+          }
+
+          return inserted;
+        } else {
+          // Traditional imperative strategy
+          // 1. Save Parent
+          const inserted: any = await tx.insert(config.table, validated);
+          const parentId = inserted.id;
+
+          // 2. Save Many/Pivot Relations
+          if (config.relations) {
+            // Many Relations
+            if (config.relations.many) {
+              for (const rel of config.relations.many) {
+                const children = data[rel.name];
+                if (Array.isArray(children)) {
+                  for (const child of children) {
+                    await tx.insert(rel.table, { ...child, [rel.foreignKey]: parentId });
+                  }
+                }
+              }
+            }
+
+            // Pivot Relations
+            if (config.relations.pivots) {
+              for (const rel of config.relations.pivots) {
+                const items = data[rel.name];
+                if (Array.isArray(items)) {
+                  for (const item of items) {
+                    await tx.insert(rel.table, { ...item, [rel.foreignKey]: parentId });
+                  }
                 }
               }
             }
           }
-        }
 
-        if (config.hooks?.afterCreate) {
-          await config.hooks.afterCreate(inserted as TSelect, c, tx, appContext);
-        }
+          if (config.hooks?.afterCreate) {
+            await config.hooks.afterCreate(inserted as TSelect, c, tx, appContext);
+          }
 
-        return inserted;
+          return inserted;
+        }
       });
 
       await emitEvent(appContext, "create", record);
@@ -737,6 +810,7 @@ export function defineResource<
   if (methods.has("update")) {
     app.patch("/:id", async (c) => {
       const adapter = getAdapter(c);
+      const strategy = globalConfig?.strategy ?? "batch";
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
@@ -755,7 +829,7 @@ export function defineResource<
       // 0. Recursive File Upload Processing
       body = await processUploads(body);
 
-      const record = await adapter.transaction(async (tx) => {
+      const record = await runTransaction(c, async (tx) => {
         let data = body;
 
         if (config.hooks?.beforeUpdate) {
@@ -783,50 +857,102 @@ export function defineResource<
           validated[ts.updated] = new Date().toISOString();
         }
 
-        // 1. Update Parent
-        const updated = await tx.update(config.table, id, validated);
-        if (!updated) throw ApiError.notFound();
+        if (strategy === "batch") {
+          const stmts: any[] = [];
+          
+          // 1. Add Parent Statement
+          stmts.push(tx.updateStmt(config.table, id, validated));
 
-        // 2. Sync Relations (if provided)
-        if (config.relations) {
-          // Sync Many
-          if (config.relations.many) {
-            for (const rel of config.relations.many) {
-              if (Array.isArray(data[rel.name])) {
-                const strategy = rel.strategy ?? "replace";
-                if (strategy === "replace") {
-                   await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id));
+          // 2. Sync Relations (if provided)
+          if (config.relations) {
+            // Sync Many
+            if (config.relations.many) {
+              for (const rel of config.relations.many) {
+                if (Array.isArray(data[rel.name])) {
+                  const relStrategy = rel.strategy ?? "replace";
+                  if (relStrategy === "replace") {
+                    stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id)));
+                  }
+                  
+                  for (const child of data[rel.name]) {
+                    stmts.push(tx.insertStmt(rel.table, { ...child, [rel.foreignKey]: id }));
+                  }
                 }
-                
-                for (const child of data[rel.name]) {
-                  await tx.insert(rel.table, { ...child, [rel.foreignKey]: id });
+              }
+            }
+
+            // Sync Pivots
+            if (config.relations.pivots) {
+              for (const rel of config.relations.pivots) {
+                if (Array.isArray(data[rel.name])) {
+                  const relStrategy = rel.strategy ?? "replace";
+                  if (relStrategy === "replace") {
+                    stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id)));
+                  }
+                  
+                  for (const item of data[rel.name]) {
+                    stmts.push(tx.insertStmt(rel.table, { ...item, [rel.foreignKey]: id }));
+                  }
                 }
               }
             }
           }
 
-          // Sync Pivots
-          if (config.relations.pivots) {
-            for (const rel of config.relations.pivots) {
-              if (Array.isArray(data[rel.name])) {
-                const strategy = rel.strategy ?? "replace";
-                if (strategy === "replace") {
-                  await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id));
+          const results = await tx.batch(stmts);
+          const updated = Array.isArray(results[0]) ? results[0][0] : results[0];
+
+          if (config.hooks?.afterUpdate) {
+            await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
+          }
+
+          return updated;
+        } else {
+          // Traditional imperative strategy
+          // 1. Update Parent
+          const updated = await tx.update(config.table, id, validated);
+          if (!updated) throw ApiError.notFound();
+
+          // 2. Sync Relations (if provided)
+          if (config.relations) {
+            // Sync Many
+            if (config.relations.many) {
+              for (const rel of config.relations.many) {
+                if (Array.isArray(data[rel.name])) {
+                  const relStrategy = rel.strategy ?? "replace";
+                  if (relStrategy === "replace") {
+                     await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id));
+                  }
+                  
+                  for (const child of data[rel.name]) {
+                    await tx.insert(rel.table, { ...child, [rel.foreignKey]: id });
+                  }
                 }
-                
-                for (const item of data[rel.name]) {
-                  await tx.insert(rel.table, { ...item, [rel.foreignKey]: id });
+              }
+            }
+
+            // Sync Pivots
+            if (config.relations.pivots) {
+              for (const rel of config.relations.pivots) {
+                if (Array.isArray(data[rel.name])) {
+                  const relStrategy = rel.strategy ?? "replace";
+                  if (relStrategy === "replace") {
+                    await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id));
+                  }
+                  
+                  for (const item of data[rel.name]) {
+                    await tx.insert(rel.table, { ...item, [rel.foreignKey]: id });
+                  }
                 }
               }
             }
           }
-        }
 
-        if (config.hooks?.afterUpdate) {
-          await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
-        }
+          if (config.hooks?.afterUpdate) {
+            await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
+          }
 
-        return updated;
+          return updated;
+        }
       });
 
       await emitEvent(appContext, "update", record);
@@ -865,7 +991,7 @@ export function defineResource<
 
       await checkAccess(appContext, "delete", existingRecord);
 
-      await adapter.transaction(async (tx) => {
+      await runTransaction(c, async (tx) => {
         if (config.hooks?.beforeDelete) {
           await config.hooks.beforeDelete(id, c, tx, appContext);
         }

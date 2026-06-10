@@ -1,3 +1,5 @@
+export type DatabaseStrategy = "transaction" | "batch" | "none";
+
 export interface FindManyOptions {
   where?: unknown;
   limit?: number;
@@ -24,6 +26,14 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
   // Transaction support is vital for pivot tables
   transaction<T>(cb: (tx: DatabaseAdapter<TTable, TSelect, TInsert>) => Promise<T>): Promise<T>;
   
+  // Batch support for D1 and other performance-sensitive environments
+  batch<T = any>(stmts: any[]): Promise<T[]>;
+
+  // Statement builders for batching
+  insertStmt(table: TTable, data: TInsert): any;
+  updateStmt(table: TTable, id: string | number, data: Partial<TInsert>): any;
+  deleteStmt(table: TTable, id: string | number): any;
+
   // Helper to get columns for validation/filtering
   getColumnNames(table: TTable): string[];
 
