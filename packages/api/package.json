@@ -1,6 +1,6 @@
 {
   "name": "@honocube/api",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,6 +19,9 @@
   "dependencies": {
     "drizzle-orm": "^0.45.2",
     "hono": "^4.0.0",
+    "prettier": "^3.8.4",
+    "turbo": "^2.9.17",
+    "typescript": "6.0.3",
     "zod": "^3.0.0"
   },
   "devDependencies": {
