@@ -19,10 +19,15 @@ async function runDeepSearchTest() {
 
   await client.execute(`CREATE TABLE products_search (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)`);
 
-  // 1. Insert 600 records (exceeds the 512 variable limit seen in user's error)
-  console.log('  - Inserting 600 test records...');
-  const values = Array.from({ length: 600 }, (_, i) => `('Product ${i + 1}')`).join(',');
-  await client.execute(`INSERT INTO products_search (name) VALUES ${values}`);
+  // 1. Insert 10,000 records (massively exceeds the 512 variable limit seen in user's error)
+  console.log('  - Inserting 10,000 test records...');
+  // SQLite has an insert limit too, so we chunk the inserts
+  const totalRecords = 10000;
+  const chunkSize = 500;
+  for (let i = 0; i < totalRecords; i += chunkSize) {
+    const chunk = Array.from({ length: chunkSize }, (_, j) => `('Product ${i + j + 1}')`).join(',');
+    await client.execute(`INSERT INTO products_search (name) VALUES ${chunk}`);
+  }
 
   const adapter = new DrizzleAdapter(db, { dialect: 'sqlite' });
   const { defineResource } = createApp({
@@ -44,15 +49,15 @@ async function runDeepSearchTest() {
   const app = new Hono();
   app.route('/api/products', productsResource);
 
-  // 2. Test Search (Should match all 600 records)
-  console.log('  - Testing search with 600 matches (should NOT crash)...');
+  // 2. Test Search (Should match all 10000 records)
+  console.log('  - Testing search with 10,000 matches (should NOT crash)...');
   const searchRes = await app.request('/api/products?q=Product&limit=10');
   const searchData = await searchRes.json();
   
-  if (searchData.success && searchData.meta.total === 600) {
+  if (searchData.success && searchData.meta.total === 10000) {
     console.log(`    ✅ Search successful! Found ${searchData.meta.total} records without variable limit error.`);
   } else {
-    throw new Error(`Search failed! Expected 600 matches, got ${searchData.meta.total}. Data: ${JSON.stringify(searchData)}`);
+    throw new Error(`Search failed! Expected 10000 matches, got ${searchData.meta.total}. Data: ${JSON.stringify(searchData)}`);
   }
 
   // 3. Test maxLimit Enforcement

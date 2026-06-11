@@ -1,6 +1,6 @@
 import { Hono, Context } from "hono";
 import { z } from "zod";
-import { or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
+import { sql, or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
 import { ApiError } from "../utils/errors.js";
 import { DatabaseAdapter } from "../adapters/base.js";
@@ -344,7 +344,8 @@ export function defineResource<
 
         // Apply Search (via Subqueries to avoid parameter limits)
         if (searchSubqueries.length > 0) {
-          conditions.push(or(...searchSubqueries.map(sq => inArray(cols.id, sq))));
+          // Use raw sql to force Drizzle to treat it as a subquery, not an array of values
+          conditions.push(or(...searchSubqueries.map(sq => sql`${cols.id} IN (${sq})`)));
         } else if (q && config.search) {
           // If search term provided but no fields/relations matched, force empty result
           conditions.push(eq(cols.id, -1));
