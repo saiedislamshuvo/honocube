@@ -391,7 +391,7 @@ export function defineResource<
         adapter.findMany(config.table, {
           limit,
           offset,
-          orderBy: config.defaultSort,
+          orderBy: config.defaultSort ?? { field: 'id', direction: 'desc' },
           where,
           with: withTree,
           queryKey
