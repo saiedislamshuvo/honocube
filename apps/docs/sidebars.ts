@@ -42,6 +42,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'guides/custom-actions',
         'guides/validation-errors',
+        'guides/llm-integration',
       ],
     },
     {

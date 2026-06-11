@@ -1,0 +1,281 @@
+# HonoCube API Framework Documentation
+
+HonoCube API is a lightweight, declarative resource-based backend framework built on top of Hono and Drizzle ORM. It is designed to rapidly build RESTful APIs with built-in validation, relations, caching, database execution strategies, and rate limiting.
+
+## 1. Setup and Initialization
+
+HonoCube is initialized using `createApp`, providing the global config (adapter, strategy, logger). You then use `defineResource` to create endpoints, and `defineApi` to group them.
+
+```typescript
+import { Hono } from 'hono';
+import { drizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
+import { DrizzleAdapter, createApp } from '@honocube/api';
+import * as schema from './schema';
+
+const client = createClient({ url: process.env.DATABASE_URL! });
+const db = drizzle(client, { schema });
+
+const adapter = new DrizzleAdapter(db, { dialect: 'sqlite' });
+
+const { defineResource, defineApi } = createApp({
+  adapter,
+  strategy: 'batch', // "batch" (Cloudflare D1 optimized), "transaction", or "none"
+});
+```
+
+## 2. Defining Resources
+
+A resource maps a database table to standard REST CRUD endpoints (`GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id`, `PATCH /batch-update`, `POST /batch-delete`).
+
+```typescript
+import { z } from 'zod';
+
+const usersResource = defineResource({
+  name: 'users',
+  table: schema.users,
+  methods: ['list', 'detail', 'create', 'update', 'delete'], // Defaults to all 5
+  timestamps: true, // Auto-manages createdAt and updatedAt
+  softDelete: 'deletedAt', // Automatically ignores rows where deletedAt is not null
+  pagination: {
+    defaultLimit: 20,
+    maxLimit: 100 // Hard cap to prevent database overload
+  },
+  validator: z.object({
+    name: z.string(),
+    email: z.string().email(),
+  }),
+  search: {
+    fields: ['name', 'email'], // Allows deep subquery searching via ?q=
+  },
+  filter: {
+    allow: ['status', 'role'] // Explicitly allow query param filtering
+  },
+  defaultSort: { field: 'id', direction: 'desc' }, // Used when no sort param is provided
+});
+```
+
+## 3. Relationships
+
+HonoCube handles nested writes, relationship queries, and syncing pivot tables automatically.
+
+```typescript
+const postsResource = defineResource({
+  name: 'posts',
+  table: schema.posts,
+  validator: z.object({ title: z.string(), userId: z.number() }),
+  relations: {
+    one: [
+      {
+        name: 'author',
+        table: schema.users,
+        foreignKey: 'userId',
+        referenceKey: 'id',
+        search: ['name', 'email'] // Parent is searchable by relational data
+      }
+    ],
+    many: [
+      {
+        name: 'comments',
+        table: schema.comments,
+        foreignKey: 'postId',
+        referenceKey: 'id',
+        schema: z.object({ text: z.string() })
+      }
+    ]
+  },
+  with: { author: true, comments: true } // Return these relations in GET responses
+});
+```
+
+When creating or updating `posts`, passing a `comments` array will automatically insert or sync the child table (optimizing into a single D1 `batch` call if configured).
+
+## 4. Querying the API (For Frontend/Admin Clients)
+
+When building frontends, understand these URL parameters:
+
+*   **Pagination**: `?limit=20&page=2`
+*   **Search**: `?q=searchterm` (Searches `search.fields` and `search.relations` using highly optimized SQL subqueries to bypass SQLite variable limits).
+*   **Exact Filter**: `?status=active` (Must be explicitly allowed in `filter.allow`).
+*   **Range Filters**: `?price__gte=100&price__lte=500` (Supported suffixes: `__gte`, `__lte`, `__gt`, `__lt`, `__like`).
+
+*Example Frontend Fetch:*
+`GET /api/posts?q=hello&status=published&price__gte=10&limit=50&page=1`
+
+## 5. Standard Responses
+
+**Success:**
+```json
+{
+  "success": true,
+  "data": { "id": 1, "name": "Item" }, // Object for detail/create/update, Array for list
+  "meta": { "total": 100, "page": 1, "limit": 20, "totalPages": 5 } // Only on list
+}
+```
+
+**Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR", // e.g. VALIDATION_ERROR, NOT_FOUND, INTERNAL_ERROR
+    "message": "Validation failed",
+    "details": [...] // Zod issues if validation fails
+  }
+}
+```
+
+## 6. Batch Operations
+
+HonoCube supports batch updates and deletes.
+*   **Batch Update**: `PATCH /batch-update` - Body: `{ "ids": [1,2], "data": { "status": "active" } }`
+*   **Batch Delete**: `POST /batch-delete` - Body: `{ "ids": [1,2] }`
+
+## 7. Database Strategy
+
+The `createApp` takes a `strategy` config:
+*   `batch` (Default): Compiles multi-statement operations (e.g. parent insert + relational inserts) into Drizzle `db.batch()`. Highly optimized for Cloudflare D1. Utilizes `(SELECT last_insert_rowid())` internally.
+*   `transaction`: Uses traditional `db.transaction()` wrapper.
+*   `none`: Executes sequentially without wrapping logic.
+
+---
+
+## 8. API Behavioral Mechanics
+
+To accurately consume or extend the HonoCube API, an AI must understand its internal mechanics.
+
+### Search Execution (Subqueries vs. Arrays)
+When a user passes `?q=term`, the API **does not** pull matching IDs into memory. Instead, it generates nested SQL `SELECT` statements (subqueries) for the main table and any related tables configured in `search.relations`. These subqueries are wrapped in a raw `sql` template literal to prevent Drizzle ORM from prematurely evaluating them. This ensures the API can securely search through millions of records without hitting Cloudflare D1's 512 variable limit. 
+*Constraint:* If you add a custom search override, you MUST use SQL subqueries; do not use `inArray` with a mapped array of IDs.
+
+### Default Sorting
+If a client calls `GET /` without a sort parameter, and the backend developer has not provided a `defaultSort` in the `ResourceConfig`, the API will automatically fallback to sorting by `id` descending (`{ field: 'id', direction: 'desc' }`).
+
+### Execution Strategies & Atomicity
+*   **`batch`**: In this mode, `create` and `update` requests that include nested relationships do not execute sequential queries. They build an array of statement builders (`adapter.insertStmt`). For related children, the framework uses the raw SQL function `(SELECT last_insert_rowid())` as the foreign key value. All statements are sent to the database in one single `db.batch()` network call.
+*   **`transaction`**: Traditional SQL transactions. Should be avoided in D1 if possible.
+*   **`none`**: Executes queries sequentially.
+
+### Relational Syncing (The "Replace" Strategy)
+When updating a record via `PATCH /:id` and providing a nested array of relations (e.g., `many` or `pivots`), the default relation strategy is `"replace"`. 
+This means the API will dynamically execute a `DELETE` query against the child table where the `foreignKey` matches the current `id`, followed immediately by `INSERT` queries for the new array payload. If you are building a frontend, be aware that omitting a child from the array during a `PATCH` request will delete it from the database.
+
+### Pagination Safeguards
+Clients use `?page=X&limit=Y`. However, the API enforces a `maxLimit` (defaults to 100). If an AI client attempts to request `?limit=5000`, the API will silently cap the query to 100 rows to protect the database engine.
+
+---
+
+## 9. Core Configuration Types (TypeScript)
+
+For an exact understanding of the configuration surface, refer to these core TypeScript interfaces.
+
+```typescript
+export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
+  adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
+  strategy?: "batch" | "transaction" | "none"; 
+  middleware?: MiddlewareHandler<{ Bindings: Env }>[];
+  schema?: Record<string, any>;
+  logger?: AppLogger;
+  cache?: AppCache;
+  rateLimiter?: RateLimiter;
+  storage?: AppStorage;
+  mediaBaseUrl?: string;
+  onEvent?: (event: ResourceEvent<AppContext>) => Promise<void> | void;
+  getContext?: (c: Context<{ Bindings: Env }>) => Promise<AppContext> | AppContext;
+  auth?: {
+    can: (appContext: AppContext, permission: string, record?: any) => boolean | Promise<boolean>;
+  };
+}
+
+export interface ResourceConfig<TTable = unknown, TSelect = unknown, TInsert = unknown, Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
+  name: string;
+  queryKey?: string;
+  table: TTable;
+  schema?: Record<string, any>;
+  adapter?: DatabaseAdapter<TTable, TSelect, TInsert> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<TTable, TSelect, TInsert>);
+  
+  validator: 
+    | z.ZodType<TInsert, any, any> 
+    | [z.ZodType<TInsert, any, any>, z.ZodTypeAny]
+    | { create: z.ZodType<TInsert, any, any>; update: z.ZodTypeAny };
+  
+  middleware?: MiddlewareHandler<{ Bindings: Env }>[];
+  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete")[];
+  softDelete?: string; 
+  
+  permissions?: {
+    list?: string; detail?: string; create?: string; update?: string; delete?: string;
+    "batch-update"?: string; "batch-delete"?: string;
+  };
+  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete", record?: TSelect) => boolean | Promise<boolean>;
+
+  hidden?: (keyof TSelect)[];
+  transform?: (record: TSelect, appContext: AppContext) => any | Promise<any>;
+  
+  cache?: { enabled: boolean; ttl?: number; };
+  rateLimit?: { limit: number; window: string; key?: (c: Context<{ Bindings: Env }>, appContext: AppContext) => string; };
+  uploads?: Record<string, { folder?: string }>;
+  timestamps?: boolean | { createdAt?: string; updatedAt?: string; };
+  scope?: (cols: any, ops: any, appContext: AppContext) => any;
+
+  search?: { fields?: (keyof TSelect | string)[]; relations?: string[]; };
+  filter?: { allow?: (keyof TSelect | string)[]; };
+  defaultSort?: { field: string; direction: "asc" | "desc" };
+  pagination?: { defaultLimit?: number; maxLimit?: number };
+  
+  relations?: {
+    one?: OneConfig<any>[];
+    pivots?: PivotConfig<any>[];
+    many?: ManyConfig<any>[];
+  };
+
+  with?: Record<string, any>;
+  hooks?: ResourceHooks<TSelect, TInsert, Env>;
+  actions?: ActionConfig<Env, AppContext>[];
+}
+
+export interface OneConfig<TTable = any> {
+  name: string; 
+  table: TTable;
+  foreignKey: string; 
+  referenceKey: string; 
+  search?: string[]; 
+  hidden?: string[]; 
+}
+
+export interface PivotConfig<TTable = any> {
+  name: string;
+  table: TTable;
+  targetTable?: any; 
+  foreignKey: string; 
+  referenceKey: string; 
+  targetReferenceKey: string; 
+  relationName: string;
+  strategy?: "upsert" | "replace" | "append";
+  search?: string[]; 
+  hidden?: string[]; 
+}
+
+export interface ManyConfig<TTable = any> {
+  name: string;
+  table: TTable;
+  foreignKey: string; 
+  referenceKey: string; 
+  schema: z.ZodSchema;
+  strategy?: "upsert" | "replace" | "append";
+  search?: string[]; 
+  hidden?: string[]; 
+}
+
+export interface ResourceHooks<TSelect = unknown, TInsert = unknown, Env = any, AppContext = any> {
+  beforeFetch?: (c: Context, params: { list?: boolean; detailId?: string | number }, appContext: AppContext) => Promise<void> | void;
+  afterFetch?: (rows: TSelect[], c: Context, appContext: AppContext) => Promise<TSelect[]> | TSelect[];
+  beforeCreate?: (data: TInsert, c: Context, tx: any, appContext: AppContext) => Promise<TInsert | void> | TInsert | void;
+  afterCreate?: (record: TSelect, c: Context, tx: any, appContext: AppContext) => Promise<void> | void;
+  beforeUpdate?: (id: string | number, data: Partial<TInsert>, c: Context, tx: any, appContext: AppContext) => Promise<Partial<TInsert> | void> | Partial<TInsert> | void;
+  afterUpdate?: (record: TSelect, c: Context, tx: any, appContext: AppContext) => Promise<void> | void;
+  beforeDelete?: (id: string | number, c: Context, tx: any, appContext: AppContext) => Promise<void> | void;
+  afterDelete?: (id: string | number, c: Context, tx: any, appContext: AppContext) => Promise<void> | void;
+  // Batch Hooks also available...
+}
+```
