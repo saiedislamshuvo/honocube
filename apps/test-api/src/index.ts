@@ -20,6 +20,7 @@ await client.execute(`
     price INTEGER NOT NULL,
     description TEXT,
     status TEXT DEFAULT 'active',
+    image_url TEXT,
     deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT
