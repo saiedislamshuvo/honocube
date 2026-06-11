@@ -265,7 +265,10 @@ export function defineResource<
       }
 
       const queryParams = c.req.query();
-      const limit = Number(queryParams.limit ?? config.pagination?.defaultLimit ?? 20);
+      let limit = Number(queryParams.limit ?? config.pagination?.defaultLimit ?? 20);
+      const maxLimit = config.pagination?.maxLimit ?? 100;
+      if (limit > maxLimit) limit = maxLimit;
+
       const page = Number(queryParams.page ?? 1);
       const offset = (page - 1) * limit;
       const q = queryParams.q;
@@ -273,19 +276,17 @@ export function defineResource<
       // 1. Resolve 'with' object (Explicit only)
       const withTree: any = config.with;
 
-      // 2. Build 'where' clause using ID collection for search
-      let matchingIds: any[] | undefined = undefined;
+      // 2. Build Search Subqueries
+      const searchSubqueries: any[] = [];
 
       if (q && config.search) {
-        const idSet = new Set<any>();
-
         // Search local fields
         if (config.search.fields) {
-          const localMatch = await adapter.getDb()
+          const localSubquery = adapter.getDb()
             .select({ id: (config.table as any).id })
             .from(config.table)
             .where(or(...config.search.fields.map(f => like((config.table as any)[f as string], `%${q}%`))));
-          localMatch.forEach((r: any) => idSet.add(r.id));
+          searchSubqueries.push(localSubquery);
         }
 
         // Search relations
@@ -294,42 +295,40 @@ export function defineResource<
             // Check 'one' relations
             const oneRel = config.relations?.one?.find(r => r.name === relName);
             if (oneRel && oneRel.search) {
-              const relMatch = await adapter.getDb()
+              const relSubquery = adapter.getDb()
                 .select({ parentId: (config.table as any)[oneRel.foreignKey] })
                 .from(config.table)
                 .innerJoin(oneRel.table, eq(oneRel.table[oneRel.referenceKey], (config.table as any)[oneRel.foreignKey]))
                 .where(or(...oneRel.search.map(f => like(oneRel.table[f], `%${q}%`))));
-              relMatch.forEach((r: any) => idSet.add(r.parentId));
+              searchSubqueries.push(relSubquery);
             }
 
             // Check 'many' relations
             const manyRel = config.relations?.many?.find(r => r.name === relName);
             if (manyRel && manyRel.search) {
-              const relMatch = await adapter.getDb()
+              const relSubquery = adapter.getDb()
                 .select({ parentId: manyRel.table[manyRel.foreignKey] })
                 .from(manyRel.table)
                 .where(or(...manyRel.search.map(f => like(manyRel.table[f], `%${q}%`))));
-              relMatch.forEach((r: any) => idSet.add(r.parentId));
+              searchSubqueries.push(relSubquery);
             }
 
             // Check 'pivot' relations
             const pivotRel = config.relations?.pivots?.find(r => r.name === relName);
             if (pivotRel && pivotRel.search && pivotRel.targetTable) {
-              const relMatch = await adapter.getDb()
+              const relSubquery = adapter.getDb()
                 .select({ parentId: pivotRel.table[pivotRel.foreignKey] })
                 .from(pivotRel.table)
                 .innerJoin(pivotRel.targetTable, eq(pivotRel.targetTable[pivotRel.targetReferenceKey], pivotRel.table[pivotRel.referenceKey]))
                 .where(or(...pivotRel.search.map(f => like(pivotRel.targetTable[f], `%${q}%`))));
-              relMatch.forEach((r: any) => idSet.add(r.parentId));
+              searchSubqueries.push(relSubquery);
             }
           }
         }
-
-        matchingIds = Array.from(idSet);
       }
 
       const where = (cols: any, ops: any) => {
-        const { and, eq, inArray, like, gt, gte, lt, lte, isNull } = ops;
+        const { and, eq, inArray, like, gt, gte, lt, lte, isNull, or } = ops;
         const conditions: any[] = [];
 
         // Apply Soft Delete (Mandatory)
@@ -343,12 +342,12 @@ export function defineResource<
           if (scoped) conditions.push(scoped);
         }
 
-        if (matchingIds !== undefined) {
-          if (matchingIds.length === 0) {
-            conditions.push(eq(cols.id, -1));
-          } else {
-            conditions.push(inArray(cols.id, matchingIds));
-          }
+        // Apply Search (via Subqueries to avoid parameter limits)
+        if (searchSubqueries.length > 0) {
+          conditions.push(or(...searchSubqueries.map(sq => inArray(cols.id, sq))));
+        } else if (q && config.search) {
+          // If search term provided but no fields/relations matched, force empty result
+          conditions.push(eq(cols.id, -1));
         }
 
         // Direct Filters
