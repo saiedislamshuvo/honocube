@@ -14,7 +14,7 @@
     "@hono/node-server": "^1.13.0",
     "drizzle-orm": "^0.39.0",
     "@libsql/client": "^0.14.0",
-    "zod": "^3.24.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

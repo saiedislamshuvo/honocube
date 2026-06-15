@@ -467,7 +467,7 @@ export function defineResource<
         validator = config.validator as z.ZodTypeAny;
       }
 
-      const validatedData = validator.parse(updateData);
+      const validatedData = validator.parse(updateData) as any;
 
       // Auto Timestamps
       const ts = getTimestampFields();
@@ -685,7 +685,7 @@ export function defineResource<
           validator = config.validator as z.ZodTypeAny;
         }
 
-        const validated = validator.parse(data);
+        const validated = validator.parse(data) as any;
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -849,7 +849,7 @@ export function defineResource<
           validator = config.validator as z.ZodTypeAny;
         }
 
-        const validated = validator.parse(data);
+        const validated = validator.parse(data) as any;
 
         // Auto Timestamps
         const ts = getTimestampFields();
