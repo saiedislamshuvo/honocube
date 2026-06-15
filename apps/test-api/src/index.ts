@@ -174,9 +174,9 @@ const api = defineApi({
 
 app.route('/api', api);
 
-console.log('Test API running on http://localhost:3000');
+console.log('Test API running on http://localhost:3005');
 
 serve({
   fetch: app.fetch,
-  port: 3000
+  port: 3005
 });

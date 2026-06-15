@@ -58,7 +58,7 @@ const productsResource = defineResource({
       // We can use the context to modify data or validate
       // In a real app, you might set a 'createdById' field here
       return {
-        ...data,
+        ...(data as any),
         description: `Created by User ID: ${appContext.user.id}`
       };
     }

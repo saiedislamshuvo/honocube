@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'http://localhost:3005/api';
 
 async function testApi() {
   console.log('🚀 Starting Relational API Tests...\n');
