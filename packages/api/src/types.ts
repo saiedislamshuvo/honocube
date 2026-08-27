@@ -34,6 +34,10 @@ export interface ResourceHooks<
   afterBatchUpdate?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
   beforeBatchDelete?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<(string | number)[] | void> | (string | number)[] | void;
   afterBatchDelete?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
+
+  // Import Hooks
+  beforeImport?: (rows: any[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, params: { isPreview: boolean }) => Promise<any[]> | any[];
+  afterImport?: (results: { creates: any[]; updates: any[]; unchanged: any[]; errors: any[] }, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, params: { isPreview: boolean }) => Promise<void> | void;
 }
 
 export interface AppLogger {
@@ -60,7 +64,7 @@ export interface AppStorage {
 }
 
 export interface ResourceEvent<AppContext = any> {
-  type: "create" | "update" | "delete" | "batch-update" | "batch-delete";
+  type: "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import";
   resource: string;
   data?: any;
   ids?: (string | number)[];
@@ -103,9 +107,14 @@ export interface ResourceConfig<
   
   // Enterprise Features
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
-  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete")[];
+  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute")[];
   softDelete?: string; 
   slugs?: string[]; 
+  
+  import?: {
+    lookupBy: string | string[] | string[][];
+    maxRowsPerRequest?: number;
+  };
   
   // Security
   permissions?: {
@@ -116,8 +125,10 @@ export interface ResourceConfig<
     delete?: string;
     "batch-update"?: string;
     "batch-delete"?: string;
+    "import-preview"?: string;
+    "import-execute"?: string;
   };
-  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete", record?: TSelect) => boolean | Promise<boolean>;
+  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute", record?: TSelect) => boolean | Promise<boolean>;
 
   // UI/API Hints
   hidden?: (keyof TSelect)[];

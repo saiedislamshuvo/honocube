@@ -120,7 +120,11 @@ export function defineResource<
   };
 
   // Helper to check both permissions and authorize
-  const checkAccess = async (appContext: any, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete", record?: any) => {
+  const checkAccess = async (
+    appContext: any, 
+    action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute", 
+    record?: any
+  ) => {
     // 1. Check declarative permission string
     const requiredPermission = config.permissions?.[action];
     if (requiredPermission && globalConfig?.auth?.can) {
@@ -160,7 +164,7 @@ export function defineResource<
     }
   };
 
-  const getCacheKey = (c: Context, type: "list" | "detail", id?: string | number) => {
+  const getCacheKey = (c: Context, type: string, id?: string | number) => {
     const queryStr = new URL(c.req.url).search;
     return `res:${config.name}:${type}${id ? `:${id}` : ''}:${queryStr}`;
   };
@@ -1127,6 +1131,299 @@ export function defineResource<
 
       return c.json({ success: true });
     });
+  }
+
+  // Import Engine
+  if (config.import && (methods.has("import-preview") || methods.has("import-execute"))) {
+    const handleImport = async (c: any, isPreview: boolean) => {
+      const adapter = getAdapter(c);
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+      await checkRateLimit(c, appContext);
+      await checkAccess(appContext, isPreview ? "import-preview" : "import-execute");
+
+      let body = await c.req.json();
+      if (!Array.isArray(body)) throw new ApiError(400, "Import payload must be an array of objects.");
+
+      const maxRows = config.import?.maxRowsPerRequest ?? 100;
+      if (body.length > maxRows) {
+        body = body.slice(0, maxRows);
+      }
+
+      const results = {
+        creates: [] as any[],
+        updates: [] as any[],
+        unchanged: [] as any[],
+        errors: [] as any[]
+      };
+
+      await runTransaction(c, async (tx) => {
+        // 1. Hook
+        if (config.hooks?.beforeImport) {
+          const hooked = await config.hooks.beforeImport(body, c, tx, appContext, { isPreview });
+          if (hooked) body = hooked;
+        }
+
+        if (body.length === 0) return;
+
+        // 2. Fetch Existing (The Batch Lookup)
+        const cols = getTableColumns(config.table as any);
+        let existingRecords: any[] = [];
+        
+        // We do a pre-check to see if ANY rows have valid lookup keys.
+        // If not, we skip the DB query entirely to prevent full table scans.
+        const hasValidKeys = body.some(row => {
+           let lookupConfig = config.import!.lookupBy;
+           if (typeof lookupConfig === 'string') return row[lookupConfig] !== undefined;
+           if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') return !(lookupConfig as string[]).some(k => row[k] === undefined);
+           if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) return (lookupConfig as string[][]).some(keys => !keys.some(k => row[k] === undefined));
+           return false;
+        });
+
+        if (hasValidKeys) {
+           existingRecords = await adapter.findMany(config.table, {
+             where: (cCols: any, { or, and, eq }: any) => {
+                const rowConditions = body.map(row => {
+                   let lookupConfig = config.import!.lookupBy;
+                   if (typeof lookupConfig === 'string') {
+                      if (row[lookupConfig] === undefined) return null;
+                      return eq(cCols[lookupConfig], row[lookupConfig]);
+                   } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
+                      if ((lookupConfig as string[]).some(k => row[k] === undefined)) return null;
+                      return and(...(lookupConfig as string[]).map(k => eq(cCols[k], row[k])));
+                   } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
+                      const orConds = (lookupConfig as string[][]).map(keys => {
+                          if (keys.some(k => row[k] === undefined)) return null;
+                          return and(...keys.map(k => eq(cCols[k], row[k])));
+                      }).filter(Boolean);
+                      if (orConds.length === 0) return null;
+                      return or(...orConds);
+                   }
+                }).filter(Boolean);
+                
+                return rowConditions.length > 1 ? or(...rowConditions) : rowConditions[0];
+             }
+           });
+        }
+
+        const findExisting = (row: any) => {
+           return existingRecords.find(er => {
+              let lookupConfig = config.import!.lookupBy;
+              if (typeof lookupConfig === 'string') {
+                 return er[lookupConfig] === row[lookupConfig];
+              } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
+                 return (lookupConfig as string[]).every(k => er[k] === row[k]);
+              } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
+                 return (lookupConfig as string[][]).some(keys => keys.every(k => er[k] === row[k]));
+              }
+              return false;
+           });
+        };
+
+        let createValidator: z.ZodTypeAny;
+        let updateValidator: z.ZodTypeAny;
+        if (Array.isArray(config.validator)) {
+            createValidator = config.validator[0];
+            updateValidator = config.validator[1];
+        } else if ('create' in config.validator && !(config.validator instanceof z.ZodType)) {
+            createValidator = config.validator.create as z.ZodTypeAny;
+            updateValidator = ('update' in config.validator && !(config.validator instanceof z.ZodType))
+                ? config.validator.update 
+                : (config.validator as any).partial?.() || config.validator;
+        } else {
+            createValidator = config.validator as z.ZodTypeAny;
+            updateValidator = (config.validator as any).partial?.() || config.validator;
+        }
+
+        const ts = getTimestampFields();
+        const stmts: any[] = [];
+        const strategy = globalConfig?.strategy ?? "batch";
+        const sql = tx.getSql();
+
+        for (let i = 0; i < body.length; i++) {
+           const rawRow = body[i];
+           const existing = findExisting(rawRow);
+           const isUpdate = !!existing;
+
+           let validatedRow;
+           try {
+              validatedRow = isUpdate ? updateValidator.parse(rawRow) : createValidator.parse(rawRow);
+           } catch (e: any) {
+              results.errors.push({ index: i, error: e.errors || e.message });
+              continue;
+           }
+           
+           if (!isUpdate) {
+              // Create
+              if (ts?.created && !validatedRow[ts.created]) validatedRow[ts.created] = new Date().toISOString();
+              if (ts?.updated) validatedRow[ts.updated] = new Date().toISOString();
+              
+              results.creates.push(validatedRow);
+              if (!isPreview) {
+                 if (strategy === "batch") {
+                    stmts.push(tx.insertStmt(config.table, validatedRow));
+                    
+                    if (config.relations) {
+                      const parentId = validatedRow.id ? validatedRow.id : sql`(SELECT last_insert_rowid())`;
+                      if (config.relations.many) {
+                        for (const rel of config.relations.many) {
+                          if (Array.isArray(rawRow[rel.name])) {
+                            for (const child of rawRow[rel.name]) {
+                              stmts.push(tx.insertStmt(rel.table, { ...child, [rel.foreignKey]: parentId }));
+                            }
+                          }
+                        }
+                      }
+                      if (config.relations.pivots) {
+                        for (const rel of config.relations.pivots) {
+                          if (Array.isArray(rawRow[rel.name])) {
+                            for (const item of rawRow[rel.name]) {
+                              stmts.push(tx.insertStmt(rel.table, { ...item, [rel.foreignKey]: parentId }));
+                            }
+                          }
+                        }
+                      }
+                    }
+                 } else {
+                    const inserted: any = await tx.insert(config.table, validatedRow);
+                    if (config.relations) {
+                       if (config.relations.many) {
+                         for (const rel of config.relations.many) {
+                           if (Array.isArray(rawRow[rel.name])) {
+                             for (const child of rawRow[rel.name]) {
+                               await tx.insert(rel.table, { ...child, [rel.foreignKey]: inserted.id });
+                             }
+                           }
+                         }
+                       }
+                       if (config.relations.pivots) {
+                         for (const rel of config.relations.pivots) {
+                           if (Array.isArray(rawRow[rel.name])) {
+                             for (const item of rawRow[rel.name]) {
+                               await tx.insert(rel.table, { ...item, [rel.foreignKey]: inserted.id });
+                             }
+                           }
+                         }
+                       }
+                    }
+                 }
+              }
+           } else {
+              // Update
+              const isUnchanged = Object.keys(validatedRow).every(k => existing[k] === validatedRow[k]);
+              if (isUnchanged) {
+                 const hasRelations = config.relations && [
+                    ...(config.relations.many || []),
+                    ...(config.relations.pivots || [])
+                 ].some(r => rawRow[r.name] !== undefined);
+                 
+                 if (!hasRelations) {
+                    results.unchanged.push(validatedRow);
+                    continue;
+                 }
+              }
+
+              let expectedVersion: any;
+              if (config.versionControl) {
+                 const vField = config.versionControl.field;
+                 expectedVersion = rawRow[vField];
+                 if (expectedVersion === undefined) {
+                    results.errors.push({ index: i, error: `Version control field '${vField}' is required for update.` });
+                    continue;
+                 }
+                 validatedRow[vField] = expectedVersion + 1;
+              }
+              
+              if (ts?.updated) validatedRow[ts.updated] = new Date().toISOString();
+              
+              results.updates.push(validatedRow);
+              if (!isPreview) {
+                 const idCol = (cols as any).id;
+                 if (strategy === "batch") {
+                    let updateStmt: any = tx.updateStmt(config.table, existing.id, validatedRow);
+                    if (config.versionControl) {
+                       const vField = config.versionControl.field;
+                       updateStmt = updateStmt.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
+                    }
+                    stmts.push(updateStmt);
+                    
+                    if (config.relations) {
+                       if (config.relations.many) {
+                          for (const rel of config.relations.many) {
+                             if (Array.isArray(rawRow[rel.name])) {
+                                const relStrategy = rel.strategy ?? "replace";
+                                if (relStrategy === "replace") stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id)));
+                                for (const child of rawRow[rel.name]) stmts.push(tx.insertStmt(rel.table, { ...child, [rel.foreignKey]: existing.id }));
+                             }
+                          }
+                       }
+                       if (config.relations.pivots) {
+                          for (const rel of config.relations.pivots) {
+                             if (Array.isArray(rawRow[rel.name])) {
+                                const relStrategy = rel.strategy ?? "replace";
+                                if (relStrategy === "replace") stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id)));
+                                for (const item of rawRow[rel.name]) stmts.push(tx.insertStmt(rel.table, { ...item, [rel.foreignKey]: existing.id }));
+                             }
+                          }
+                       }
+                    }
+                 } else {
+                    let updateQuery: any = tx.updateStmt(config.table, existing.id, validatedRow);
+                    if (config.versionControl) {
+                       const vField = config.versionControl.field;
+                       updateQuery = updateQuery.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
+                    }
+                    const res = await updateQuery;
+                    const updatedRec = Array.isArray(res) ? res[0] : res;
+                    if (config.versionControl && !updatedRec) throw new ApiError(409, `OCC failed at row ${i}.`);
+                    
+                    if (config.relations) {
+                       if (config.relations.many) {
+                          for (const rel of config.relations.many) {
+                             if (Array.isArray(rawRow[rel.name])) {
+                                const relStrategy = rel.strategy ?? "replace";
+                                if (relStrategy === "replace") await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id));
+                                for (const child of rawRow[rel.name]) await tx.insert(rel.table, { ...child, [rel.foreignKey]: existing.id });
+                             }
+                          }
+                       }
+                       if (config.relations.pivots) {
+                          for (const rel of config.relations.pivots) {
+                             if (Array.isArray(rawRow[rel.name])) {
+                                const relStrategy = rel.strategy ?? "replace";
+                                if (relStrategy === "replace") await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id));
+                                for (const item of rawRow[rel.name]) await tx.insert(rel.table, { ...item, [rel.foreignKey]: existing.id });
+                             }
+                          }
+                       }
+                    }
+                 }
+              }
+           }
+        }
+
+        if (!isPreview && stmts.length > 0 && strategy === "batch") {
+           await tx.batch(stmts);
+        }
+
+        if (config.hooks?.afterImport) {
+           await config.hooks.afterImport(results, c, tx, appContext, { isPreview });
+        }
+      });
+
+      if (!isPreview && (results.creates.length > 0 || results.updates.length > 0)) {
+         await emitEvent(appContext, "import", results);
+         await invalidateCache();
+      }
+
+      return c.json({ success: true, results });
+    };
+
+    if (methods.has("import-preview")) {
+       app.post("/import/preview", (c) => handleImport(c, true));
+    }
+    if (methods.has("import-execute")) {
+       app.post("/import/execute", (c) => handleImport(c, false));
+    }
   }
 
   // Custom Actions
