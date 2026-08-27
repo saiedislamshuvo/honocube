@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { z } from "zod";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 429 | 500;
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500;
 
 /**
  * Helper to infer the select type from a table (Drizzle compatible)

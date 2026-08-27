@@ -997,7 +997,7 @@ export function defineResource<
           if (config.versionControl) {
             const vField = config.versionControl.field;
             expectedVersion = data[vField];
-            if (expectedVersion === undefined) throw new ApiError(400, `Version control field '${vField}' is required for update.`);
+            if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
             validated[vField] = expectedVersion + 1;
           }
 
@@ -1051,7 +1051,7 @@ export function defineResource<
           const updated = Array.isArray(results[0]) ? results[0][0] : results[0];
 
           if (config.versionControl && !updated) {
-            throw new ApiError(409, "Optimistic concurrency control failed. The record was modified by another transaction.");
+            throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
           }
 
           if (config.hooks?.afterUpdate) {
@@ -1066,7 +1066,7 @@ export function defineResource<
           if (config.versionControl) {
             const vField = config.versionControl.field;
             expectedVersion = data[vField];
-            if (expectedVersion === undefined) throw new ApiError(400, `Version control field '${vField}' is required for update.`);
+            if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
             validated[vField] = expectedVersion + 1;
           }
 
@@ -1083,7 +1083,7 @@ export function defineResource<
           const updated = Array.isArray(results) ? results[0] : results;
           
           if (config.versionControl && !updated) {
-            throw new ApiError(409, "Optimistic concurrency control failed. The record was modified by another transaction.");
+            throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
           } else if (!updated) {
             throw ApiError.notFound();
           }
@@ -1187,7 +1187,7 @@ export function defineResource<
       await checkAccess(appContext, isPreview ? "import-preview" : "import-execute");
 
       let body = await c.req.json();
-      if (!Array.isArray(body)) throw new ApiError(400, "Import payload must be an array of objects.");
+      if (!Array.isArray(body)) throw new ApiError(400, "INVALID_PAYLOAD", "Import payload must be an array of objects.");
 
       const maxRows = config.import?.maxRowsPerRequest ?? 100;
       if (body.length > maxRows) {
@@ -1216,7 +1216,7 @@ export function defineResource<
         
         // We do a pre-check to see if ANY rows have valid lookup keys.
         // If not, we skip the DB query entirely to prevent full table scans.
-        const hasValidKeys = body.some(row => {
+        const hasValidKeys = body.some((row: any) => {
            let lookupConfig = config.import!.lookupBy;
            if (typeof lookupConfig === 'string') return row[lookupConfig] !== undefined;
            if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') return !(lookupConfig as string[]).some(k => row[k] === undefined);
@@ -1227,7 +1227,7 @@ export function defineResource<
         if (hasValidKeys) {
            existingRecords = await adapter.findMany(config.table, {
              where: (cCols: any, { or, and, eq }: any) => {
-                const rowConditions = body.map(row => {
+                const rowConditions = body.map((row: any) => {
                    let lookupConfig = config.import!.lookupBy;
                    if (typeof lookupConfig === 'string') {
                       if (row[lookupConfig] === undefined) return null;
@@ -1417,7 +1417,7 @@ export function defineResource<
                     }
                     const res = await updateQuery;
                     const updatedRec = Array.isArray(res) ? res[0] : res;
-                    if (config.versionControl && !updatedRec) throw new ApiError(409, `OCC failed at row ${i}.`);
+                    if (config.versionControl && !updatedRec) throw new ApiError(409, "OCC_FAILED", `OCC failed at row ${i}.`);
                     
                     if (config.relations) {
                        if (config.relations.many) {
