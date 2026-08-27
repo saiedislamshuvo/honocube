@@ -20,7 +20,7 @@ export interface ResourceHooks<
   Env extends Record<string, unknown> = Record<string, unknown>,
   AppContext = any
 > {
-  beforeFetch?: (c: Context<{ Bindings: Env }>, params: { list?: boolean; detailId?: string | number }, appContext: AppContext) => Promise<void> | void;
+  beforeFetch?: (c: Context<{ Bindings: Env }>, params: { list?: boolean; detailId?: string | number; slug?: string }, appContext: AppContext) => Promise<void> | void;
   afterFetch?: (rows: TSelect[], c: Context<{ Bindings: Env }>, appContext: AppContext) => Promise<TSelect[]> | TSelect[];
   beforeCreate?: (data: TInsert, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<TInsert | void> | TInsert | void;
   afterCreate?: (record: TSelect, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
@@ -105,6 +105,7 @@ export interface ResourceConfig<
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
   methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete")[];
   softDelete?: string; 
+  slugs?: string[]; 
   
   // Security
   permissions?: {

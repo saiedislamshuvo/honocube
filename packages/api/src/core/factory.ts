@@ -655,6 +655,75 @@ export function defineResource<
     });
   }
 
+  if (config.slugs) {
+    for (const slugField of config.slugs) {
+      app.get(`/${slugField}/:value`, async (c) => {
+        const adapter = getAdapter(c);
+        const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+        await checkRateLimit(c, appContext);
+        const value = c.req.param("value");
+        
+        // Cache Check
+        const cacheEnabled = config.cache?.enabled && globalConfig?.cache;
+        const cacheKey = getCacheKey(c, `detail:${slugField}`, value);
+        if (cacheEnabled) {
+          const cached = await globalConfig!.cache!.get(cacheKey);
+          if (cached) return c.json(cached);
+        }
+
+        if (config.hooks?.beforeFetch) {
+          await config.hooks.beforeFetch(c, { detailId: value, slug: slugField }, appContext);
+        }
+
+        const withTree: any = config.with;
+        const queryKey = config.queryKey ?? config.name;
+
+        const row = await adapter.findFirst(config.table, {
+          where: (cols: any, ops: any) => {
+            const { and, eq, isNull } = ops;
+            const conditions = [eq(cols[slugField], value)];
+            
+            if (config.softDelete) {
+              conditions.push(isNull(cols[config.softDelete]));
+            }
+
+            if (config.scope) {
+              const scoped = config.scope(cols, ops, appContext);
+              if (scoped) conditions.push(scoped);
+            }
+
+            return conditions.length > 1 ? and(...conditions) : conditions[0];
+          },
+          with: withTree,
+          queryKey
+        });
+
+        if (!row) throw ApiError.notFound();
+
+        await checkAccess(appContext, "detail", row);
+
+        let resultRow: any = row;
+        if (config.hooks?.afterFetch) {
+          const after = await config.hooks.afterFetch([row], c, appContext);
+          if (after && after.length > 0) {
+            resultRow = after[0];
+          }
+        }
+
+        const response = {
+          success: true,
+          data: await finalize(resultRow as TSelect, appContext)
+        };
+
+        if (cacheEnabled) {
+          await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
+        }
+
+        return c.json(response);
+      });
+    }
+  }
+
   if (methods.has("create")) {
     app.post("/", async (c) => {
       const adapter = getAdapter(c);
