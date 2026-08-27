@@ -22,17 +22,17 @@ export interface ResourceHooks<
 > {
   beforeFetch?: (c: Context<{ Bindings: Env }>, params: { list?: boolean; detailId?: string | number }, appContext: AppContext) => Promise<void> | void;
   afterFetch?: (rows: TSelect[], c: Context<{ Bindings: Env }>, appContext: AppContext) => Promise<TSelect[]> | TSelect[];
-  beforeCreate?: (data: TInsert, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<TInsert | void> | TInsert | void;
+  beforeCreate?: (data: TInsert, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<TInsert | void> | TInsert | void;
   afterCreate?: (record: TSelect, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
-  beforeUpdate?: (id: string | number, data: Partial<TInsert>, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<Partial<TInsert> | void> | Partial<TInsert> | void;
+  beforeUpdate?: (id: string | number, data: Partial<TInsert>, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<Partial<TInsert> | void> | Partial<TInsert> | void;
   afterUpdate?: (record: TSelect, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
-  beforeDelete?: (id: string | number, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
+  beforeDelete?: (id: string | number, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<void> | void;
   afterDelete?: (id: string | number, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
   
   // Batch Hooks
-  beforeBatchUpdate?: (ids: (string | number)[], data: Partial<TInsert>, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<{ ids: (string | number)[], data: Partial<TInsert> } | void> | { ids: (string | number)[], data: Partial<TInsert> } | void;
+  beforeBatchUpdate?: (ids: (string | number)[], data: Partial<TInsert>, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<{ ids: (string | number)[], data: Partial<TInsert> } | void> | { ids: (string | number)[], data: Partial<TInsert> } | void;
   afterBatchUpdate?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
-  beforeBatchDelete?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<(string | number)[] | void> | (string | number)[] | void;
+  beforeBatchDelete?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<(string | number)[] | void> | (string | number)[] | void;
   afterBatchDelete?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
 }
 
@@ -143,6 +143,11 @@ export interface ResourceConfig<
   timestamps?: boolean | {
     createdAt?: string; // Default: 'createdAt'
     updatedAt?: string; // Default: 'updatedAt'
+  };
+  
+  versionControl?: {
+    field: string;
+    strategy?: "optimistic";
   };
 
   // Mandatory Query Constraints

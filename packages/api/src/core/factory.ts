@@ -476,9 +476,10 @@ export function defineResource<
       }
 
       const record = await runTransaction(c, async (tx) => {
+        const stmts: any[] = [];
         // Apply Batch Hook
         if (config.hooks?.beforeBatchUpdate) {
-          const hooked = await config.hooks.beforeBatchUpdate(targetIds, validatedData, c, tx, appContext);
+          const hooked = await config.hooks.beforeBatchUpdate(targetIds, validatedData, c, tx, appContext, stmts);
           if (hooked) {
             targetIds = hooked.ids;
             updateData = hooked.data;
@@ -541,9 +542,10 @@ export function defineResource<
       let targetIds = parsed.ids;
 
       await runTransaction(c, async (tx) => {
+        const stmts: any[] = [];
         // Apply Batch Hook
         if (config.hooks?.beforeBatchDelete) {
-          const hookedIds = await config.hooks.beforeBatchDelete(targetIds, c, tx, appContext);
+          const hookedIds = await config.hooks.beforeBatchDelete(targetIds, c, tx, appContext, stmts);
           if (hookedIds) targetIds = hookedIds;
         }
 
@@ -670,8 +672,10 @@ export function defineResource<
         let data = body;
         const sql = tx.getSql();
         
+        const stmts: any[] = [];
+        
         if (config.hooks?.beforeCreate) {
-          const hooked = await config.hooks.beforeCreate(data, c, tx, appContext);
+          const hooked = await config.hooks.beforeCreate(data, c, tx, appContext, stmts);
           if (hooked) data = hooked;
         }
 
@@ -696,8 +700,6 @@ export function defineResource<
         }
 
         if (strategy === "batch") {
-          const stmts: any[] = [];
-          
           // 1. Add Parent Statement
           stmts.push(tx.insertStmt(config.table, validated));
 
@@ -831,9 +833,10 @@ export function defineResource<
 
       const record = await runTransaction(c, async (tx) => {
         let data = body;
+        const stmts: any[] = [];
 
         if (config.hooks?.beforeUpdate) {
-          const hooked = await config.hooks.beforeUpdate(id, data, c, tx, appContext);
+          const hooked = await config.hooks.beforeUpdate(id, data, c, tx, appContext, stmts);
           if (hooked) data = hooked;
         }
 
@@ -858,10 +861,25 @@ export function defineResource<
         }
 
         if (strategy === "batch") {
-          const stmts: any[] = [];
-          
           // 1. Add Parent Statement
-          stmts.push(tx.updateStmt(config.table, id, validated));
+          let expectedVersion: any;
+          if (config.versionControl) {
+            const vField = config.versionControl.field;
+            expectedVersion = data[vField];
+            if (expectedVersion === undefined) throw new ApiError(400, `Version control field '${vField}' is required for update.`);
+            validated[vField] = expectedVersion + 1;
+          }
+
+          let parentStmt: any = tx.updateStmt(config.table, id, validated);
+
+          if (config.versionControl) {
+             const vField = config.versionControl.field;
+             const idCol = (getTableColumns(config.table as any) as any).id;
+             const updateCondition = and(eq(idCol, id as any), eq((config.table as any)[vField], expectedVersion));
+             parentStmt = parentStmt.where(updateCondition);
+          }
+
+          stmts.push(parentStmt);
 
           // 2. Sync Relations (if provided)
           if (config.relations) {
@@ -901,6 +919,10 @@ export function defineResource<
           const results = await tx.batch(stmts);
           const updated = Array.isArray(results[0]) ? results[0][0] : results[0];
 
+          if (config.versionControl && !updated) {
+            throw new ApiError(409, "Optimistic concurrency control failed. The record was modified by another transaction.");
+          }
+
           if (config.hooks?.afterUpdate) {
             await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
           }
@@ -909,8 +931,31 @@ export function defineResource<
         } else {
           // Traditional imperative strategy
           // 1. Update Parent
-          const updated = await tx.update(config.table, id, validated);
-          if (!updated) throw ApiError.notFound();
+          let expectedVersion: any;
+          if (config.versionControl) {
+            const vField = config.versionControl.field;
+            expectedVersion = data[vField];
+            if (expectedVersion === undefined) throw new ApiError(400, `Version control field '${vField}' is required for update.`);
+            validated[vField] = expectedVersion + 1;
+          }
+
+          let updateQuery: any = tx.updateStmt(config.table, id, validated);
+
+          if (config.versionControl) {
+             const vField = config.versionControl.field;
+             const idCol = (getTableColumns(config.table as any) as any).id;
+             const updateCondition = and(eq(idCol, id as any), eq((config.table as any)[vField], expectedVersion));
+             updateQuery = updateQuery.where(updateCondition);
+          }
+
+          const results = await updateQuery;
+          const updated = Array.isArray(results) ? results[0] : results;
+          
+          if (config.versionControl && !updated) {
+            throw new ApiError(409, "Optimistic concurrency control failed. The record was modified by another transaction.");
+          } else if (!updated) {
+            throw ApiError.notFound();
+          }
 
           // 2. Sync Relations (if provided)
           if (config.relations) {
@@ -992,8 +1037,9 @@ export function defineResource<
       await checkAccess(appContext, "delete", existingRecord);
 
       await runTransaction(c, async (tx) => {
+        const stmts: any[] = [];
         if (config.hooks?.beforeDelete) {
-          await config.hooks.beforeDelete(id, c, tx, appContext);
+          await config.hooks.beforeDelete(id, c, tx, appContext, stmts);
         }
 
         if (config.softDelete) {
