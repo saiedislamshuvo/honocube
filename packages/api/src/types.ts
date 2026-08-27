@@ -217,6 +217,7 @@ export interface PivotConfig<TTable = any> {
   targetReferenceKey: string; // key on target table
   relationName: string;
   strategy?: "upsert" | "replace" | "append";
+  lookupBy?: string | string[] | string[][];
   search?: string[]; // searchable fields in the target table
   hidden?: string[]; // hidden fields in the target table
 }
@@ -228,6 +229,7 @@ export interface ManyConfig<TTable = any> {
   referenceKey: string; // key on parent table
   schema: z.ZodSchema;
   strategy?: "upsert" | "replace" | "append";
+  lookupBy?: string | string[] | string[][];
   search?: string[]; // searchable fields in this relation
   hidden?: string[]; // hidden fields in this relation
 }

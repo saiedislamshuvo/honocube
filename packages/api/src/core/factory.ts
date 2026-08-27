@@ -152,6 +152,64 @@ export function defineResource<
     };
   };
 
+  const syncRelations = async (
+    tx: any, 
+    relConfig: any, 
+    parentId: any, 
+    incomingChildren: any[], 
+    isPivot: boolean
+  ) => {
+    const stmts: any[] = [];
+    const relStrategy = relConfig.strategy ?? "replace";
+
+    if (relStrategy === "replace") {
+      stmts.push(tx.getDb().delete(relConfig.table).where(eq(relConfig.table[relConfig.foreignKey], parentId)));
+      for (const child of incomingChildren) {
+        stmts.push(tx.insertStmt(relConfig.table, { ...child, [relConfig.foreignKey]: parentId }));
+      }
+    } else if (relStrategy === "append") {
+      for (const child of incomingChildren) {
+        stmts.push(tx.insertStmt(relConfig.table, { ...child, [relConfig.foreignKey]: parentId }));
+      }
+    } else if (relStrategy === "upsert") {
+      let lookupBy = relConfig.lookupBy;
+      if (!lookupBy && isPivot) lookupBy = relConfig.referenceKey;
+      if (!lookupBy) lookupBy = "id";
+
+      const existingChildren = await tx.getDb().select().from(relConfig.table).where(eq(relConfig.table[relConfig.foreignKey], parentId));
+
+      const findExisting = (row: any) => {
+        return existingChildren.find((er: any) => {
+          if (typeof lookupBy === 'string') return er[lookupBy] === row[lookupBy];
+          if (Array.isArray(lookupBy) && typeof lookupBy[0] === 'string') return (lookupBy as string[]).every(k => er[k] === row[k]);
+          if (Array.isArray(lookupBy) && Array.isArray(lookupBy[0])) return (lookupBy as string[][]).some(keys => keys.every(k => er[k] === row[k]));
+          return false;
+        });
+      };
+
+      const cCols = getTableColumns(relConfig.table);
+
+      for (const child of incomingChildren) {
+        const existing = findExisting(child);
+        if (existing) {
+          let updateStmt: any = tx.getDb().update(relConfig.table).set(child);
+          if (cCols.id) {
+             updateStmt = updateStmt.where(eq(cCols.id, existing.id));
+          } else {
+             if (typeof lookupBy === 'string') updateStmt = updateStmt.where(and(eq(cCols[relConfig.foreignKey], parentId), eq(cCols[lookupBy], existing[lookupBy])));
+             else if (Array.isArray(lookupBy) && typeof lookupBy[0] === 'string') {
+                updateStmt = updateStmt.where(and(eq(cCols[relConfig.foreignKey], parentId), ...((lookupBy as string[]).map(k => eq(cCols[k], existing[k])))));
+             }
+          }
+          stmts.push(updateStmt);
+        } else {
+          stmts.push(tx.insertStmt(relConfig.table, { ...child, [relConfig.foreignKey]: parentId }));
+        }
+      }
+    }
+    return stmts;
+  };
+
   const emitEvent = async (appContext: any, type: any, data?: any, ids?: (string | number)[]) => {
     if (globalConfig?.onEvent) {
       await globalConfig.onEvent({
@@ -1032,18 +1090,11 @@ export function defineResource<
 
           // 2. Sync Relations (if provided)
           if (config.relations) {
-            // Sync Many
             if (config.relations.many) {
               for (const rel of config.relations.many) {
                 if (Array.isArray(data[rel.name])) {
-                  const relStrategy = rel.strategy ?? "replace";
-                  if (relStrategy === "replace") {
-                     await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id));
-                  }
-                  
-                  for (const child of data[rel.name]) {
-                    await tx.insert(rel.table, { ...child, [rel.foreignKey]: id });
-                  }
+                  const relStmts = await syncRelations(tx, rel, id, data[rel.name], false);
+                  for (const stmt of relStmts) await stmt;
                 }
               }
             }
@@ -1052,14 +1103,8 @@ export function defineResource<
             if (config.relations.pivots) {
               for (const rel of config.relations.pivots) {
                 if (Array.isArray(data[rel.name])) {
-                  const relStrategy = rel.strategy ?? "replace";
-                  if (relStrategy === "replace") {
-                    await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id));
-                  }
-                  
-                  for (const item of data[rel.name]) {
-                    await tx.insert(rel.table, { ...item, [rel.foreignKey]: id });
-                  }
+                  const relStmts = await syncRelations(tx, rel, id, data[rel.name], true);
+                  for (const stmt of relStmts) await stmt;
                 }
               }
             }
@@ -1244,7 +1289,7 @@ export function defineResource<
            const existing = findExisting(rawRow);
            const isUpdate = !!existing;
 
-           let validatedRow;
+           let validatedRow: any;
            try {
               validatedRow = isUpdate ? updateValidator.parse(rawRow) : createValidator.parse(rawRow);
            } catch (e: any) {
@@ -1350,18 +1395,16 @@ export function defineResource<
                        if (config.relations.many) {
                           for (const rel of config.relations.many) {
                              if (Array.isArray(rawRow[rel.name])) {
-                                const relStrategy = rel.strategy ?? "replace";
-                                if (relStrategy === "replace") stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id)));
-                                for (const child of rawRow[rel.name]) stmts.push(tx.insertStmt(rel.table, { ...child, [rel.foreignKey]: existing.id }));
+                                const relStmts = await syncRelations(tx, rel, existing.id, rawRow[rel.name], false);
+                                stmts.push(...relStmts);
                              }
                           }
                        }
                        if (config.relations.pivots) {
                           for (const rel of config.relations.pivots) {
                              if (Array.isArray(rawRow[rel.name])) {
-                                const relStrategy = rel.strategy ?? "replace";
-                                if (relStrategy === "replace") stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id)));
-                                for (const item of rawRow[rel.name]) stmts.push(tx.insertStmt(rel.table, { ...item, [rel.foreignKey]: existing.id }));
+                                const relStmts = await syncRelations(tx, rel, existing.id, rawRow[rel.name], true);
+                                stmts.push(...relStmts);
                              }
                           }
                        }
@@ -1380,18 +1423,16 @@ export function defineResource<
                        if (config.relations.many) {
                           for (const rel of config.relations.many) {
                              if (Array.isArray(rawRow[rel.name])) {
-                                const relStrategy = rel.strategy ?? "replace";
-                                if (relStrategy === "replace") await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id));
-                                for (const child of rawRow[rel.name]) await tx.insert(rel.table, { ...child, [rel.foreignKey]: existing.id });
+                                const relStmts = await syncRelations(tx, rel, existing.id, rawRow[rel.name], false);
+                                for (const stmt of relStmts) await stmt;
                              }
                           }
                        }
                        if (config.relations.pivots) {
                           for (const rel of config.relations.pivots) {
                              if (Array.isArray(rawRow[rel.name])) {
-                                const relStrategy = rel.strategy ?? "replace";
-                                if (relStrategy === "replace") await tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], existing.id));
-                                for (const item of rawRow[rel.name]) await tx.insert(rel.table, { ...item, [rel.foreignKey]: existing.id });
+                                const relStmts = await syncRelations(tx, rel, existing.id, rawRow[rel.name], true);
+                                for (const stmt of relStmts) await stmt;
                              }
                           }
                        }
