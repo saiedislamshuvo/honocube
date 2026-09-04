@@ -52,7 +52,7 @@ yarn build
 
 ## Documentation
 
-For full documentation, please refer to the [Docs App](./apps/docs) or visit the live site at [honocube.sugarcanedev.com](https://honocube.sugarcanedev.com)
+For full documentation, please refer to the [Docs App](./apps/docs) or visit the live site at [honocube.com](https://honocube.com)
 
 ---
 

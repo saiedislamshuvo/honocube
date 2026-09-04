@@ -53,4 +53,4 @@ The output will be in the `build` directory.
 
 ---
 
-For full documentation, visit [honocube.sugarcanedev.com](https://honocube.sugarcanedev.com) (once deployed) or run the dev server locally.
+For full documentation, visit [honocube.com](https://honocube.com) (once deployed) or run the dev server locally.
