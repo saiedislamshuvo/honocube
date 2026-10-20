@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr merge)",
+      "Bash(gh pr delete:*)",
+      "Bash(gh release:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(npm publish:*)",
+      "Bash(npm publish)",
+      "Bash(npm deprecate:*)",
+      "Bash(npm unpublish:*)",
+      "Bash(npm version:*)",
+      "Bash(yarn npm publish:*)",
+      "Bash(git push:*main)",
+      "Bash(git push:*--force)",
+      "Bash(git push:*-f)",
+      "Bash(git push --delete:*)",
+      "Bash(git push origin --delete:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout -- :*)",
+      "Bash(git clean:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git rebase:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(yarn install:*)"
+    ]
+  }
+}
