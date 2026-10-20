@@ -176,6 +176,21 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     return await this.db.batch(stmts);
   }
 
+  /**
+   * Detects whether the underlying Drizzle driver exposes `db.batch()`.
+   *
+   * Drizzle only implements `batch` on a subset of drivers. As of 0.45.x these
+   * are `d1`, `libsql`, `neon-http` and `sqlite-proxy`. On `postgres-js`,
+   * `node-postgres`, `mysql2` and `better-sqlite3` the method is absent, so
+   * calling it throws "tx.batch is not a function".
+   *
+   * The check is done on the live instance rather than on a driver-name list,
+   * so it stays correct for custom drivers and for future Drizzle releases.
+   */
+  supportsBatch(): boolean {
+    return typeof this.db?.batch === "function";
+  }
+
   insertStmt(table: any, data: unknown): any {
     if (this.dialect === "mysql") {
       return this.db.insert(table).values(data);

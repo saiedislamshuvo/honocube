@@ -29,6 +29,21 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
   // Batch support for D1 and other performance-sensitive environments
   batch<T = any>(stmts: any[]): Promise<T[]>;
 
+  /**
+   * Whether the underlying driver exposes `db.batch()`.
+   *
+   * Only some Drizzle drivers implement it — `d1`, `libsql`, `neon-http` and
+   * `sqlite-proxy` do. `postgres-js`, `node-postgres`, `mysql2` and
+   * `better-sqlite3` do not, and calling it there throws
+   * "tx.batch is not a function".
+   *
+   * Optional so that custom adapters written before this method existed keep
+   * type-checking. When it is absent the framework assumes batch is
+   * available, because `batch()` is a required member of this interface and
+   * a custom adapter that implements it can be relied on to work.
+   */
+  supportsBatch?(): boolean;
+
   // Statement builders for batching
   insertStmt(table: TTable, data: TInsert): any;
   updateStmt(table: TTable, id: string | number, data: Partial<TInsert>): any;
