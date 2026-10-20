@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql, or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
 import { ApiError } from "../utils/errors.js";
-import { DatabaseAdapter } from "../adapters/base.js";
+import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 
 /**
  * Creates the resource framework with global configuration.
@@ -57,6 +57,38 @@ export function defineResource<
   };
 
   const methods = new Set(config.methods ?? ["list", "detail", "create", "update", "delete"]);
+
+  /**
+   * Resolves the execution strategy to use for a request.
+   *
+   * The `batch` strategy requires the underlying driver to expose
+   * `db.batch()`. Only some Drizzle drivers do — `d1`, `libsql`, `neon-http`
+   * and `sqlite-proxy` do; `postgres-js`, `node-postgres`, `mysql2` and
+   * `better-sqlite3` do not. On those drivers `tx.batch` is undefined and
+   * calling it throws "tx.batch is not a function", so a request would fail
+   * with a 500.
+   *
+   * When the driver cannot batch, we fall back to `transaction`, which is
+   * atomic on every driver that supports transactions. This keeps the
+   * "all or nothing" guarantee that `batch` provides rather than silently
+   * degrading to non-atomic sequential writes.
+   *
+   * Adapters that do not implement `supportsBatch()` are assumed to support
+   * batching, because `batch()` is a required member of the adapter
+   * interface.
+   */
+  const resolveStrategy = (
+    adapter: DatabaseAdapter<TTable, TSelect, TInsert>,
+    requested?: DatabaseStrategy
+  ): DatabaseStrategy => {
+    const strategy = requested ?? globalConfig?.strategy ?? "batch";
+    if (strategy !== "batch") return strategy;
+
+    if (adapter.supportsBatch && !adapter.supportsBatch()) {
+      return "transaction";
+    }
+    return "batch";
+  };
 
   // Apply Global App Middleware
   if (globalConfig?.middleware) {
@@ -487,12 +519,12 @@ export function defineResource<
 
   const runTransaction = async <T>(c: Context, cb: (tx: DatabaseAdapter<TTable, TSelect, TInsert>) => Promise<T>): Promise<T> => {
     const adapter = getAdapter(c) as DatabaseAdapter<TTable, TSelect, TInsert>;
-    const strategy = globalConfig?.strategy ?? "batch";
+    const strategy = resolveStrategy(adapter);
 
     if (strategy === "transaction") {
       return await adapter.transaction(cb);
     } else if (strategy === "none" || strategy === "batch") {
-      // For batch, we don't wrap in a transaction here because the inner logic 
+      // For batch, we don't wrap in a transaction here because the inner logic
       // will call tx.batch() which handles atomicity.
       return await cb(adapter);
     } else {
@@ -789,7 +821,7 @@ export function defineResource<
   if (methods.has("create")) {
     app.post("/", async (c) => {
       const adapter = getAdapter(c);
-      const strategy = globalConfig?.strategy ?? "none";
+      const strategy = resolveStrategy(adapter, globalConfig?.strategy ?? "none");
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "create");
@@ -943,7 +975,7 @@ export function defineResource<
   if (methods.has("update")) {
     app.patch("/:id", async (c) => {
       const adapter = getAdapter(c);
-      const strategy = globalConfig?.strategy ?? "batch";
+      const strategy = resolveStrategy(adapter);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
@@ -1281,7 +1313,7 @@ export function defineResource<
 
         const ts = getTimestampFields();
         const stmts: any[] = [];
-        const strategy = globalConfig?.strategy ?? "batch";
+        const strategy = resolveStrategy(tx);
         const sql = tx.getSql();
 
         for (let i = 0; i < body.length; i++) {
