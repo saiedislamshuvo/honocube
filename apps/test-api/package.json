@@ -12,12 +12,13 @@
     "@honocube/api": "*",
     "hono": "^4.0.0",
     "@hono/node-server": "^1.13.0",
-    "drizzle-orm": "^0.39.0",
+    "drizzle-orm": "^0.45.2",
     "@libsql/client": "^0.14.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "25.9.2",
     "tsx": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^6.0.3"
   }
 }
