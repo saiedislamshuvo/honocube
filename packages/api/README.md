@@ -25,32 +25,46 @@ Honocube operates on three main levels:
 2.  **Resources (`defineResource`):** Define a single entity (e.g., "Users", "Posts") with its schema, validators, hooks, and relationships.
 3.  **API Gateway (`defineApi`):** Group multiple resources into a versioned API.
 
+## Peer Dependencies
+
+As of v2.0.0, Honocube no longer bundles its own copy of Hono, Zod, or Drizzle ORM. They are declared as
+**peer dependencies**, which means **your** installed versions are the ones that run — no duplicate copies,
+no version conflicts, and no risk of two different Hono or Zod instances in the same process.
+
+```bash
+npm install @honocube/api hono zod drizzle-orm
+```
+
+| Package     | Peer range         | Notes                                                     |
+| ----------- | ------------------ | --------------------------------------------------------- |
+| `hono`      | `>=4.0.0`          | The version you mount your API with.                      |
+| `zod`       | `^4.0.0`           | The version your resource validators are built with.      |
+| `drizzle-orm` | `>=0.45.0`      | The version your tables and adapter are built with.       |
+
+If you are on npm 7+ or Yarn 2+, these are installed automatically if missing. With Yarn 1 they are not —
+install them yourself.
+
 ## Development
 
-This directory contains the source code for the Honocube documentation site, built with [Docusaurus](https://docusaurus.io/).
+This directory contains the source code for the Honocube framework itself.
 
 ### Running Locally
 
-To start the documentation server in development mode:
-
 ```bash
 # From the root of the monorepo
-yarn dev
+yarn install
+yarn build
 ```
 
-The site will be available at `http://localhost:4000`.
+The compiled output is written to `dist/`.
 
-### Building for Production
-
-To generate the static build:
+### Checking Types
 
 ```bash
-# From the root of the monorepo
-yarn build --filter=@honocube/docs
+yarn workspace @honocube/api check-types
 ```
-
-The output will be in the `build` directory.
 
 ---
 
-For full documentation, visit [honocube.com](https://honocube.com) (once deployed) or run the dev server locally.
+For full documentation, visit [honocube.com](https://honocube.com) or run the docs site locally with
+`yarn dev` from the repository root.

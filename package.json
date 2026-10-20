@@ -9,9 +9,12 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.0.0",
     "prettier": "^3.7.4",
     "turbo": "^2.9.16",
-    "typescript": "5.9.2"
+    "typescript": "6.0.3",
+    "zod": "^4.0.0"
   },
   "engines": {
     "node": ">=18"
