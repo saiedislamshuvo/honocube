@@ -57,6 +57,42 @@ Honocube uses a centralized `ApiError` class to handle both expected and unexpec
 | `TOO_MANY_REQUESTS` | 429 | Rate limit exceeded. |
 | `INTERNAL_ERROR` | 500 | An unexpected server-side error occurred. |
 
+### Not Found
+
+A resource answers every request it cannot route with the same error envelope.
+
+That covers a record that does not exist:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Not Found"
+  }
+}
+```
+
+And a path under the resource that no route handles — `/posts/1/2`, or a collection
+whose `list` method is switched off:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Not Found",
+    "details": {
+      "path": "/api/posts/1/2",
+      "method": "GET"
+    }
+  }
+}
+```
+
+A route your application registers under the resource's path still answers as usual,
+and a `notFound` handler you install on your app is left alone.
+
 ### Manual Error Throwing
 
 You can throw `ApiError` within your hooks or custom actions:

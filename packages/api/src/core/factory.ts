@@ -2,8 +2,32 @@ import { Hono, Context } from "hono";
 import { z } from "zod";
 import { sql, or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
-import { ApiError } from "../utils/errors.js";
+import { ApiError, errorBody } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
+
+/**
+ * The body Hono's built-in not-found handler answers with.
+ *
+ * A response carrying exactly this body is the framework's own fallback; the
+ * resource not-found handler replaces it with the error envelope. A not-found
+ * handler installed by the application answers with something else and is
+ * left alone.
+ */
+const DEFAULT_NOT_FOUND_BODY = "404 Not Found";
+
+/**
+ * Whether a response is Hono's built-in not-found answer.
+ */
+const isDefaultNotFound = async (res: Response): Promise<boolean> => {
+  if (res.status !== 404) return false;
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/plain")) return false;
+  try {
+    return (await res.clone().text()) === DEFAULT_NOT_FOUND_BODY;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Creates the resource framework with global configuration.
@@ -1612,17 +1636,57 @@ export function defineResource<
     }
   }
 
+  /**
+   * Answers a request that no route of this resource handled.
+   *
+   * A path that is not registered under the resource — `/posts/1/2`, or a
+   * collection whose `list` method is switched off — used to fall through to
+   * Hono's default not-found handler, which answers with a bare
+   * `404 Not Found` text body. The very same failure on a registered path
+   * (a record that does not exist) answered with the error envelope, so a
+   * client parsing that envelope got a parse error instead of a structured
+   * error.
+   *
+   * The handler calls `next()` first, so a route the application registered
+   * under the resource's path still wins, and a not-found handler the
+   * application installed itself is left alone.
+   */
+  app.all("*", async (c, next) => {
+    await next();
+
+    // Something answered the request — keep that response.
+    if (c.finalized && !(await isDefaultNotFound(c.res))) {
+      return c.res;
+    }
+
+    const response = c.json(
+      errorBody(
+        new ApiError(404, "NOT_FOUND", "Not Found", {
+          path: c.req.path,
+          method: c.req.method,
+        })
+      ),
+      404
+    );
+
+    // Assigning the response to `c.res` as well keeps it in place when the
+    // handler chain already produced a response of its own.
+    c.res = response;
+
+    return c.res;
+  });
+
   app.onError((err, c) => {
     if (err instanceof ApiError) {
-      return c.json({ success: false, error: { code: err.code, message: err.message, details: err.details } }, err.status);
+      return c.json(errorBody(err), err.status);
     }
     if (err.name === "ZodError") {
-       return c.json({ success: false, error: { code: "VALIDATION_ERROR", message: "Validation failed", details: (err as any).issues } }, 400);
+       return c.json(errorBody({ code: "VALIDATION_ERROR", message: "Validation failed", details: (err as any).issues }), 400);
     }
-    
+
     // Use the framework logger for unexpected errors
     globalConfig?.logger?.error("Internal Error:", err);
-    
+
     return c.json({ success: false, error: { code: "INTERNAL_ERROR", message: "Internal Server Error", debug: err.message } }, 500);
   });
 
