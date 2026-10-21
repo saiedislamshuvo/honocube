@@ -56,7 +56,11 @@ const productsResource = defineResource({
   name: 'products',
   queryKey: 'products',
   table: schema.products,
-  cache: { enabled: true, ttl: 60 }, // Opt-in to caching
+  // Opt-in to caching. The cache key has to identify the caller, otherwise
+  // one caller's response would be served to the next one — this resource
+  // has no scope and no transform, so every caller is owed the same rows
+  // and the key can say so.
+  cache: { enabled: true, ttl: 60, keyBy: () => 'shared' },
   validator: z.object({
     name: z.string().min(1),
     price: z.number().positive(),

@@ -212,7 +212,12 @@ export interface ResourceConfig<TTable = unknown, TSelect = unknown, TInsert = u
   hidden?: (keyof TSelect)[];
   transform?: (record: TSelect, appContext: AppContext) => any | Promise<any>;
   
-  cache?: { enabled: boolean; ttl?: number; };
+  // The cache key has to identify the caller: scope and transform both depend on the
+  // app context, so one key shared by all callers would serve one caller's rows to
+  // another. keyBy returns the caller dimension of the key; without it (or when it
+  // returns nothing for this caller) the response is served from the database and
+  // nothing is read from or written to the cache.
+  cache?: { enabled: boolean; ttl?: number; keyBy?: (appContext: AppContext, query: Record<string, string>) => string | undefined; };
   rateLimit?: { limit: number; window: string; key?: (c: Context<{ Bindings: Env }>, appContext: AppContext) => string; };
   uploads?: Record<string, { folder?: string }>;
   timestamps?: boolean | { createdAt?: string; updatedAt?: string; };

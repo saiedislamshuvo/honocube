@@ -254,9 +254,36 @@ export function defineResource<
     }
   };
 
-  const getCacheKey = (c: Context, type: string, id?: string | number) => {
+  /**
+   * Builds the cache key for a response, or returns `null` when the response
+   * must not be cached.
+   *
+   * The key has to identify the caller. `scope` and `transform` both depend
+   * on the app context, so two callers sending the same query can be owed
+   * different rows — a key without a caller dimension hands the first
+   * caller's response to the second one.
+   *
+   * The caller dimension comes from `cache.keyBy`. When it is missing, or
+   * when it returns nothing for this caller, the response is served from the
+   * database and nothing is read from or written to the cache — sharing one
+   * key between callers would leak rows between them.
+   */
+  const getCacheKey = (
+    c: Context,
+    type: string,
+    id: string | number | undefined,
+    appContext: AppContext
+  ): string | null => {
+    if (!config.cache?.enabled || !globalConfig?.cache) return null;
+
+    const keyBy = config.cache.keyBy;
+    if (!keyBy) return null;
+
+    const caller = keyBy(appContext, c.req.query());
+    if (caller === undefined || caller === null || caller === '') return null;
+
     const queryStr = new URL(c.req.url).search;
-    return `res:${config.name}:${type}${id ? `:${id}` : ''}:${queryStr}`;
+    return `res:${config.name}:${type}${id ? `:${id}` : ''}:${caller}:${queryStr}`;
   };
 
   const invalidateCache = async () => {
@@ -347,9 +374,8 @@ export function defineResource<
       await checkAccess(appContext, "list");
 
       // 0. Cache Check
-      const cacheEnabled = config.cache?.enabled && globalConfig?.cache;
-      const cacheKey = getCacheKey(c, "list");
-      if (cacheEnabled) {
+      const cacheKey = getCacheKey(c, "list", undefined, appContext);
+      if (cacheKey) {
         const cached = await globalConfig!.cache!.get(cacheKey);
         if (cached) return c.json(cached);
       }
@@ -509,7 +535,7 @@ export function defineResource<
         }
       };
 
-      if (cacheEnabled) {
+      if (cacheKey) {
         await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
       }
 
@@ -690,9 +716,8 @@ export function defineResource<
       const id = c.req.param("id");
       
       // 0. Cache Check
-      const cacheEnabled = config.cache?.enabled && globalConfig?.cache;
-      const cacheKey = getCacheKey(c, "detail", id);
-      if (cacheEnabled) {
+      const cacheKey = getCacheKey(c, "detail", id, appContext);
+      if (cacheKey) {
         const cached = await globalConfig!.cache!.get(cacheKey);
         if (cached) return c.json(cached);
       }
@@ -741,7 +766,7 @@ export function defineResource<
         data: await finalize(resultRow as TSelect, appContext)
       };
 
-      if (cacheEnabled) {
+      if (cacheKey) {
         await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
       }
 
@@ -758,9 +783,8 @@ export function defineResource<
         const value = c.req.param("value");
         
         // Cache Check
-        const cacheEnabled = config.cache?.enabled && globalConfig?.cache;
-        const cacheKey = getCacheKey(c, `detail:${slugField}`, value);
-        if (cacheEnabled) {
+        const cacheKey = getCacheKey(c, `detail:${slugField}`, value, appContext);
+        if (cacheKey) {
           const cached = await globalConfig!.cache!.get(cacheKey);
           if (cached) return c.json(cached);
         }
@@ -809,7 +833,7 @@ export function defineResource<
           data: await finalize(resultRow as TSelect, appContext)
         };
 
-        if (cacheEnabled) {
+        if (cacheKey) {
           await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
         }
 
