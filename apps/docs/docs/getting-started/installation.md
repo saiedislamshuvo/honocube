@@ -25,6 +25,8 @@ Ensure you have the following peer dependencies installed:
 yarn add hono drizzle-orm zod
 ```
 
+Coming from 1.x? See the [migration guide](../guides/v2-migration.md).
+
 ## Basic Configuration
 
 To start using Honocube, you'll need to initialize your application configuration using `createApp`.
