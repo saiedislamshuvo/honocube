@@ -1,9 +1,14 @@
 import { Hono, Context } from "hono";
-import { z } from "zod";
 import { sql, or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
-import { ApiError } from "../utils/errors.js";
+import { ApiError, ValidationError } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
+import {
+  parseBatchDeleteBody,
+  parseBatchUpdateBody,
+  resolveValidators,
+  validateWith,
+} from "./validation.js";
 
 /**
  * Creates the resource framework with global configuration.
@@ -591,28 +596,13 @@ export function defineResource<
       await checkAccess(appContext, "batch-update");
 
       const body = await c.req.json();
-      const schema = z.object({
-        ids: z.array(z.union([z.string(), z.number()])).min(1),
-        data: z.any() // Will be validated against resource updateValidator
-      });
-
-      const parsed = schema.parse(body);
+      const parsed = parseBatchUpdateBody(body);
       let targetIds = parsed.ids;
       let updateData = parsed.data;
 
       // Validate data payload
-      let validator: z.ZodTypeAny;
-      if (Array.isArray(config.validator)) {
-        validator = config.validator[1];
-      } else if ('update' in config.validator && !(config.validator instanceof z.ZodType)) {
-        validator = config.validator.update;
-      } else if (typeof (config.validator as any).partial === 'function') {
-        validator = (config.validator as any).partial();
-      } else {
-        validator = config.validator as z.ZodTypeAny;
-      }
-
-      const validatedData = validator.parse(updateData) as any;
+      const { update: validator } = resolveValidators(config.validator);
+      const validatedData = await validateWith(validator, updateData);
 
       // Auto Timestamps
       const ts = getTimestampFields();
@@ -679,11 +669,7 @@ export function defineResource<
       await checkAccess(appContext, "batch-delete");
 
       const body = await c.req.json();
-      const schema = z.object({
-        ids: z.array(z.union([z.string(), z.number()])).min(1)
-      });
-
-      const parsed = schema.parse(body);
+      const parsed = parseBatchDeleteBody(body);
       let targetIds = parsed.ids;
 
       await runTransaction(c, async (tx) => {
@@ -890,16 +876,8 @@ export function defineResource<
         }
 
         // Resolve Create Validator
-        let validator: z.ZodTypeAny;
-        if (Array.isArray(config.validator)) {
-          validator = config.validator[0];
-        } else if ('create' in config.validator && !(config.validator instanceof z.ZodType)) {
-          validator = config.validator.create;
-        } else {
-          validator = config.validator as z.ZodTypeAny;
-        }
-
-        const validated = validator.parse(data) as any;
+        const { create: validator } = resolveValidators(config.validator);
+        const validated = await validateWith(validator, data);
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -1071,18 +1049,8 @@ export function defineResource<
         }
 
         // Resolve Update Validator
-        let validator: z.ZodTypeAny;
-        if (Array.isArray(config.validator)) {
-          validator = config.validator[1];
-        } else if ('update' in config.validator && !(config.validator instanceof z.ZodType)) {
-          validator = config.validator.update;
-        } else if (typeof (config.validator as any).partial === 'function') {
-          validator = (config.validator as any).partial();
-        } else {
-          validator = config.validator as z.ZodTypeAny;
-        }
-
-        const validated = validator.parse(data) as any;
+        const { update: validator } = resolveValidators(config.validator);
+        const validated = await validateWith(validator, data);
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -1376,20 +1344,7 @@ export function defineResource<
            });
         };
 
-        let createValidator: z.ZodTypeAny;
-        let updateValidator: z.ZodTypeAny;
-        if (Array.isArray(config.validator)) {
-            createValidator = config.validator[0];
-            updateValidator = config.validator[1];
-        } else if ('create' in config.validator && !(config.validator instanceof z.ZodType)) {
-            createValidator = config.validator.create as z.ZodTypeAny;
-            updateValidator = ('update' in config.validator && !(config.validator instanceof z.ZodType))
-                ? config.validator.update 
-                : (config.validator as any).partial?.() || config.validator;
-        } else {
-            createValidator = config.validator as z.ZodTypeAny;
-            updateValidator = (config.validator as any).partial?.() || config.validator;
-        }
+        const { create: createValidator, update: updateValidator } = resolveValidators(config.validator);
 
         const ts = getTimestampFields();
         const stmts: any[] = [];
@@ -1402,9 +1357,11 @@ export function defineResource<
 
            let validatedRow: any;
            try {
-              validatedRow = isUpdate ? updateValidator.parse(rawRow) : createValidator.parse(rawRow);
+              validatedRow = isUpdate
+                 ? await validateWith(updateValidator, rawRow)
+                 : await validateWith(createValidator, rawRow);
            } catch (e: any) {
-              results.errors.push({ index: i, error: e.errors || e.message });
+              results.errors.push({ index: i, error: e.issues || e.errors || e.message });
               continue;
            }
            
@@ -1603,7 +1560,7 @@ export function defineResource<
 
         if (action.validator) {
           const body = await c.req.json();
-          validatedData = action.validator.parse(body);
+          validatedData = await validateWith(action.validator, body);
         }
 
         const result = await action.handler(c, appContext, validatedData);
@@ -1615,6 +1572,9 @@ export function defineResource<
   app.onError((err, c) => {
     if (err instanceof ApiError) {
       return c.json({ success: false, error: { code: err.code, message: err.message, details: err.details } }, err.status);
+    }
+    if (err instanceof ValidationError) {
+       return c.json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, details: err.issues } }, 400);
     }
     if (err.name === "ZodError") {
        return c.json({ success: false, error: { code: "VALIDATION_ERROR", message: "Validation failed", details: (err as any).issues } }, 400);

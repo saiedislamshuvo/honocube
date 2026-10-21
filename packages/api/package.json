@@ -60,6 +60,11 @@
     "hono": ">=4.0.0",
     "zod": "^4.0.0"
   },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "drizzle-orm": "^0.45.2",
     "hono": "^4.0.0",

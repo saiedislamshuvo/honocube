@@ -22,8 +22,12 @@ yarn add @honocube/api
 Ensure you have the following peer dependencies installed:
 
 ```bash
-yarn add hono drizzle-orm zod
+yarn add hono drizzle-orm
 ```
+
+`zod` is an optional peer dependency: the framework validates with the
+[Standard Schema](https://standardschema.dev) protocol, so a validator written with Zod, with
+Valibot or with ArkType is accepted. Install `zod` only if your own resources use it.
 
 ## Basic Configuration
 
