@@ -19,8 +19,24 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
   findMany(table: TTable, options: FindManyOptions): Promise<TSelect[]>;
   findFirst(table: TTable, options: FindFirstOptions): Promise<TSelect | null>;
   insert(table: TTable, data: TInsert): Promise<TSelect>;
-  update(table: TTable, id: string | number, data: Partial<TInsert>): Promise<TSelect>;
-  delete(table: TTable, id: string | number, permanent?: boolean): Promise<void>;
+
+  /**
+   * Updates a single row.
+   *
+   * `where` is an optional additional predicate that is combined with the
+   * row's id. The framework passes the row-level scope and the soft-delete
+   * filter, so that a row outside the caller's scope cannot be written even
+   * if it is addressed directly by id.
+   */
+  update(table: TTable, id: string | number, data: Partial<TInsert>, where?: unknown): Promise<TSelect>;
+
+  /**
+   * Deletes a single row.
+   *
+   * `where` is an optional additional predicate that is combined with the
+   * row's id, with the same meaning as in `update`.
+   */
+  delete(table: TTable, id: string | number, permanent?: boolean, where?: unknown): Promise<void>;
   count(table: TTable, where?: unknown): Promise<number>;
   
   // Transaction support is vital for pivot tables

@@ -184,6 +184,31 @@ export function defineResource<
     };
   };
 
+  /**
+   * Builds the predicate a single-record write has to satisfy: the row's id,
+   * plus the soft-delete filter and the row-level scope.
+   *
+   * The read paths apply the same two filters, so a row that does not match
+   * them must not be writable either — otherwise a caller could update or
+   * delete another user's row simply by guessing its id.
+   */
+  const buildRecordPredicate = (id: string | number, appContext: AppContext) => {
+    const cols = getTableColumns(config.table as any);
+    const conditions: any[] = [eq((cols as any).id, id as any)];
+
+    if (config.softDelete) {
+      conditions.push(isNull((cols as any)[config.softDelete]));
+    }
+
+    if (config.scope) {
+      const ops = { eq, and, or, gt, gte, lt, lte, isNull, isNotNull, like, inArray, exists };
+      const scoped = config.scope(cols, ops, appContext);
+      if (scoped) conditions.push(scoped);
+    }
+
+    return conditions.length > 1 ? and(...conditions) : conditions[0];
+  };
+
   const syncRelations = async (
     tx: any, 
     relConfig: any, 
@@ -653,19 +678,18 @@ export function defineResource<
         }
 
         const idCol = (getTableColumns(config.table as any) as any).id;
-        
+        const conditions: any[] = [inArray(idCol, targetIds)];
+
+        if (scopedWhere) {
+          conditions.push(scopedWhere);
+        }
+
+        // A row that is already soft-deleted is not deleted again.
         if (config.softDelete) {
-          let updateQuery = tx.getDb().update(config.table).set({ [config.softDelete]: new Date().toISOString() }).where(inArray(idCol, targetIds));
-          if (scopedWhere) {
-             updateQuery = tx.getDb().update(config.table).set({ [config.softDelete]: new Date().toISOString() }).where(and(inArray(idCol, targetIds), scopedWhere));
-          }
-          await updateQuery;
+          conditions.push(isNull((getTableColumns(config.table as any) as any)[config.softDelete]));
+          await tx.getDb().update(config.table).set({ [config.softDelete]: new Date().toISOString() }).where(and(...conditions));
         } else {
-          let deleteQuery = tx.getDb().delete(config.table).where(inArray(idCol, targetIds));
-          if (scopedWhere) {
-             deleteQuery = tx.getDb().delete(config.table).where(and(inArray(idCol, targetIds), scopedWhere));
-          }
-          await deleteQuery;
+          await tx.getDb().delete(config.table).where(and(...conditions));
         }
 
         if (config.hooks?.afterBatchDelete) {
@@ -994,9 +1018,14 @@ export function defineResource<
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
 
+      // The scope and soft-delete filters are part of the lookup, so a row
+      // outside the caller's scope is reported as not found instead of
+      // confirming that it exists.
+      const recordPredicate = buildRecordPredicate(id, appContext);
+
       // We need to fetch the existing record first for Row-Level Security
       const existingRecord = await adapter.findFirst(config.table, {
-        where: (cols: any, { eq }: any) => eq(cols.id, id),
+        where: recordPredicate,
       });
 
       if (!existingRecord) throw ApiError.notFound();
@@ -1049,11 +1078,15 @@ export function defineResource<
 
           let parentStmt: any = tx.updateStmt(config.table, id, validated);
 
+          // The scope and soft-delete filters are part of the write itself,
+          // so a row that stopped matching them after the lookup is not
+          // written either.
           if (config.versionControl) {
              const vField = config.versionControl.field;
-             const idCol = (getTableColumns(config.table as any) as any).id;
-             const updateCondition = and(eq(idCol, id as any), eq((config.table as any)[vField], expectedVersion));
+             const updateCondition = and(recordPredicate, eq((config.table as any)[vField], expectedVersion));
              parentStmt = parentStmt.where(updateCondition);
+          } else {
+             parentStmt = parentStmt.where(recordPredicate);
           }
 
           stmts.push(parentStmt);
@@ -1118,11 +1151,15 @@ export function defineResource<
 
           let updateQuery: any = tx.updateStmt(config.table, id, validated);
 
+          // The scope and soft-delete filters are part of the write itself,
+          // so a row that stopped matching them after the lookup is not
+          // written either.
           if (config.versionControl) {
              const vField = config.versionControl.field;
-             const idCol = (getTableColumns(config.table as any) as any).id;
-             const updateCondition = and(eq(idCol, id as any), eq((config.table as any)[vField], expectedVersion));
+             const updateCondition = and(recordPredicate, eq((config.table as any)[vField], expectedVersion));
              updateQuery = updateQuery.where(updateCondition);
+          } else {
+             updateQuery = updateQuery.where(recordPredicate);
           }
 
           const results = await updateQuery;
@@ -1192,8 +1229,13 @@ export function defineResource<
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
 
+      // The scope and soft-delete filters are part of the lookup, so a row
+      // outside the caller's scope is reported as not found instead of
+      // confirming that it exists.
+      const recordPredicate = buildRecordPredicate(id, appContext);
+
       const existingRecord = await adapter.findFirst(config.table, {
-        where: (cols: any, { eq }: any) => eq(cols.id, id),
+        where: recordPredicate,
       });
 
       if (!existingRecord) throw ApiError.notFound();
@@ -1207,9 +1249,9 @@ export function defineResource<
         }
 
         if (config.softDelete) {
-          await tx.update(config.table, id, { [config.softDelete]: new Date().toISOString() } as any);
+          await tx.update(config.table, id, { [config.softDelete]: new Date().toISOString() } as any, recordPredicate);
         } else {
-          await tx.delete(config.table, id, true);
+          await tx.delete(config.table, id, true, recordPredicate);
         }
 
         if (config.hooks?.afterDelete) {

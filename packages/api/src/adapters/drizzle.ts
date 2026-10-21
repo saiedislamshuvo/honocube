@@ -143,27 +143,28 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     return result[0];
   }
 
-  async update(table: any, id: string | number, data: any): Promise<unknown> {
+  async update(table: any, id: string | number, data: any, where?: unknown): Promise<unknown> {
     const columns = getTableColumns(table);
     const idCol = (columns as any).id;
     if (!idCol) throw new Error("Table must have an 'id' column for updates");
 
+    const condition = where ? and(eq(idCol, id as any), where as any) : eq(idCol, id as any);
+
     if (this.dialect === "mysql") {
-      await this.db.update(table).set(data).where(eq(idCol, id as any));
-      return this.findFirst(table, {
-        where: (cols: any, { eq }: any) => eq(cols.id, id)
-      });
+      await this.db.update(table).set(data).where(condition);
+      return this.findFirst(table, { where: condition });
     }
 
-    const result = await this.db.update(table).set(data).where(eq(idCol, id as any)).returning();
+    const result = await this.db.update(table).set(data).where(condition).returning();
     return result[0];
   }
 
-  async delete(table: any, id: string | number, _permanent = false): Promise<void> {
+  async delete(table: any, id: string | number, _permanent = false, where?: unknown): Promise<void> {
     const columns = getTableColumns(table);
     const idCol = (columns as any).id;
     if (!idCol) throw new Error("Table must have an 'id' column for deletion");
-    await this.db.delete(table).where(eq(idCol, id as any));
+    const condition = where ? and(eq(idCol, id as any), where as any) : eq(idCol, id as any);
+    await this.db.delete(table).where(condition);
   }
 
   async count(table: any, where?: unknown): Promise<number> {
