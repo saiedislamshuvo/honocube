@@ -140,6 +140,26 @@ export interface ResourceConfig<
   cache?: {
     enabled: boolean;
     ttl?: number; // Time-to-live in seconds
+    /**
+     * Identifies the caller in the cache key.
+     *
+     * A cached response may only be shared between callers when the key
+     * says who is asking. `scope` and `transform` both depend on the app
+     * context, so two callers sending the same query can be owed different
+     * rows — a key without a caller dimension hands the first caller's
+     * response to the second one.
+     *
+     * The returned string becomes part of the cache key, so it has to
+     * distinguish every caller that must not see another caller's data.
+     * Returning `undefined` — an anonymous caller, for instance — leaves
+     * the response uncached.
+     *
+     * When this is not set at all the resource is served from the database
+     * every time and nothing is read from or written to the cache. A
+     * resource whose response is the same for everybody can say so
+     * explicitly with `keyBy: () => 'shared'`.
+     */
+    keyBy?: (appContext: AppContext, query: Record<string, string>) => string | undefined;
   };
   
   rateLimit?: {
