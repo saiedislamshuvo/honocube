@@ -36,6 +36,56 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   };
 }
 
+/**
+ * Reads the `limit` of a list request.
+ *
+ * A malformed limit is refused rather than repaired: a limit of 0 makes the
+ * number of pages infinite, and a negative limit is read by some drivers as
+ * "no limit" — the endpoint would answer with every row.
+ *
+ * A limit above the maximum is not an error, it is capped — that has always
+ * been the behaviour, and it is what protects the database.
+ */
+const parseLimit = (raw: string | undefined, maxLimit: number): number | undefined => {
+  if (raw === undefined) return undefined;
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    const shown = Number.isFinite(value) ? value : raw;
+    throw new ApiError(
+      400,
+      "INVALID_PAGINATION",
+      `Invalid 'limit': expected an integer between 1 and ${maxLimit}, got ${shown}.`,
+      { limit: shown, maxLimit }
+    );
+  }
+
+  return value;
+};
+
+/**
+ * Reads the `page` of a list request.
+ *
+ * The page decides the offset, so a page below 1 would ask the database for
+ * a negative offset — which some drivers read as "from the beginning".
+ */
+const parsePage = (raw: string | undefined): number | undefined => {
+  if (raw === undefined) return undefined;
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    const shown = Number.isFinite(value) ? value : raw;
+    throw new ApiError(
+      400,
+      "INVALID_PAGINATION",
+      `Invalid 'page': expected an integer of at least 1, got ${shown}.`,
+      { page: shown }
+    );
+  }
+
+  return value;
+};
+
 export function defineResource<
   TTable, 
   TSelect, 
@@ -410,12 +460,20 @@ export function defineResource<
       }
 
       const queryParams = c.req.query();
-      let limit = Number(queryParams.limit ?? config.pagination?.defaultLimit ?? 20);
       const maxLimit = config.pagination?.maxLimit ?? 100;
-      if (limit > maxLimit) limit = maxLimit;
+      const requestedLimit = parseLimit(queryParams.limit, maxLimit);
+      const limit = Math.min(requestedLimit ?? config.pagination?.defaultLimit ?? 20, maxLimit);
 
-      const page = Number(queryParams.page ?? 1);
+      const page = parsePage(queryParams.page) ?? 1;
       const offset = (page - 1) * limit;
+      if (!Number.isSafeInteger(offset)) {
+        throw new ApiError(
+          400,
+          "INVALID_PAGINATION",
+          `Invalid 'page': the resulting offset is not a valid number.`,
+          { page: queryParams.page, limit }
+        );
+      }
       const q = queryParams.q;
 
       // 1. Resolve 'with' object (Explicit only)
@@ -556,7 +614,7 @@ export function defineResource<
           total,
           page,
           limit,
-          totalPages: Math.ceil(total / limit)
+          totalPages: limit > 0 ? Math.ceil(total / limit) : 0
         }
       };
 
