@@ -44,6 +44,24 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
    */
   supportsBatch?(): boolean;
 
+  /**
+   * Builds a SQL expression that resolves to the id of the parent row that
+   * was inserted earlier in the same batch.
+   *
+   * This is used when a parent row and its children are inserted in a single
+   * batch, where the parent's id is not known until the insert has run.
+   *
+   * The expression must be portable across the dialect in use — SQLite's
+   * `last_insert_rowid()` does not exist on Postgres or MySQL — and it must
+   * be *stable*: it has to keep resolving to the same parent id for every
+   * child, no matter how many inserts run after the parent's insert.
+   *
+   * Optional so that custom adapters written before this method existed keep
+   * type-checking. When it is absent the framework falls back to inserting
+   * the parent first and reading its id back, which works everywhere.
+   */
+  parentIdExpression?(parentTable: unknown, parentIdColumn?: string): unknown;
+
   // Statement builders for batching
   insertStmt(table: TTable, data: TInsert): any;
   updateStmt(table: TTable, id: string | number, data: Partial<TInsert>): any;

@@ -134,7 +134,7 @@ HonoCube supports batch updates and deletes.
 ## 7. Database Strategy
 
 The `createApp` takes a `strategy` config:
-*   `batch` (Default): Compiles multi-statement operations (e.g. parent insert + relational inserts) into Drizzle `db.batch()`. Highly optimized for Cloudflare D1. Utilizes `(SELECT last_insert_rowid())` internally.
+*   `batch` (Default): Compiles multi-statement operations (e.g. parent insert + relational inserts) into Drizzle `db.batch()`. Highly optimized for Cloudflare D1. The foreign key of a nested child is resolved with a dialect-appropriate SQL expression, because the parent's id is not known until the parent statement has run.
 *   `transaction`: Uses traditional `db.transaction()` wrapper.
 *   `none`: Executes sequentially without wrapping logic.
 
@@ -152,7 +152,7 @@ When a user passes `?q=term`, the API **does not** pull matching IDs into memory
 If a client calls `GET /` without a sort parameter, and the backend developer has not provided a `defaultSort` in the `ResourceConfig`, the API will automatically fallback to sorting by `id` descending (`{ field: 'id', direction: 'desc' }`).
 
 ### Execution Strategies & Atomicity
-*   **`batch`**: In this mode, `create` and `update` requests that include nested relationships do not execute sequential queries. They build an array of statement builders (`adapter.insertStmt`). For related children, the framework uses the raw SQL function `(SELECT last_insert_rowid())` as the foreign key value. All statements are sent to the database in one single `db.batch()` network call.
+*   **`batch`**: In this mode, `create` and `update` requests that include nested relationships do not execute sequential queries. They build an array of statement builders (`adapter.insertStmt`). For related children, the framework resolves the parent's id with a dialect-appropriate SQL expression — `currval(pg_get_serial_sequence(...))` on Postgres, a sub-select on the parent table on SQLite and MySQL — since the parent's id is not known until the parent statement has run. All statements are sent to the database in one single `db.batch()` network call.
 *   **`transaction`**: Traditional SQL transactions. Should be avoided in D1 if possible.
 *   **`none`**: Executes queries sequentially.
 

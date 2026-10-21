@@ -833,8 +833,7 @@ export function defineResource<
 
       const record = await runTransaction(c, async (tx) => {
         let data = body;
-        const sql = tx.getSql();
-        
+
         const stmts: any[] = [];
         
         if (config.hooks?.beforeCreate) {
@@ -862,7 +861,22 @@ export function defineResource<
           if (ts.updated) validated[ts.updated] = now; // Always update modified time
         }
 
-        if (strategy === "batch") {
+        // The foreign key of a child row points at the parent, and the parent's
+        // id is only known once the parent has been inserted. When the client
+        // supplied the id we can use it as-is; otherwise the adapter builds a
+        // dialect-appropriate expression that resolves to it when the child is
+        // inserted. Without either, relations cannot be written in a batch and
+        // we fall back to the imperative strategy below.
+        const hasRelations = !!(config.relations?.many?.length || config.relations?.pivots?.length);
+        const explicitParentId = (validated as any).id;
+        const batchParentId = !hasRelations
+          ? undefined
+          : explicitParentId != null
+            ? explicitParentId
+            : tx.parentIdExpression?.(config.table);
+        const useBatch = strategy === "batch" && (!hasRelations || batchParentId !== undefined);
+
+        if (useBatch) {
           // 1. Add Parent Statement
           stmts.push(tx.insertStmt(config.table, validated));
 
@@ -874,9 +888,9 @@ export function defineResource<
                 const children = data[rel.name];
                 if (Array.isArray(children)) {
                   for (const child of children) {
-                    stmts.push(tx.insertStmt(rel.table, { 
-                      ...child, 
-                      [rel.foreignKey]: sql`(SELECT last_insert_rowid())` 
+                    stmts.push(tx.insertStmt(rel.table, {
+                      ...child,
+                      [rel.foreignKey]: batchParentId
                     }));
                   }
                 }
@@ -889,9 +903,9 @@ export function defineResource<
                 const items = data[rel.name];
                 if (Array.isArray(items)) {
                   for (const item of items) {
-                    stmts.push(tx.insertStmt(rel.table, { 
-                      ...item, 
-                      [rel.foreignKey]: sql`(SELECT last_insert_rowid())` 
+                    stmts.push(tx.insertStmt(rel.table, {
+                      ...item,
+                      [rel.foreignKey]: batchParentId
                     }));
                   }
                 }
@@ -1314,7 +1328,6 @@ export function defineResource<
         const ts = getTimestampFields();
         const stmts: any[] = [];
         const strategy = resolveStrategy(tx);
-        const sql = tx.getSql();
 
         for (let i = 0; i < body.length; i++) {
            const rawRow = body[i];
@@ -1336,11 +1349,25 @@ export function defineResource<
               
               results.creates.push(validatedRow);
               if (!isPreview) {
-                 if (strategy === "batch") {
+                 const rowHasRelations = !!config.relations && [
+                    ...(config.relations.many || []),
+                    ...(config.relations.pivots || [])
+                 ].some(r => Array.isArray(rawRow[r.name]));
+
+                 // The foreign key of a child row points at the parent, and the
+                 // parent's id is only known once the parent has been inserted.
+                 // An id supplied by the client is used as-is; otherwise the
+                 // adapter builds a dialect-appropriate expression that
+                 // resolves to it when the child is inserted.
+                 const batchParentId = rowHasRelations
+                    ? (validatedRow.id != null ? validatedRow.id : tx.parentIdExpression?.(config.table))
+                    : undefined;
+
+                 if (strategy === "batch" && (!rowHasRelations || batchParentId !== undefined)) {
                     stmts.push(tx.insertStmt(config.table, validatedRow));
-                    
+
                     if (config.relations) {
-                      const parentId = validatedRow.id ? validatedRow.id : sql`(SELECT last_insert_rowid())`;
+                      const parentId = batchParentId;
                       if (config.relations.many) {
                         for (const rel of config.relations.many) {
                           if (Array.isArray(rawRow[rel.name])) {
