@@ -113,6 +113,13 @@ export interface ResourceConfig<
   
   import?: {
     lookupBy: string | string[] | string[][];
+    /**
+     * How many rows an import request may carry. Defaults to 100.
+     *
+     * A payload over the limit is refused with a 400 — it is not truncated.
+     * A partial import that reports success is much harder to notice than a
+     * rejected request, so the caller is told to chunk the payload instead.
+     */
     maxRowsPerRequest?: number;
   };
   

@@ -1312,9 +1312,17 @@ export function defineResource<
       let body = await c.req.json();
       if (!Array.isArray(body)) throw new ApiError(400, "INVALID_PAYLOAD", "Import payload must be an array of objects.");
 
+      // The payload is not truncated: a partial import that looks like a
+      // complete one is worse than a refused request. The caller is told
+      // how many rows it sent and the limit it has to chunk them by.
       const maxRows = config.import?.maxRowsPerRequest ?? 100;
       if (body.length > maxRows) {
-        body = body.slice(0, maxRows);
+        throw new ApiError(
+          400,
+          "INVALID_PAYLOAD",
+          `Import payload has ${body.length} rows, but the limit for '${config.name}' is ${maxRows}. Send the rows in chunks of ${maxRows} or fewer.`,
+          { rows: body.length, limit: maxRows }
+        );
       }
 
       const results = {
