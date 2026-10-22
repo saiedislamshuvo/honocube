@@ -1,9 +1,32 @@
 import { Hono, Context } from "hono";
-import { z } from "zod";
 import { sql, or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
-import { ApiError } from "../utils/errors.js";
+import { ApiError, ValidationError } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
+import {
+  parseBatchDeleteBody,
+  parseBatchUpdateBody,
+  resolveValidators,
+  validateWith,
+} from "./validation.js";
+
+/**
+ * The execution strategy used when the application does not ask for one.
+ *
+ * This is the single source of truth for the default — `createApp` and every
+ * strategy-reading call site read it from here.
+ */
+export const DEFAULT_STRATEGY: DatabaseStrategy = "batch";
+
+/**
+ * Whether a value is something the framework recurses into.
+ *
+ * `finalize` and `processUploads` both walk nested values, and both have to
+ * skip the values that are not containers. A string, a number or a boolean
+ * would otherwise be spread into an object — a string into its characters —
+ * which is nonsense output rather than the value the caller sent.
+ */
+const isRecursable = (value: unknown): boolean => typeof value === "object" && value !== null;
 
 /**
  * Creates the resource framework with global configuration.
@@ -11,14 +34,18 @@ import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 export function createApp<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any>(
   globalConfig: AppConfig<Env, AppContext>
 ) {
+  // Copy the config so the caller's object is never mutated. The defaults are
+  // applied to the copy, not written back into the object the caller holds.
+  const appConfig: AppConfig<Env, AppContext> = { ...globalConfig };
+
   // Set default strategy to batch if not provided
-  if (!globalConfig.strategy) {
-    globalConfig.strategy = "batch";
+  if (!appConfig.strategy) {
+    appConfig.strategy = DEFAULT_STRATEGY;
   }
 
   // Setup default logger if none provided
-  if (!globalConfig.logger) {
-    globalConfig.logger = {
+  if (!appConfig.logger) {
+    appConfig.logger = {
       info: (msg, ...meta) => console.log(`[HonoCube INFO] ${msg}`, ...meta),
       warn: (msg, ...meta) => console.warn(`[HonoCube WARN] ${msg}`, ...meta),
       error: (msg, err, ...meta) => console.error(`[HonoCube ERROR] ${msg}`, err, ...meta),
@@ -29,12 +56,62 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   return {
     defineResource: <TTable, TSelect, TInsert>(
       config: ResourceConfig<TTable, TSelect, TInsert, Env, AppContext>
-    ) => defineResource<TTable, TSelect, TInsert, Env, AppContext>(config, globalConfig),
+    ) => defineResource<TTable, TSelect, TInsert, Env, AppContext>(config, appConfig),
 
     defineApi: (resources: Record<string, Hono<any>>, version?: string) => 
       defineApi<Env>(resources, version)
   };
 }
+
+/**
+ * Reads the `limit` of a list request.
+ *
+ * A malformed limit is refused rather than repaired: a limit of 0 makes the
+ * number of pages infinite, and a negative limit is read by some drivers as
+ * "no limit" — the endpoint would answer with every row.
+ *
+ * A limit above the maximum is not an error, it is capped — that has always
+ * been the behaviour, and it is what protects the database.
+ */
+const parseLimit = (raw: string | undefined, maxLimit: number): number | undefined => {
+  if (raw === undefined) return undefined;
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    const shown = Number.isFinite(value) ? value : raw;
+    throw new ApiError(
+      400,
+      "INVALID_PAGINATION",
+      `Invalid 'limit': expected an integer between 1 and ${maxLimit}, got ${shown}.`,
+      { limit: shown, maxLimit }
+    );
+  }
+
+  return value;
+};
+
+/**
+ * Reads the `page` of a list request.
+ *
+ * The page decides the offset, so a page below 1 would ask the database for
+ * a negative offset — which some drivers read as "from the beginning".
+ */
+const parsePage = (raw: string | undefined): number | undefined => {
+  if (raw === undefined) return undefined;
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    const shown = Number.isFinite(value) ? value : raw;
+    throw new ApiError(
+      400,
+      "INVALID_PAGINATION",
+      `Invalid 'page': expected an integer of at least 1, got ${shown}.`,
+      { page: shown }
+    );
+  }
+
+  return value;
+};
 
 export function defineResource<
   TTable, 
@@ -81,7 +158,7 @@ export function defineResource<
     adapter: DatabaseAdapter<TTable, TSelect, TInsert>,
     requested?: DatabaseStrategy
   ): DatabaseStrategy => {
-    const strategy = requested ?? globalConfig?.strategy ?? "batch";
+    const strategy = requested ?? globalConfig?.strategy ?? DEFAULT_STRATEGY;
     if (strategy !== "batch") return strategy;
 
     if (adapter.supportsBatch && !adapter.supportsBatch()) {
@@ -137,7 +214,7 @@ export function defineResource<
       for (const rel of allRels) {
         // Ensure we only recurse if the property is actually a relation object/array,
         // and NOT just a simple string URL from an upload field.
-        if (out[rel.name] !== undefined && typeof out[rel.name] === 'object') {
+        if (out[rel.name] !== undefined && isRecursable(out[rel.name])) {
           out[rel.name] = await finalize(out[rel.name], appContext, rel);
         }
       }
@@ -185,16 +262,16 @@ export function defineResource<
   };
 
   /**
-   * Builds the predicate a single-record write has to satisfy: the row's id,
-   * plus the soft-delete filter and the row-level scope.
+   * Builds the conditions a row has to satisfy beyond its id: the soft-delete
+   * filter and the row-level scope.
    *
    * The read paths apply the same two filters, so a row that does not match
    * them must not be writable either — otherwise a caller could update or
    * delete another user's row simply by guessing its id.
    */
-  const buildRecordPredicate = (id: string | number, appContext: AppContext) => {
+  const buildConstraintConditions = (appContext: AppContext) => {
     const cols = getTableColumns(config.table as any);
-    const conditions: any[] = [eq((cols as any).id, id as any)];
+    const conditions: any[] = [];
 
     if (config.softDelete) {
       conditions.push(isNull((cols as any)[config.softDelete]));
@@ -205,6 +282,17 @@ export function defineResource<
       const scoped = config.scope(cols, ops, appContext);
       if (scoped) conditions.push(scoped);
     }
+
+    return conditions;
+  };
+
+  /**
+   * Builds the predicate a single-record write has to satisfy: the row's id,
+   * plus the soft-delete filter and the row-level scope.
+   */
+  const buildRecordPredicate = (id: string | number, appContext: AppContext) => {
+    const cols = getTableColumns(config.table as any);
+    const conditions: any[] = [eq((cols as any).id, id as any), ...buildConstraintConditions(appContext)];
 
     return conditions.length > 1 ? and(...conditions) : conditions[0];
   };
@@ -337,6 +425,11 @@ export function defineResource<
       return await Promise.all(data.map(item => processUploads(item, localConfig)));
     }
 
+    // Only a container can carry upload fields and relations. A string, a
+    // number or a boolean is returned unchanged instead of being spread into
+    // an object.
+    if (!isRecursable(data)) return data;
+
     const out = { ...data };
 
     // 2. Handle Local Uploads
@@ -381,7 +474,9 @@ export function defineResource<
       ];
 
       for (const rel of allRels) {
-        if (out[rel.name] !== undefined) {
+        // Ensure we only recurse if the property is actually a relation object/array,
+        // and NOT just a simple string URL from an upload field.
+        if (out[rel.name] !== undefined && isRecursable(out[rel.name])) {
           out[rel.name] = await processUploads(out[rel.name], rel);
         }
       }
@@ -410,12 +505,20 @@ export function defineResource<
       }
 
       const queryParams = c.req.query();
-      let limit = Number(queryParams.limit ?? config.pagination?.defaultLimit ?? 20);
       const maxLimit = config.pagination?.maxLimit ?? 100;
-      if (limit > maxLimit) limit = maxLimit;
+      const requestedLimit = parseLimit(queryParams.limit, maxLimit);
+      const limit = Math.min(requestedLimit ?? config.pagination?.defaultLimit ?? 20, maxLimit);
 
-      const page = Number(queryParams.page ?? 1);
+      const page = parsePage(queryParams.page) ?? 1;
       const offset = (page - 1) * limit;
+      if (!Number.isSafeInteger(offset)) {
+        throw new ApiError(
+          400,
+          "INVALID_PAGINATION",
+          `Invalid 'page': the resulting offset is not a valid number.`,
+          { page: queryParams.page, limit }
+        );
+      }
       const q = queryParams.q;
 
       // 1. Resolve 'with' object (Explicit only)
@@ -556,7 +659,7 @@ export function defineResource<
           total,
           page,
           limit,
-          totalPages: Math.ceil(total / limit)
+          totalPages: limit > 0 ? Math.ceil(total / limit) : 0
         }
       };
 
@@ -593,28 +696,13 @@ export function defineResource<
       await checkAccess(appContext, "batch-update");
 
       const body = await c.req.json();
-      const schema = z.object({
-        ids: z.array(z.union([z.string(), z.number()])).min(1),
-        data: z.any() // Will be validated against resource updateValidator
-      });
-
-      const parsed = schema.parse(body);
+      const parsed = parseBatchUpdateBody(body);
       let targetIds = parsed.ids;
       let updateData = parsed.data;
 
       // Validate data payload
-      let validator: z.ZodTypeAny;
-      if (Array.isArray(config.validator)) {
-        validator = config.validator[1];
-      } else if ('update' in config.validator && !(config.validator instanceof z.ZodType)) {
-        validator = config.validator.update;
-      } else if (typeof (config.validator as any).partial === 'function') {
-        validator = (config.validator as any).partial();
-      } else {
-        validator = config.validator as z.ZodTypeAny;
-      }
-
-      const validatedData = validator.parse(updateData) as any;
+      const { update: validator } = resolveValidators(config.validator);
+      const validatedData = await validateWith(validator, updateData);
 
       // Auto Timestamps
       const ts = getTimestampFields();
@@ -683,11 +771,7 @@ export function defineResource<
       await checkAccess(appContext, "batch-delete");
 
       const body = await c.req.json();
-      const schema = z.object({
-        ids: z.array(z.union([z.string(), z.number()])).min(1)
-      });
-
-      const parsed = schema.parse(body);
+      const parsed = parseBatchDeleteBody(body);
       let targetIds = parsed.ids;
 
       await runTransaction(c, async (tx) => {
@@ -873,7 +957,7 @@ export function defineResource<
   if (methods.has("create")) {
     app.post("/", async (c) => {
       const adapter = getAdapter(c);
-      const strategy = resolveStrategy(adapter, globalConfig?.strategy ?? "none");
+      const strategy = resolveStrategy(adapter);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "create");
@@ -894,16 +978,8 @@ export function defineResource<
         }
 
         // Resolve Create Validator
-        let validator: z.ZodTypeAny;
-        if (Array.isArray(config.validator)) {
-          validator = config.validator[0];
-        } else if ('create' in config.validator && !(config.validator instanceof z.ZodType)) {
-          validator = config.validator.create;
-        } else {
-          validator = config.validator as z.ZodTypeAny;
-        }
-
-        const validated = validator.parse(data) as any;
+        const { create: validator } = resolveValidators(config.validator);
+        const validated = await validateWith(validator, data);
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -1075,18 +1151,8 @@ export function defineResource<
         }
 
         // Resolve Update Validator
-        let validator: z.ZodTypeAny;
-        if (Array.isArray(config.validator)) {
-          validator = config.validator[1];
-        } else if ('update' in config.validator && !(config.validator instanceof z.ZodType)) {
-          validator = config.validator.update;
-        } else if (typeof (config.validator as any).partial === 'function') {
-          validator = (config.validator as any).partial();
-        } else {
-          validator = config.validator as z.ZodTypeAny;
-        }
-
-        const validated = validator.parse(data) as any;
+        const { update: validator } = resolveValidators(config.validator);
+        const validated = await validateWith(validator, data);
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -1305,9 +1371,17 @@ export function defineResource<
       let body = await c.req.json();
       if (!Array.isArray(body)) throw new ApiError(400, "INVALID_PAYLOAD", "Import payload must be an array of objects.");
 
+      // The payload is not truncated: a partial import that looks like a
+      // complete one is worse than a refused request. The caller is told
+      // how many rows it sent and the limit it has to chunk them by.
       const maxRows = config.import?.maxRowsPerRequest ?? 100;
       if (body.length > maxRows) {
-        body = body.slice(0, maxRows);
+        throw new ApiError(
+          400,
+          "INVALID_PAYLOAD",
+          `Import payload has ${body.length} rows, but the limit for '${config.name}' is ${maxRows}. Send the rows in chunks of ${maxRows} or fewer.`,
+          { rows: body.length, limit: maxRows }
+        );
       }
 
       const results = {
@@ -1329,6 +1403,7 @@ export function defineResource<
         // 2. Fetch Existing (The Batch Lookup)
         const cols = getTableColumns(config.table as any);
         let existingRecords: any[] = [];
+        let visibleRecords: any[] = [];
         
         // We do a pre-check to see if ANY rows have valid lookup keys.
         // If not, we skip the DB query entirely to prevent full table scans.
@@ -1340,60 +1415,85 @@ export function defineResource<
            return false;
         });
 
-        if (hasValidKeys) {
-           existingRecords = await adapter.findMany(config.table, {
-             where: (cCols: any, { or, and, eq }: any) => {
-                const rowConditions = body.map((row: any) => {
-                   const lookupConfig = config.import!.lookupBy;
-                   if (typeof lookupConfig === 'string') {
-                      if (row[lookupConfig] === undefined) return null;
-                      return eq(cCols[lookupConfig], row[lookupConfig]);
-                   } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
-                      if ((lookupConfig as string[]).some(k => row[k] === undefined)) return null;
-                      return and(...(lookupConfig as string[]).map(k => eq(cCols[k], row[k])));
-                   } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
-                      const orConds = (lookupConfig as string[][]).map(keys => {
-                          if (keys.some(k => row[k] === undefined)) return null;
-                          return and(...keys.map(k => eq(cCols[k], row[k])));
-                      }).filter(Boolean);
-                      if (orConds.length === 0) return null;
-                      return or(...orConds);
-                   }
-                }).filter(Boolean);
-                
-                return rowConditions.length > 1 ? or(...rowConditions) : rowConditions[0];
-             }
-           });
-        }
+        // The soft-delete filter and the row-level scope — the same two
+        // filters the read paths apply. A row that does not match them is not
+        // the caller's to write.
+        const constraintConditions = buildConstraintConditions(appContext);
 
-        const findExisting = (row: any) => {
-           return existingRecords.find(er => {
-              const lookupConfig = config.import!.lookupBy;
+        // The conditions that match the lookup keys of the payload.
+        const buildLookupConditions = (cCols: any, ops: any) => {
+           return body.map((row: any) => {
+              let lookupConfig = config.import!.lookupBy;
               if (typeof lookupConfig === 'string') {
-                 return er[lookupConfig] === row[lookupConfig];
+                 if (row[lookupConfig] === undefined) return null;
+                 return ops.eq(cCols[lookupConfig], row[lookupConfig]);
               } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
-                 return (lookupConfig as string[]).every(k => er[k] === row[k]);
+                 if ((lookupConfig as string[]).some(k => row[k] === undefined)) return null;
+                 return ops.and(...(lookupConfig as string[]).map(k => ops.eq(cCols[k], row[k])));
               } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
-                 return (lookupConfig as string[][]).some(keys => keys.every(k => er[k] === row[k]));
+                 const orConds = (lookupConfig as string[][]).map(keys => {
+                     if (keys.some(k => row[k] === undefined)) return null;
+                     return ops.and(...keys.map(k => ops.eq(cCols[k], row[k])));
+                 }).filter(Boolean);
+                 if (orConds.length === 0) return null;
+                 return ops.or(...orConds);
               }
-              return false;
-           });
+              return null;
+           }).filter(Boolean);
         };
 
-        let createValidator: z.ZodTypeAny;
-        let updateValidator: z.ZodTypeAny;
-        if (Array.isArray(config.validator)) {
-            createValidator = config.validator[0];
-            updateValidator = config.validator[1];
-        } else if ('create' in config.validator && !(config.validator instanceof z.ZodType)) {
-            createValidator = config.validator.create as z.ZodTypeAny;
-            updateValidator = ('update' in config.validator && !(config.validator instanceof z.ZodType))
-                ? config.validator.update 
-                : (config.validator as any).partial?.() || config.validator;
-        } else {
-            createValidator = config.validator as z.ZodTypeAny;
-            updateValidator = (config.validator as any).partial?.() || config.validator;
+        if (hasValidKeys) {
+           existingRecords = await adapter.findMany(config.table, {
+             where: (cCols: any, ops: any) => {
+                const rowConditions = buildLookupConditions(cCols, ops);
+
+                return rowConditions.length > 1 ? ops.or(...rowConditions) : rowConditions[0];
+             }
+           });
+
+           // The same lookup with the soft-delete filter and the row-level
+           // scope applied: the rows this caller may write. A row that is in
+           // the lookup but not in here matched a key the caller may not
+           // touch.
+           if (constraintConditions.length > 0) {
+              visibleRecords = await adapter.findMany(config.table, {
+                where: (cCols: any, ops: any) => {
+                   const rowConditions = buildLookupConditions(cCols, ops);
+                   const lookup = rowConditions.length > 1 ? ops.or(...rowConditions) : rowConditions[0];
+
+                   return ops.and(lookup, ops.and(...constraintConditions));
+                }
+              });
+           } else {
+              visibleRecords = existingRecords;
+           }
         }
+
+        const matchesLookup = (er: any, row: any) => {
+           let lookupConfig = config.import!.lookupBy;
+           if (typeof lookupConfig === 'string') {
+              return er[lookupConfig] === row[lookupConfig];
+           } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
+              return (lookupConfig as string[]).every(k => er[k] === row[k]);
+           } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
+              return (lookupConfig as string[][]).some(keys => keys.every(k => er[k] === row[k]));
+           }
+           return false;
+        };
+
+        // The record the import row updates: one the caller may write.
+        const findExisting = (row: any) => {
+           return visibleRecords.find(er => matchesLookup(er, row));
+        };
+
+        // A record the import row matched but may not write — it belongs to
+        // somebody else, or it has been soft-deleted.
+        const visibleIds = new Set(visibleRecords.map((v: any) => v.id));
+        const findForbidden = (row: any) => {
+           return existingRecords.find(er => !visibleIds.has(er.id) && matchesLookup(er, row));
+        };
+
+        const { create: createValidator, update: updateValidator } = resolveValidators(config.validator);
 
         const ts = getTimestampFields();
         const stmts: any[] = [];
@@ -1402,13 +1502,30 @@ export function defineResource<
         for (let i = 0; i < body.length; i++) {
            const rawRow = body[i];
            const existing = findExisting(rawRow);
+
+           // The row matched a record the caller may not write — it belongs
+           // to somebody else, or it has been soft-deleted. Updating it would
+           // cross the row-level scope, so it is refused instead.
+           if (!existing) {
+              const forbidden = findForbidden(rawRow);
+              if (forbidden) {
+                 const reason = config.softDelete && forbidden[config.softDelete] != null
+                    ? `Row matches a soft-deleted record.`
+                    : `Row matches a record that is outside the caller's scope.`;
+                 results.errors.push({ index: i, error: reason });
+                 continue;
+              }
+           }
+
            const isUpdate = !!existing;
 
            let validatedRow: any;
            try {
-              validatedRow = isUpdate ? updateValidator.parse(rawRow) : createValidator.parse(rawRow);
+              validatedRow = isUpdate
+                 ? await validateWith(updateValidator, rawRow)
+                 : await validateWith(createValidator, rawRow);
            } catch (e: any) {
-              results.errors.push({ index: i, error: e.errors || e.message });
+              results.errors.push({ index: i, error: e.issues || e.errors || e.message });
               continue;
            }
            
@@ -1512,12 +1629,29 @@ export function defineResource<
               results.updates.push(validatedRow);
               if (!isPreview) {
                  const idCol = (cols as any).id;
+
+                 // The row's id, the version it is expected to be at, and the
+                 // soft-delete filter and the row-level scope — so that a row
+                 // that stops matching between the lookup and the write is
+                 // not written.
+                 const updateConditions: any[] = [eq(idCol, existing.id as any)];
+                 if (config.versionControl) {
+                    const vField = config.versionControl.field;
+                    updateConditions.push(eq((config.table as any)[vField], expectedVersion));
+                 }
+                 if (constraintConditions.length > 0) {
+                    updateConditions.push(and(...constraintConditions));
+                 }
+
+                 // The statement builder already filters on the row's id; the
+                 // version and the constraints are added on top.
+                 const buildUpdateStatement = () => {
+                    const statement = tx.updateStmt(config.table, existing.id, validatedRow);
+                    return updateConditions.length > 1 ? statement.where(and(...updateConditions)) : statement;
+                 };
+
                  if (strategy === "batch") {
-                    let updateStmt: any = tx.updateStmt(config.table, existing.id, validatedRow);
-                    if (config.versionControl) {
-                       const vField = config.versionControl.field;
-                       updateStmt = updateStmt.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
-                    }
+                    let updateStmt: any = buildUpdateStatement();
                     stmts.push(updateStmt);
                     
                     if (config.relations) {
@@ -1539,11 +1673,7 @@ export function defineResource<
                        }
                     }
                  } else {
-                    let updateQuery: any = tx.updateStmt(config.table, existing.id, validatedRow);
-                    if (config.versionControl) {
-                       const vField = config.versionControl.field;
-                       updateQuery = updateQuery.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
-                    }
+                    const updateQuery: any = buildUpdateStatement();
                     const res = await updateQuery;
                     const updatedRec = Array.isArray(res) ? res[0] : res;
                     if (config.versionControl && !updatedRec) throw new ApiError(409, "OCC_FAILED", `OCC failed at row ${i}.`);
@@ -1609,7 +1739,7 @@ export function defineResource<
 
         if (action.validator) {
           const body = await c.req.json();
-          validatedData = action.validator.parse(body);
+          validatedData = await validateWith(action.validator, body);
         }
 
         const result = await action.handler(c, appContext, validatedData);
@@ -1621,6 +1751,9 @@ export function defineResource<
   app.onError((err, c) => {
     if (err instanceof ApiError) {
       return c.json({ success: false, error: { code: err.code, message: err.message, details: err.details } }, err.status);
+    }
+    if (err instanceof ValidationError) {
+       return c.json({ success: false, error: { code: "VALIDATION_ERROR", message: err.message, details: err.issues } }, 400);
     }
     if (err.name === "ZodError") {
        return c.json({ success: false, error: { code: "VALIDATION_ERROR", message: "Validation failed", details: (err as any).issues } }, 400);

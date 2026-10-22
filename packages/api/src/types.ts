@@ -1,8 +1,68 @@
 import type { Context, MiddlewareHandler } from "hono";
-import type { z } from "zod";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 
 export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500;
+
+/**
+ * The Standard Schema interface (version 1).
+ *
+ * Zod 3.25+, Zod 4, Valibot and ArkType all implement it, so a validator
+ * written with any of them can be handed to the framework. The framework
+ * checks the protocol instead of the constructor: an `instanceof` check
+ * breaks as soon as two copies of the same library end up in the dependency
+ * tree, and it would tie the framework to a single validation library.
+ *
+ * The interface is declared here rather than imported from
+ * `@standard-schema/spec` so that the published package keeps no dependency
+ * on a validation library.
+ */
+export interface StandardSchemaV1<Input = unknown, Output = Input> {
+  readonly "~standard": StandardSchemaV1.Props<Input, Output>;
+}
+
+export declare namespace StandardSchemaV1 {
+  interface Props<Input = unknown, Output = Input> {
+    /** The version number of the standard. */
+    readonly version: 1;
+    /** The vendor name of the schema library. */
+    readonly vendor: string;
+    /** Inferred types associated with the schema. */
+    readonly types?: Types<Input, Output> | undefined;
+    /** Validates an unknown input value. */
+    readonly validate: (
+      value: unknown,
+      options?: { libraryOptions?: Record<string, unknown> | undefined } | undefined
+    ) => Result<Output> | Promise<Result<Output>>;
+  }
+
+  interface Types<Input = unknown, Output = Input> {
+    readonly input: Input;
+    readonly output: Output;
+  }
+
+  type Result<Output> = SuccessResult<Output> | FailureResult;
+
+  interface SuccessResult<Output> {
+    readonly value: Output;
+    readonly issues?: undefined;
+  }
+
+  interface FailureResult {
+    readonly issues: ReadonlyArray<Issue>;
+  }
+
+  interface Issue {
+    readonly message: string;
+    readonly path?: ReadonlyArray<PropertyKey | PathSegment> | undefined;
+  }
+
+  interface PathSegment {
+    readonly key: PropertyKey;
+  }
+
+  type InferInput<Schema extends StandardSchemaV1> = NonNullable<Schema["~standard"]["types"]>["input"];
+  type InferOutput<Schema extends StandardSchemaV1> = NonNullable<Schema["~standard"]["types"]>["output"];
+}
 
 /**
  * Helper to infer the select type from a table (Drizzle compatible)
@@ -100,10 +160,10 @@ export interface ResourceConfig<
   table: TTable;
   schema?: Record<string, any>; // Scoped schema for performance
   adapter?: DatabaseAdapter<TTable, TSelect, TInsert> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<TTable, TSelect, TInsert>);
-  validator: 
-    | z.ZodType<TInsert, any, any> 
-    | [z.ZodType<TInsert, any, any>, z.ZodTypeAny]
-    | { create: z.ZodType<TInsert, any, any>; update: z.ZodTypeAny };
+  validator:
+    | StandardSchemaV1<unknown, TInsert>
+    | [StandardSchemaV1<unknown, TInsert>, StandardSchemaV1<unknown, any>]
+    | { create: StandardSchemaV1<unknown, TInsert>; update: StandardSchemaV1<unknown, any> };
   
   // Enterprise Features
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
@@ -113,6 +173,13 @@ export interface ResourceConfig<
   
   import?: {
     lookupBy: string | string[] | string[][];
+    /**
+     * How many rows an import request may carry. Defaults to 100.
+     *
+     * A payload over the limit is refused with a 400 — it is not truncated.
+     * A partial import that reports success is much harder to notice than a
+     * rejected request, so the caller is told to chunk the payload instead.
+     */
     maxRowsPerRequest?: number;
   };
   
@@ -216,7 +283,7 @@ export interface ActionConfig<Env extends Record<string, unknown> = Record<strin
   path: string;
   method: "get" | "post" | "put" | "patch" | "delete";
   handler: (c: Context<{ Bindings: Env }>, appContext: AppContext, validatedData?: any) => Promise<any> | any;
-  validator?: z.ZodTypeAny;
+  validator?: StandardSchemaV1<unknown, any>;
 }
 
 export interface OneConfig<TTable = any> {
@@ -247,7 +314,7 @@ export interface ManyConfig<TTable = any> {
   table: TTable;
   foreignKey: string; // key on child table linking back to parent
   referenceKey: string; // key on parent table
-  schema: z.ZodSchema;
+  schema: StandardSchemaV1<unknown, any>;
   strategy?: "upsert" | "replace" | "append";
   lookupBy?: string | string[] | string[][];
   search?: string[]; // searchable fields in this relation

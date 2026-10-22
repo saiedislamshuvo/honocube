@@ -28,6 +28,10 @@ const { defineResource, defineApi } = createApp({
 
 A resource maps a database table to standard REST CRUD endpoints (`GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `DELETE /:id`, `PATCH /batch-update`, `POST /batch-delete`).
 
+The `validator` of a resource is a [Standard Schema](https://standardschema.dev) validator: Zod 3.25+,
+Zod 4, Valibot and ArkType all implement that protocol, and so can a schema of your own. The framework
+asks a validator what it can do, not which library it comes from, so `zod` is an optional peer dependency.
+
 ```typescript
 import { z } from 'zod';
 
@@ -120,7 +124,7 @@ When building frontends, understand these URL parameters:
   "error": {
     "code": "VALIDATION_ERROR", // e.g. VALIDATION_ERROR, NOT_FOUND, INTERNAL_ERROR
     "message": "Validation failed",
-    "details": [...] // Zod issues if validation fails
+    "details": [...] // The issues of the schema if validation fails
   }
 }
 ```
@@ -194,11 +198,11 @@ export interface ResourceConfig<TTable = unknown, TSelect = unknown, TInsert = u
   schema?: Record<string, any>;
   adapter?: DatabaseAdapter<TTable, TSelect, TInsert> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<TTable, TSelect, TInsert>);
   
-  validator: 
-    | z.ZodType<TInsert, any, any> 
-    | [z.ZodType<TInsert, any, any>, z.ZodTypeAny]
-    | { create: z.ZodType<TInsert, any, any>; update: z.ZodTypeAny };
-  
+  validator:
+    | StandardSchemaV1<unknown, TInsert>
+    | [StandardSchemaV1<unknown, TInsert>, StandardSchemaV1<unknown, any>]
+    | { create: StandardSchemaV1<unknown, TInsert>; update: StandardSchemaV1<unknown, any> };
+
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
   methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete")[];
   softDelete?: string; 

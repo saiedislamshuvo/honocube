@@ -99,4 +99,25 @@ The response will include a `meta` object with total counts and page information
 }
 ```
 
+### Validating the Pagination Inputs
+
+`page` and `limit` must be whole numbers. `page` is at least `1`, and `limit` is at least `1`.
+A malformed value is refused with a `400` instead of being repaired, because a limit of `0`
+makes the number of pages infinite and a negative limit is read by some drivers as "no limit" —
+the endpoint would answer with every row.
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_PAGINATION",
+    "message": "Invalid 'limit': expected an integer between 1 and 100, got -1.",
+    "details": { "limit": -1, "maxLimit": 100 }
+  }
+}
+```
+
+A `limit` **above** the maximum is not an error — it is capped at `maxLimit` (100 by default),
+which is what protects the database from oversized queries.
+
 Next, learn how to [Assemble your API](./api-gateway.md).
