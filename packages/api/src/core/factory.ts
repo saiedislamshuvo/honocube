@@ -11,19 +11,31 @@ import {
 } from "./validation.js";
 
 /**
+ * The execution strategy used when the application does not ask for one.
+ *
+ * This is the single source of truth for the default — `createApp` and every
+ * strategy-reading call site read it from here.
+ */
+export const DEFAULT_STRATEGY: DatabaseStrategy = "batch";
+
+/**
  * Creates the resource framework with global configuration.
  */
 export function createApp<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any>(
   globalConfig: AppConfig<Env, AppContext>
 ) {
+  // Copy the config so the caller's object is never mutated. The defaults are
+  // applied to the copy, not written back into the object the caller holds.
+  const appConfig: AppConfig<Env, AppContext> = { ...globalConfig };
+
   // Set default strategy to batch if not provided
-  if (!globalConfig.strategy) {
-    globalConfig.strategy = "batch";
+  if (!appConfig.strategy) {
+    appConfig.strategy = DEFAULT_STRATEGY;
   }
 
   // Setup default logger if none provided
-  if (!globalConfig.logger) {
-    globalConfig.logger = {
+  if (!appConfig.logger) {
+    appConfig.logger = {
       info: (msg, ...meta) => console.log(`[HonoCube INFO] ${msg}`, ...meta),
       warn: (msg, ...meta) => console.warn(`[HonoCube WARN] ${msg}`, ...meta),
       error: (msg, err, ...meta) => console.error(`[HonoCube ERROR] ${msg}`, err, ...meta),
@@ -34,7 +46,7 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   return {
     defineResource: <TTable, TSelect, TInsert>(
       config: ResourceConfig<TTable, TSelect, TInsert, Env, AppContext>
-    ) => defineResource<TTable, TSelect, TInsert, Env, AppContext>(config, globalConfig),
+    ) => defineResource<TTable, TSelect, TInsert, Env, AppContext>(config, appConfig),
 
     defineApi: (resources: Record<string, Hono<any>>, version?: string) => 
       defineApi<Env>(resources, version)
@@ -136,7 +148,7 @@ export function defineResource<
     adapter: DatabaseAdapter<TTable, TSelect, TInsert>,
     requested?: DatabaseStrategy
   ): DatabaseStrategy => {
-    const strategy = requested ?? globalConfig?.strategy ?? "batch";
+    const strategy = requested ?? globalConfig?.strategy ?? DEFAULT_STRATEGY;
     if (strategy !== "batch") return strategy;
 
     if (adapter.supportsBatch && !adapter.supportsBatch()) {
@@ -924,7 +936,7 @@ export function defineResource<
   if (methods.has("create")) {
     app.post("/", async (c) => {
       const adapter = getAdapter(c);
-      const strategy = resolveStrategy(adapter, globalConfig?.strategy ?? "none");
+      const strategy = resolveStrategy(adapter);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "create");
