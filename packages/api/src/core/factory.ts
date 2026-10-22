@@ -19,6 +19,16 @@ import {
 export const DEFAULT_STRATEGY: DatabaseStrategy = "batch";
 
 /**
+ * Whether a value is something the framework recurses into.
+ *
+ * `finalize` and `processUploads` both walk nested values, and both have to
+ * skip the values that are not containers. A string, a number or a boolean
+ * would otherwise be spread into an object — a string into its characters —
+ * which is nonsense output rather than the value the caller sent.
+ */
+const isRecursable = (value: unknown): boolean => typeof value === "object" && value !== null;
+
+/**
  * Creates the resource framework with global configuration.
  */
 export function createApp<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any>(
@@ -204,7 +214,7 @@ export function defineResource<
       for (const rel of allRels) {
         // Ensure we only recurse if the property is actually a relation object/array,
         // and NOT just a simple string URL from an upload field.
-        if (out[rel.name] !== undefined && typeof out[rel.name] === 'object') {
+        if (out[rel.name] !== undefined && isRecursable(out[rel.name])) {
           out[rel.name] = await finalize(out[rel.name], appContext, rel);
         }
       }
@@ -415,6 +425,11 @@ export function defineResource<
       return await Promise.all(data.map(item => processUploads(item, localConfig)));
     }
 
+    // Only a container can carry upload fields and relations. A string, a
+    // number or a boolean is returned unchanged instead of being spread into
+    // an object.
+    if (!isRecursable(data)) return data;
+
     const out = { ...data };
 
     // 2. Handle Local Uploads
@@ -459,7 +474,9 @@ export function defineResource<
       ];
 
       for (const rel of allRels) {
-        if (out[rel.name] !== undefined) {
+        // Ensure we only recurse if the property is actually a relation object/array,
+        // and NOT just a simple string URL from an upload field.
+        if (out[rel.name] !== undefined && isRecursable(out[rel.name])) {
           out[rel.name] = await processUploads(out[rel.name], rel);
         }
       }
