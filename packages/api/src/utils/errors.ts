@@ -1,4 +1,4 @@
-import { ApiErrorStatus } from "../types.js";
+import { ApiErrorStatus, StandardSchemaV1 } from "../types.js";
 
 export class ApiError extends Error {
   constructor(
@@ -61,3 +61,19 @@ export const errorBody = (error: {
     details: error.details,
   },
 });
+/**
+ * A validation failure.
+ *
+ * The issues are the ones the failing schema produced, so a caller sees the
+ * same detail whether the schema was written with Zod, with Valibot or by
+ * hand.
+ */
+export class ValidationError extends Error {
+  constructor(
+    public issues: ReadonlyArray<StandardSchemaV1.Issue>,
+    message = "Validation failed"
+  ) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}

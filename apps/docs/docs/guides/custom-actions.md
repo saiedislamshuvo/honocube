@@ -35,7 +35,7 @@ export const usersResource = defineResource({
 | :--- | :--- | :--- |
 | `path` | `string` | The sub-path for the action (relative to the resource root). |
 | `method` | `"get" \| "post" \| "patch" \| "delete" \| "put"` | The HTTP method. |
-| `validator` | `ZodType` | (Optional) Zod schema to validate the request body. |
+| `validator` | `StandardSchema` | (Optional) Schema to validate the request body. Any [Standard Schema](https://standardschema.dev) validator works — Zod, Valibot, ArkType. |
 | `handler` | `(c, context, data) => Promise<any>` | The function that implements the action logic. |
 
 ## Handler Parameters

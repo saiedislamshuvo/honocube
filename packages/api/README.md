@@ -9,7 +9,7 @@ Building APIs often involves repetitive tasks: setting up CRUD endpoints, handli
 ## Key Features
 
 - **🔋 Battery-included CRUD:** Automatic list, detail, create, update, and delete endpoints.
-- **🛡️ Type Safety:** End-to-end TypeScript support with Zod validation.
+- **🛡️ Type Safety:** End-to-end TypeScript support with Standard Schema validation.
 - **🔌 Adapter Architecture:** Currently optimized for Drizzle ORM, with a flexible base for other adapters.
 - **📁 Integrated Uploads:** Seamlessly handle file uploads and associate them with your records.
 - **🔐 Granular Auth:** Declarative permission strings and functional Row-Level Security (RLS).
@@ -25,6 +25,12 @@ Honocube operates on three main levels:
 2.  **Resources (`defineResource`):** Define a single entity (e.g., "Users", "Posts") with its schema, validators, hooks, and relationships.
 3.  **API Gateway (`defineApi`):** Group multiple resources into a versioned API.
 
+## Migrating from 1.x
+
+The API surface did not change in 2.0.0 — only the dependency model did. The
+[migration guide](https://honocube.com/docs/guides/v2-migration) covers what to install, what to check,
+and what to do when a peer dependency is missing.
+
 ## Peer Dependencies
 
 As of v2.0.0, Honocube no longer bundles its own copy of Hono, Zod, or Drizzle ORM. They are declared as
@@ -32,17 +38,21 @@ As of v2.0.0, Honocube no longer bundles its own copy of Hono, Zod, or Drizzle O
 no version conflicts, and no risk of two different Hono or Zod instances in the same process.
 
 ```bash
-npm install @honocube/api hono zod drizzle-orm
+npm install @honocube/api hono drizzle-orm
 ```
 
 | Package     | Peer range         | Notes                                                     |
 | ----------- | ------------------ | --------------------------------------------------------- |
 | `hono`      | `>=4.0.0`          | The version you mount your API with.                      |
-| `zod`       | `^4.0.0`           | The version your resource validators are built with.      |
 | `drizzle-orm` | `>=0.45.0`      | The version your tables and adapter are built with.       |
+| `zod`       | `^4.0.0`           | **Optional.** The version your resource validators are built with. |
 
 If you are on npm 7+ or Yarn 2+, these are installed automatically if missing. With Yarn 1 they are not —
 install them yourself.
+
+`zod` is optional: the framework validates with the [Standard Schema](https://standardschema.dev)
+protocol, so a validator written with Zod, with Valibot, with ArkType, or by hand is accepted. Install
+`zod` only if your own resources use it.
 
 ## Development
 
