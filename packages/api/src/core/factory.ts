@@ -576,7 +576,7 @@ export function defineResource<
       }
 
       const where = (cols: any, ops: any) => {
-        const { and, eq, inArray, like, gt, gte, lt, lte, isNull, or } = ops;
+        const { and, eq, like, gt, gte, lt, lte, isNull, or } = ops;
         const conditions: any[] = [];
 
         // Apply Soft Delete (Mandatory)
@@ -688,7 +688,9 @@ export function defineResource<
 
   if (methods.has("batch-update")) {
     app.patch("/batch-update", async (c) => {
-      const adapter = getAdapter(c);
+      // Resolve the adapter early, so a missing one is reported before any
+      // work is done.
+      getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "batch-update");
@@ -761,7 +763,9 @@ export function defineResource<
 
   if (methods.has("batch-delete")) {
     app.post("/batch-delete", async (c) => {
-      const adapter = getAdapter(c);
+      // Resolve the adapter early, so a missing one is reported before any
+      // work is done.
+      getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "batch-delete");
@@ -1404,7 +1408,7 @@ export function defineResource<
         // We do a pre-check to see if ANY rows have valid lookup keys.
         // If not, we skip the DB query entirely to prevent full table scans.
         const hasValidKeys = body.some((row: any) => {
-           let lookupConfig = config.import!.lookupBy;
+           const lookupConfig = config.import!.lookupBy;
            if (typeof lookupConfig === 'string') return row[lookupConfig] !== undefined;
            if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') return !(lookupConfig as string[]).some(k => row[k] === undefined);
            if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) return (lookupConfig as string[][]).some(keys => !keys.some(k => row[k] === undefined));
@@ -1726,7 +1730,9 @@ export function defineResource<
   if (config.actions) {
     for (const action of config.actions) {
       app[action.method](action.path, async (c) => {
-        const adapter = getAdapter(c);
+        // Resolve the adapter early, so a missing one is reported before any
+        // work is done.
+        getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
         await checkRateLimit(c, appContext);
         let validatedData = undefined;

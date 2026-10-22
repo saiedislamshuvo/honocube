@@ -59,7 +59,7 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
   /**
    * Helper to get the correct DB instance (potentially with a scoped schema)
    */
-  private getDbInstance(options: FindManyOptions | FindFirstOptions) {
+  private getDbInstance(_options: FindManyOptions | FindFirstOptions) {
     // If a local schema is provided in options, we'd ideally create a scoped instance.
     // However, Drizzle's relational API is tied to the instance creation.
     // For now, we assume the provided 'this.db' already has the necessary schema
@@ -89,7 +89,7 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     }
 
     // 2. Fallback to standard Select API
-    let query = db.select().from(table).$dynamic();
+    const query = db.select().from(table).$dynamic();
     
     if (options.where) {
       if (typeof options.where === 'function') {

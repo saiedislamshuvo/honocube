@@ -53,7 +53,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.45.0",
@@ -66,7 +67,9 @@
     }
   },
   "devDependencies": {
+    "@repo/eslint-config": "*",
     "drizzle-orm": "^0.45.2",
+    "eslint": "^9.39.1",
     "hono": "^4.0.0",
     "typescript": "6.0.3",
     "zod": "^4.0.0"
