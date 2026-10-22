@@ -32,6 +32,35 @@ export class ApiError extends Error {
   }
 }
 
+export interface ErrorEnvelope {
+  success: false;
+  error: {
+    code: string;
+    message: string;
+    details?: any;
+  };
+}
+
+/**
+ * Builds the error envelope the framework answers with.
+ *
+ * Every error response goes through this helper — a thrown `ApiError`, a
+ * failed validation, an unexpected failure and the not-found answer for a
+ * path no route handled — so the shape a client sees is the same wherever
+ * the error came from.
+ */
+export const errorBody = (error: {
+  code: string;
+  message: string;
+  details?: any;
+}): ErrorEnvelope => ({
+  success: false,
+  error: {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+  },
+});
 /**
  * A validation failure.
  *
