@@ -185,16 +185,16 @@ export function defineResource<
   };
 
   /**
-   * Builds the predicate a single-record write has to satisfy: the row's id,
-   * plus the soft-delete filter and the row-level scope.
+   * Builds the conditions a row has to satisfy beyond its id: the soft-delete
+   * filter and the row-level scope.
    *
    * The read paths apply the same two filters, so a row that does not match
    * them must not be writable either — otherwise a caller could update or
    * delete another user's row simply by guessing its id.
    */
-  const buildRecordPredicate = (id: string | number, appContext: AppContext) => {
+  const buildConstraintConditions = (appContext: AppContext) => {
     const cols = getTableColumns(config.table as any);
-    const conditions: any[] = [eq((cols as any).id, id as any)];
+    const conditions: any[] = [];
 
     if (config.softDelete) {
       conditions.push(isNull((cols as any)[config.softDelete]));
@@ -205,6 +205,17 @@ export function defineResource<
       const scoped = config.scope(cols, ops, appContext);
       if (scoped) conditions.push(scoped);
     }
+
+    return conditions;
+  };
+
+  /**
+   * Builds the predicate a single-record write has to satisfy: the row's id,
+   * plus the soft-delete filter and the row-level scope.
+   */
+  const buildRecordPredicate = (id: string | number, appContext: AppContext) => {
+    const cols = getTableColumns(config.table as any);
+    const conditions: any[] = [eq((cols as any).id, id as any), ...buildConstraintConditions(appContext)];
 
     return conditions.length > 1 ? and(...conditions) : conditions[0];
   };
@@ -1325,6 +1336,7 @@ export function defineResource<
         // 2. Fetch Existing (The Batch Lookup)
         const cols = getTableColumns(config.table as any);
         let existingRecords: any[] = [];
+        let visibleRecords: any[] = [];
         
         // We do a pre-check to see if ANY rows have valid lookup keys.
         // If not, we skip the DB query entirely to prevent full table scans.
@@ -1336,44 +1348,82 @@ export function defineResource<
            return false;
         });
 
-        if (hasValidKeys) {
-           existingRecords = await adapter.findMany(config.table, {
-             where: (cCols: any, { or, and, eq }: any) => {
-                const rowConditions = body.map((row: any) => {
-                   let lookupConfig = config.import!.lookupBy;
-                   if (typeof lookupConfig === 'string') {
-                      if (row[lookupConfig] === undefined) return null;
-                      return eq(cCols[lookupConfig], row[lookupConfig]);
-                   } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
-                      if ((lookupConfig as string[]).some(k => row[k] === undefined)) return null;
-                      return and(...(lookupConfig as string[]).map(k => eq(cCols[k], row[k])));
-                   } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
-                      const orConds = (lookupConfig as string[][]).map(keys => {
-                          if (keys.some(k => row[k] === undefined)) return null;
-                          return and(...keys.map(k => eq(cCols[k], row[k])));
-                      }).filter(Boolean);
-                      if (orConds.length === 0) return null;
-                      return or(...orConds);
-                   }
-                }).filter(Boolean);
-                
-                return rowConditions.length > 1 ? or(...rowConditions) : rowConditions[0];
-             }
-           });
-        }
+        // The soft-delete filter and the row-level scope — the same two
+        // filters the read paths apply. A row that does not match them is not
+        // the caller's to write.
+        const constraintConditions = buildConstraintConditions(appContext);
 
-        const findExisting = (row: any) => {
-           return existingRecords.find(er => {
+        // The conditions that match the lookup keys of the payload.
+        const buildLookupConditions = (cCols: any, ops: any) => {
+           return body.map((row: any) => {
               let lookupConfig = config.import!.lookupBy;
               if (typeof lookupConfig === 'string') {
-                 return er[lookupConfig] === row[lookupConfig];
+                 if (row[lookupConfig] === undefined) return null;
+                 return ops.eq(cCols[lookupConfig], row[lookupConfig]);
               } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
-                 return (lookupConfig as string[]).every(k => er[k] === row[k]);
+                 if ((lookupConfig as string[]).some(k => row[k] === undefined)) return null;
+                 return ops.and(...(lookupConfig as string[]).map(k => ops.eq(cCols[k], row[k])));
               } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
-                 return (lookupConfig as string[][]).some(keys => keys.every(k => er[k] === row[k]));
+                 const orConds = (lookupConfig as string[][]).map(keys => {
+                     if (keys.some(k => row[k] === undefined)) return null;
+                     return ops.and(...keys.map(k => ops.eq(cCols[k], row[k])));
+                 }).filter(Boolean);
+                 if (orConds.length === 0) return null;
+                 return ops.or(...orConds);
               }
-              return false;
+              return null;
+           }).filter(Boolean);
+        };
+
+        if (hasValidKeys) {
+           existingRecords = await adapter.findMany(config.table, {
+             where: (cCols: any, ops: any) => {
+                const rowConditions = buildLookupConditions(cCols, ops);
+
+                return rowConditions.length > 1 ? ops.or(...rowConditions) : rowConditions[0];
+             }
            });
+
+           // The same lookup with the soft-delete filter and the row-level
+           // scope applied: the rows this caller may write. A row that is in
+           // the lookup but not in here matched a key the caller may not
+           // touch.
+           if (constraintConditions.length > 0) {
+              visibleRecords = await adapter.findMany(config.table, {
+                where: (cCols: any, ops: any) => {
+                   const rowConditions = buildLookupConditions(cCols, ops);
+                   const lookup = rowConditions.length > 1 ? ops.or(...rowConditions) : rowConditions[0];
+
+                   return ops.and(lookup, ops.and(...constraintConditions));
+                }
+              });
+           } else {
+              visibleRecords = existingRecords;
+           }
+        }
+
+        const matchesLookup = (er: any, row: any) => {
+           let lookupConfig = config.import!.lookupBy;
+           if (typeof lookupConfig === 'string') {
+              return er[lookupConfig] === row[lookupConfig];
+           } else if (Array.isArray(lookupConfig) && typeof lookupConfig[0] === 'string') {
+              return (lookupConfig as string[]).every(k => er[k] === row[k]);
+           } else if (Array.isArray(lookupConfig) && Array.isArray(lookupConfig[0])) {
+              return (lookupConfig as string[][]).some(keys => keys.every(k => er[k] === row[k]));
+           }
+           return false;
+        };
+
+        // The record the import row updates: one the caller may write.
+        const findExisting = (row: any) => {
+           return visibleRecords.find(er => matchesLookup(er, row));
+        };
+
+        // A record the import row matched but may not write — it belongs to
+        // somebody else, or it has been soft-deleted.
+        const visibleIds = new Set(visibleRecords.map((v: any) => v.id));
+        const findForbidden = (row: any) => {
+           return existingRecords.find(er => !visibleIds.has(er.id) && matchesLookup(er, row));
         };
 
         let createValidator: z.ZodTypeAny;
@@ -1398,6 +1448,21 @@ export function defineResource<
         for (let i = 0; i < body.length; i++) {
            const rawRow = body[i];
            const existing = findExisting(rawRow);
+
+           // The row matched a record the caller may not write — it belongs
+           // to somebody else, or it has been soft-deleted. Updating it would
+           // cross the row-level scope, so it is refused instead.
+           if (!existing) {
+              const forbidden = findForbidden(rawRow);
+              if (forbidden) {
+                 const reason = config.softDelete && forbidden[config.softDelete] != null
+                    ? `Row matches a soft-deleted record.`
+                    : `Row matches a record that is outside the caller's scope.`;
+                 results.errors.push({ index: i, error: reason });
+                 continue;
+              }
+           }
+
            const isUpdate = !!existing;
 
            let validatedRow: any;
@@ -1508,12 +1573,29 @@ export function defineResource<
               results.updates.push(validatedRow);
               if (!isPreview) {
                  const idCol = (cols as any).id;
+
+                 // The row's id, the version it is expected to be at, and the
+                 // soft-delete filter and the row-level scope — so that a row
+                 // that stops matching between the lookup and the write is
+                 // not written.
+                 const updateConditions: any[] = [eq(idCol, existing.id as any)];
+                 if (config.versionControl) {
+                    const vField = config.versionControl.field;
+                    updateConditions.push(eq((config.table as any)[vField], expectedVersion));
+                 }
+                 if (constraintConditions.length > 0) {
+                    updateConditions.push(and(...constraintConditions));
+                 }
+
+                 // The statement builder already filters on the row's id; the
+                 // version and the constraints are added on top.
+                 const buildUpdateStatement = () => {
+                    const statement = tx.updateStmt(config.table, existing.id, validatedRow);
+                    return updateConditions.length > 1 ? statement.where(and(...updateConditions)) : statement;
+                 };
+
                  if (strategy === "batch") {
-                    let updateStmt: any = tx.updateStmt(config.table, existing.id, validatedRow);
-                    if (config.versionControl) {
-                       const vField = config.versionControl.field;
-                       updateStmt = updateStmt.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
-                    }
+                    let updateStmt: any = buildUpdateStatement();
                     stmts.push(updateStmt);
                     
                     if (config.relations) {
@@ -1535,11 +1617,7 @@ export function defineResource<
                        }
                     }
                  } else {
-                    let updateQuery: any = tx.updateStmt(config.table, existing.id, validatedRow);
-                    if (config.versionControl) {
-                       const vField = config.versionControl.field;
-                       updateQuery = updateQuery.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
-                    }
+                    const updateQuery: any = buildUpdateStatement();
                     const res = await updateQuery;
                     const updatedRec = Array.isArray(res) ? res[0] : res;
                     if (config.versionControl && !updatedRec) throw new ApiError(409, "OCC_FAILED", `OCC failed at row ${i}.`);
