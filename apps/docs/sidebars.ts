@@ -40,6 +40,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Guides',
       items: [
+        'guides/v2-migration',
         'guides/custom-actions',
         'guides/validation-errors',
         'guides/llm-integration',

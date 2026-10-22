@@ -25,6 +25,12 @@ Honocube operates on three main levels:
 2.  **Resources (`defineResource`):** Define a single entity (e.g., "Users", "Posts") with its schema, validators, hooks, and relationships.
 3.  **API Gateway (`defineApi`):** Group multiple resources into a versioned API.
 
+## Migrating from 1.x
+
+The API surface did not change in 2.0.0 — only the dependency model did. The
+[migration guide](https://honocube.com/docs/guides/v2-migration) covers what to install, what to check,
+and what to do when a peer dependency is missing.
+
 ## Peer Dependencies
 
 As of v2.0.0, Honocube no longer bundles its own copy of Hono, Zod, or Drizzle ORM. They are declared as

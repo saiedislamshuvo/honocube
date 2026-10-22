@@ -25,6 +25,7 @@ Ensure you have the following peer dependencies installed:
 yarn add hono drizzle-orm
 ```
 
+Coming from 1.x? See the [migration guide](../guides/v2-migration.md).
 `zod` is an optional peer dependency: the framework validates with the
 [Standard Schema](https://standardschema.dev) protocol, so a validator written with Zod, with
 Valibot or with ArkType is accepted. Install `zod` only if your own resources use it.
