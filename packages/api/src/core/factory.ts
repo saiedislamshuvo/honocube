@@ -1,6 +1,5 @@
 import { Hono, Context } from "hono";
 import { z } from "zod";
-import { sql, or, like, eq, and, isNull, isNotNull, getTableColumns, inArray, gt, gte, lt, lte, exists } from "drizzle-orm";
 import { ResourceConfig, AppConfig } from "../types.js";
 import { ApiError } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
@@ -191,36 +190,44 @@ export function defineResource<
    * The read paths apply the same two filters, so a row that does not match
    * them must not be writable either — otherwise a caller could update or
    * delete another user's row simply by guessing its id.
+   *
+   * The operators and the columns come from the adapter, so the predicate is
+   * built with the functions the driver understands.
    */
-  const buildRecordPredicate = (id: string | number, appContext: AppContext) => {
-    const cols = getTableColumns(config.table as any);
-    const conditions: any[] = [eq((cols as any).id, id as any)];
+  const buildRecordPredicate = (
+    id: string | number,
+    appContext: AppContext,
+    adapter: DatabaseAdapter<any, any, any>
+  ) => {
+    const cols = adapter.getColumns(config.table as any) as any;
+    const ops = adapter.getOperators();
+    const conditions: any[] = [ops.eq(cols.id, id as any)];
 
     if (config.softDelete) {
-      conditions.push(isNull((cols as any)[config.softDelete]));
+      conditions.push(ops.isNull(cols[config.softDelete]));
     }
 
     if (config.scope) {
-      const ops = { eq, and, or, gt, gte, lt, lte, isNull, isNotNull, like, inArray, exists };
       const scoped = config.scope(cols, ops, appContext);
       if (scoped) conditions.push(scoped);
     }
 
-    return conditions.length > 1 ? and(...conditions) : conditions[0];
+    return conditions.length > 1 ? ops.and(...conditions) : conditions[0];
   };
 
   const syncRelations = async (
-    tx: any, 
-    relConfig: any, 
-    parentId: any, 
-    incomingChildren: any[], 
+    tx: any,
+    relConfig: any,
+    parentId: any,
+    incomingChildren: any[],
     isPivot: boolean
   ) => {
     const stmts: any[] = [];
     const relStrategy = relConfig.strategy ?? "replace";
+    const ops = tx.getOperators();
 
     if (relStrategy === "replace") {
-      stmts.push(tx.getDb().delete(relConfig.table).where(eq(relConfig.table[relConfig.foreignKey], parentId)));
+      stmts.push(tx.getDb().delete(relConfig.table).where(ops.eq(tx.getColumn(relConfig.table, relConfig.foreignKey), parentId)));
       for (const child of incomingChildren) {
         stmts.push(tx.insertStmt(relConfig.table, { ...child, [relConfig.foreignKey]: parentId }));
       }
@@ -233,7 +240,7 @@ export function defineResource<
       if (!lookupBy && isPivot) lookupBy = relConfig.referenceKey;
       if (!lookupBy) lookupBy = "id";
 
-      const existingChildren = await tx.getDb().select().from(relConfig.table).where(eq(relConfig.table[relConfig.foreignKey], parentId));
+      const existingChildren = await tx.getDb().select().from(relConfig.table).where(ops.eq(tx.getColumn(relConfig.table, relConfig.foreignKey), parentId));
 
       const findExisting = (row: any) => {
         return existingChildren.find((er: any) => {
@@ -244,18 +251,18 @@ export function defineResource<
         });
       };
 
-      const cCols = getTableColumns(relConfig.table);
+      const cCols = tx.getColumns(relConfig.table) as any;
 
       for (const child of incomingChildren) {
         const existing = findExisting(child);
         if (existing) {
           let updateStmt: any = tx.getDb().update(relConfig.table).set(child);
           if (cCols.id) {
-             updateStmt = updateStmt.where(eq(cCols.id, existing.id));
+             updateStmt = updateStmt.where(ops.eq(cCols.id, existing.id));
           } else {
-             if (typeof lookupBy === 'string') updateStmt = updateStmt.where(and(eq(cCols[relConfig.foreignKey], parentId), eq(cCols[lookupBy], existing[lookupBy])));
+             if (typeof lookupBy === 'string') updateStmt = updateStmt.where(ops.and(ops.eq(cCols[relConfig.foreignKey], parentId), ops.eq(cCols[lookupBy], existing[lookupBy])));
              else if (Array.isArray(lookupBy) && typeof lookupBy[0] === 'string') {
-                updateStmt = updateStmt.where(and(eq(cCols[relConfig.foreignKey], parentId), ...((lookupBy as string[]).map(k => eq(cCols[k], existing[k])))));
+                updateStmt = updateStmt.where(ops.and(ops.eq(cCols[relConfig.foreignKey], parentId), ...((lookupBy as string[]).map(k => ops.eq(cCols[k], existing[k])))));
              }
           }
           stmts.push(updateStmt);
@@ -425,12 +432,14 @@ export function defineResource<
       const searchSubqueries: any[] = [];
 
       if (q && config.search) {
+        const ops = adapter.getOperators();
+
         // Search local fields
         if (config.search.fields) {
           const localSubquery = adapter.getDb()
-            .select({ id: (config.table as any).id })
+            .select({ id: adapter.getColumn(config.table as any, 'id') })
             .from(config.table)
-            .where(or(...config.search.fields.map(f => like((config.table as any)[f as string], `%${q}%`))));
+            .where(ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`))));
           searchSubqueries.push(localSubquery);
         }
 
@@ -441,10 +450,10 @@ export function defineResource<
             const oneRel = config.relations?.one?.find(r => r.name === relName);
             if (oneRel && oneRel.search) {
               const relSubquery = adapter.getDb()
-                .select({ parentId: (config.table as any)[oneRel.foreignKey] })
+                .select({ parentId: adapter.getColumn(config.table as any, oneRel.foreignKey) })
                 .from(config.table)
-                .innerJoin(oneRel.table, eq(oneRel.table[oneRel.referenceKey], (config.table as any)[oneRel.foreignKey]))
-                .where(or(...oneRel.search.map(f => like(oneRel.table[f], `%${q}%`))));
+                .innerJoin(oneRel.table, ops.eq(adapter.getColumn(oneRel.table, oneRel.referenceKey), adapter.getColumn(config.table as any, oneRel.foreignKey)))
+                .where(ops.or(...oneRel.search.map(f => ops.like(adapter.getColumn(oneRel.table, f as string), `%${q}%`))));
               searchSubqueries.push(relSubquery);
             }
 
@@ -452,9 +461,9 @@ export function defineResource<
             const manyRel = config.relations?.many?.find(r => r.name === relName);
             if (manyRel && manyRel.search) {
               const relSubquery = adapter.getDb()
-                .select({ parentId: manyRel.table[manyRel.foreignKey] })
+                .select({ parentId: adapter.getColumn(manyRel.table, manyRel.foreignKey) })
                 .from(manyRel.table)
-                .where(or(...manyRel.search.map(f => like(manyRel.table[f], `%${q}%`))));
+                .where(ops.or(...manyRel.search.map(f => ops.like(adapter.getColumn(manyRel.table, f as string), `%${q}%`))));
               searchSubqueries.push(relSubquery);
             }
 
@@ -462,10 +471,10 @@ export function defineResource<
             const pivotRel = config.relations?.pivots?.find(r => r.name === relName);
             if (pivotRel && pivotRel.search && pivotRel.targetTable) {
               const relSubquery = adapter.getDb()
-                .select({ parentId: pivotRel.table[pivotRel.foreignKey] })
+                .select({ parentId: adapter.getColumn(pivotRel.table, pivotRel.foreignKey) })
                 .from(pivotRel.table)
-                .innerJoin(pivotRel.targetTable, eq(pivotRel.targetTable[pivotRel.targetReferenceKey], pivotRel.table[pivotRel.referenceKey]))
-                .where(or(...pivotRel.search.map(f => like(pivotRel.targetTable[f], `%${q}%`))));
+                .innerJoin(pivotRel.targetTable, ops.eq(adapter.getColumn(pivotRel.targetTable, pivotRel.targetReferenceKey), adapter.getColumn(pivotRel.table, pivotRel.referenceKey)))
+                .where(ops.or(...pivotRel.search.map(f => ops.like(adapter.getColumn(pivotRel.targetTable, f as string), `%${q}%`))));
               searchSubqueries.push(relSubquery);
             }
           }
@@ -490,7 +499,8 @@ export function defineResource<
         // Apply Search (via Subqueries to avoid parameter limits)
         if (searchSubqueries.length > 0) {
           // Use raw sql to force Drizzle to treat it as a subquery, not an array of values
-          conditions.push(or(...searchSubqueries.map(sq => sql`${cols.id} IN (${sq})`)));
+          const sqlTag = adapter.getSql();
+          conditions.push(or(...searchSubqueries.map(sq => sqlTag`${cols.id} IN (${sq})`)));
         } else if (q && config.search) {
           // If search term provided but no fields/relations matched, force empty result
           conditions.push(eq(cols.id, -1));
@@ -635,24 +645,25 @@ export function defineResource<
 
         // Apply mandatory scope
         let scopedWhere;
+        const cols = tx.getColumns(config.table as any) as any;
+        const ops = tx.getOperators();
         if (config.scope) {
-          const cols = getTableColumns(config.table as any);
-          scopedWhere = config.scope(cols, { eq, and, or, gt, gte, lt, lte, isNull, isNotNull, like, inArray, exists }, appContext);
+          scopedWhere = config.scope(cols, ops, appContext);
         }
 
         // Execute bulk update
-        const idCol = (getTableColumns(config.table as any) as any).id;
-        const conditions: any[] = [inArray(idCol, targetIds)];
-        
+        const idCol = cols.id;
+        const conditions: any[] = [ops.inArray(idCol, targetIds)];
+
         if (scopedWhere) {
           conditions.push(scopedWhere);
         }
 
         if (config.softDelete) {
-           conditions.push(isNull((getTableColumns(config.table as any) as any)[config.softDelete]));
+           conditions.push(ops.isNull(cols[config.softDelete]));
         }
 
-        const result: any = await tx.getDb().update(config.table).set(validatedData).where(and(...conditions));
+        const result: any = await tx.getDb().update(config.table).set(validatedData).where(ops.and(...conditions));
         
         // Handle different driver result formats
         const updatedCount = result.changes ?? result.rowCount ?? targetIds.length;
@@ -698,13 +709,14 @@ export function defineResource<
 
         // Apply mandatory scope
         let scopedWhere;
+        const cols = tx.getColumns(config.table as any) as any;
+        const ops = tx.getOperators();
         if (config.scope) {
-          const cols = getTableColumns(config.table as any);
-          scopedWhere = config.scope(cols, { eq, and, or, gt, gte, lt, lte, isNull, isNotNull, like, inArray, exists }, appContext);
+          scopedWhere = config.scope(cols, ops, appContext);
         }
 
-        const idCol = (getTableColumns(config.table as any) as any).id;
-        const conditions: any[] = [inArray(idCol, targetIds)];
+        const idCol = cols.id;
+        const conditions: any[] = [ops.inArray(idCol, targetIds)];
 
         if (scopedWhere) {
           conditions.push(scopedWhere);
@@ -712,10 +724,10 @@ export function defineResource<
 
         // A row that is already soft-deleted is not deleted again.
         if (config.softDelete) {
-          conditions.push(isNull((getTableColumns(config.table as any) as any)[config.softDelete]));
-          await tx.getDb().update(config.table).set({ [config.softDelete]: new Date().toISOString() }).where(and(...conditions));
+          conditions.push(ops.isNull(cols[config.softDelete]));
+          await tx.getDb().update(config.table).set({ [config.softDelete]: new Date().toISOString() }).where(ops.and(...conditions));
         } else {
-          await tx.getDb().delete(config.table).where(and(...conditions));
+          await tx.getDb().delete(config.table).where(ops.and(...conditions));
         }
 
         if (config.hooks?.afterBatchDelete) {
@@ -1015,7 +1027,7 @@ export function defineResource<
 
       // Reload with relations if necessary (since we just saved them)
       let finalRecord = record;
-      const idCol = (getTableColumns(config.table as any) as any).id;
+      const idCol = (adapter.getColumns(config.table as any) as any).id;
       const recordId = record[idCol.name] || record.id;
       
       if (config.with && recordId) {
@@ -1045,7 +1057,8 @@ export function defineResource<
       // The scope and soft-delete filters are part of the lookup, so a row
       // outside the caller's scope is reported as not found instead of
       // confirming that it exists.
-      const recordPredicate = buildRecordPredicate(id, appContext);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter);
+      const ops = adapter.getOperators();
 
       // We need to fetch the existing record first for Row-Level Security
       const existingRecord = await adapter.findFirst(config.table, {
@@ -1107,7 +1120,7 @@ export function defineResource<
           // written either.
           if (config.versionControl) {
              const vField = config.versionControl.field;
-             const updateCondition = and(recordPredicate, eq((config.table as any)[vField], expectedVersion));
+             const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
              parentStmt = parentStmt.where(updateCondition);
           } else {
              parentStmt = parentStmt.where(recordPredicate);
@@ -1123,7 +1136,7 @@ export function defineResource<
                 if (Array.isArray(data[rel.name])) {
                   const relStrategy = rel.strategy ?? "replace";
                   if (relStrategy === "replace") {
-                    stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id)));
+                    stmts.push(tx.getDb().delete(rel.table).where(ops.eq(adapter.getColumn(rel.table, rel.foreignKey), id)));
                   }
                   
                   for (const child of data[rel.name]) {
@@ -1139,7 +1152,7 @@ export function defineResource<
                 if (Array.isArray(data[rel.name])) {
                   const relStrategy = rel.strategy ?? "replace";
                   if (relStrategy === "replace") {
-                    stmts.push(tx.getDb().delete(rel.table).where(eq(rel.table[rel.foreignKey], id)));
+                    stmts.push(tx.getDb().delete(rel.table).where(ops.eq(adapter.getColumn(rel.table, rel.foreignKey), id)));
                   }
                   
                   for (const item of data[rel.name]) {
@@ -1180,7 +1193,7 @@ export function defineResource<
           // written either.
           if (config.versionControl) {
              const vField = config.versionControl.field;
-             const updateCondition = and(recordPredicate, eq((config.table as any)[vField], expectedVersion));
+             const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
              updateQuery = updateQuery.where(updateCondition);
           } else {
              updateQuery = updateQuery.where(recordPredicate);
@@ -1256,7 +1269,7 @@ export function defineResource<
       // The scope and soft-delete filters are part of the lookup, so a row
       // outside the caller's scope is reported as not found instead of
       // confirming that it exists.
-      const recordPredicate = buildRecordPredicate(id, appContext);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter);
 
       const existingRecord = await adapter.findFirst(config.table, {
         where: recordPredicate,
@@ -1323,7 +1336,8 @@ export function defineResource<
         if (body.length === 0) return;
 
         // 2. Fetch Existing (The Batch Lookup)
-        const cols = getTableColumns(config.table as any);
+        const cols = adapter.getColumns(config.table as any) as any;
+        const ops = adapter.getOperators();
         let existingRecords: any[] = [];
         
         // We do a pre-check to see if ANY rows have valid lookup keys.
@@ -1512,7 +1526,7 @@ export function defineResource<
                     let updateStmt: any = tx.updateStmt(config.table, existing.id, validatedRow);
                     if (config.versionControl) {
                        const vField = config.versionControl.field;
-                       updateStmt = updateStmt.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
+                       updateStmt = updateStmt.where(ops.and(ops.eq(idCol, existing.id as any), ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion)));
                     }
                     stmts.push(updateStmt);
                     
@@ -1538,7 +1552,7 @@ export function defineResource<
                     let updateQuery: any = tx.updateStmt(config.table, existing.id, validatedRow);
                     if (config.versionControl) {
                        const vField = config.versionControl.field;
-                       updateQuery = updateQuery.where(and(eq(idCol, existing.id as any), eq((config.table as any)[vField], expectedVersion)));
+                       updateQuery = updateQuery.where(ops.and(ops.eq(idCol, existing.id as any), ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion)));
                     }
                     const res = await updateQuery;
                     const updatedRec = Array.isArray(res) ? res[0] : res;
