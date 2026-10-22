@@ -19,7 +19,7 @@ import {
   isNull,
   isNotNull
 } from "drizzle-orm";
-import { DatabaseAdapter, FindManyOptions, FindFirstOptions } from "./base.js";
+import { DatabaseAdapter, DatabaseOperators, FindManyOptions, FindFirstOptions } from "./base.js";
 
 export type DrizzleDialect = "postgresql" | "mysql" | "sqlite";
 
@@ -37,8 +37,28 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     this.globalSchema = options.schema;
   }
 
-  private getOperators() {
+  /**
+   * The Drizzle operators the framework builds predicates with.
+   *
+   * They are handed out through the adapter rather than imported by the core,
+   * so the operators always belong to the driver this adapter talks to.
+   */
+  getOperators(): DatabaseOperators {
     return { eq, and, or, gt, gte, lt, lte, like, inArray, exists, isNull, isNotNull };
+  }
+
+  /**
+   * Every column of a table, keyed by the name the framework uses it under.
+   */
+  getColumns(table: any): Record<string, unknown> {
+    return getTableColumns(table) as Record<string, unknown>;
+  }
+
+  /**
+   * A single column of a table.
+   */
+  getColumn(table: any, name: string): unknown {
+    return (getTableColumns(table) as any)[name];
   }
 
   /**
