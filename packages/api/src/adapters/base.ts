@@ -1,5 +1,28 @@
 export type DatabaseStrategy = "transaction" | "batch" | "none";
 
+/**
+ * The condition operators the framework builds predicates with.
+ *
+ * The operators are specific to the ORM the adapter speaks — they are the
+ * functions the underlying driver understands — so the framework asks the
+ * adapter for them instead of importing them itself. That keeps the core
+ * free of a direct dependency on the ORM.
+ */
+export interface DatabaseOperators {
+  eq: (...args: any[]) => any;
+  and: (...args: any[]) => any;
+  or: (...args: any[]) => any;
+  gt: (...args: any[]) => any;
+  gte: (...args: any[]) => any;
+  lt: (...args: any[]) => any;
+  lte: (...args: any[]) => any;
+  like: (...args: any[]) => any;
+  inArray: (...args: any[]) => any;
+  exists: (...args: any[]) => any;
+  isNull: (...args: any[]) => any;
+  isNotNull: (...args: any[]) => any;
+}
+
 export interface FindManyOptions {
   where?: unknown;
   limit?: number;
@@ -85,6 +108,25 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
 
   // Helper to get columns for validation/filtering
   getColumnNames(table: TTable): string[];
+
+  /**
+   * The condition operators the framework builds predicates with.
+   *
+   * The core does not import the ORM's operators itself — it asks the
+   * adapter for them, so the operators always belong to the driver the
+   * adapter talks to.
+   */
+  getOperators(): DatabaseOperators;
+
+  /**
+   * Every column of a table, keyed by the name the framework uses it under.
+   */
+  getColumns(table: TTable): Record<string, unknown>;
+
+  /**
+   * A single column of a table.
+   */
+  getColumn(table: TTable, name: string): unknown;
 
   // Advanced access
   getDb(): any;
