@@ -28,7 +28,7 @@ export const usersResource = defineResource({
 | :--- | :--- | :--- |
 | `name` | `string` | The unique name for the resource (used in URLs). |
 | `table` | `AnyTable` | The Drizzle table object. |
-| `validator` | `ZodType \| { create: ZodType, update: ZodType }` | Zod schema(s) for validating incoming data. |
+| `validator` | `StandardSchema \| { create: StandardSchema, update: StandardSchema }` | Schema(s) for validating incoming data. Any [Standard Schema](https://standardschema.dev) validator works — Zod, Valibot, ArkType. |
 | `methods` | `Array<"list" \| "detail" \| "create" \| "update" \| "delete">` | Which CRUD endpoints to enable. |
 | `middleware` | `MiddlewareHandler[]` | Hono middleware specific to this resource. |
 | `permissions` | `Record<string, string>` | Declarative permission strings for each action. |
