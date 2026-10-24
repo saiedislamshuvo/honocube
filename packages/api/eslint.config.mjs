@@ -14,6 +14,12 @@ export default [
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }
+      ],
+      // Allow ambient `declare namespace` declarations used by specification types
+      // like StandardSchemaV1.
+      "@typescript-eslint/no-namespace": [
+        "error",
+        { allowDeclarations: true }
       ]
     }
   }
