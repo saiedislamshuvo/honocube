@@ -201,4 +201,66 @@ describe("Resource CRUD Operations", () => {
       `afterDelete:${created.data.id}`,
     ]);
   });
+
+  it("restricts available endpoints when methods are explicitly configured", async () => {
+    const { adapter, db } = await createTestDb();
+    const { defineResource } = createApp({ adapter });
+
+    // Seed one row
+    const [inserted] = await db
+      .insert(posts)
+      .values({ title: "Existing Post", slug: "existing" })
+      .returning();
+
+    // Resource with only 'list' and 'detail' enabled
+    const readOnlyResource = defineResource({
+      name: "posts",
+      table: posts,
+      methods: ["list", "detail"],
+      validator: z.object({ title: z.string() }),
+    });
+
+    // 1. GET / (list) is allowed
+    const listRes = await readOnlyResource.request("/", { method: "GET" });
+    expect(listRes.status).toBe(200);
+    const listJson = await listRes.json();
+    expect(listJson.success).toBe(true);
+    expect(listJson.data.length).toBe(1);
+
+    // 2. GET /:id (detail) is allowed
+    const detailRes = await readOnlyResource.request(`/${inserted.id}`, { method: "GET" });
+    expect(detailRes.status).toBe(200);
+    const detailJson = await detailRes.json();
+    expect(detailJson.success).toBe(true);
+    expect(detailJson.data.id).toBe(inserted.id);
+
+    // 3. POST / (create) is disabled -> 404 NOT_FOUND
+    const createRes = await readOnlyResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Disallowed Post" }),
+    });
+    expect(createRes.status).toBe(404);
+    const createErr = await createRes.json();
+    expect(createErr.success).toBe(false);
+    expect(createErr.error.code).toBe("NOT_FOUND");
+
+    // 4. PATCH /:id (update) is disabled -> 404 NOT_FOUND
+    const updateRes = await readOnlyResource.request(`/${inserted.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated Disallowed" }),
+    });
+    expect(updateRes.status).toBe(404);
+    const updateErr = await updateRes.json();
+    expect(updateErr.success).toBe(false);
+    expect(updateErr.error.code).toBe("NOT_FOUND");
+
+    // 5. DELETE /:id (delete) is disabled -> 404 NOT_FOUND
+    const deleteRes = await readOnlyResource.request(`/${inserted.id}`, { method: "DELETE" });
+    expect(deleteRes.status).toBe(404);
+    const deleteErr = await deleteRes.json();
+    expect(deleteErr.success).toBe(false);
+    expect(deleteErr.error.code).toBe("NOT_FOUND");
+  });
 });
