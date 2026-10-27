@@ -56,4 +56,30 @@ describe("Universal Rate Limiting", () => {
       },
     });
   });
+
+  it("uses default rate limit key when key function is omitted", async () => {
+    const { adapter } = await createTestDb();
+    let checkedKey = "";
+    const rateLimiter = {
+      check: async (key: string) => {
+        checkedKey = key;
+        return true;
+      },
+    };
+
+    const app = createApp({ adapter, rateLimiter });
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      rateLimit: { limit: 5, window: "1m" },
+      validator: z.object({ title: z.string() }),
+    });
+
+    const res = await postsResource.request("/", {
+      method: "GET",
+      headers: { "cf-connecting-ip": "192.168.1.1" },
+    });
+    expect(res.status).toBe(200);
+    expect(checkedKey).toContain("192.168.1.1");
+  });
 });

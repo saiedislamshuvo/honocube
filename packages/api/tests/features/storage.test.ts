@@ -110,4 +110,60 @@ describe("File Storage & Upload Processing", () => {
     // Expect the string was not mutated or spread into characters { 0: 'n', 1: 'o', ... }
     expect(hookedData.comments).toBe("not-an-array-or-object");
   });
+
+  it("handles arrays of files and mixed file/URL arrays in upload fields", async () => {
+    const { adapter } = await createTestDb();
+    const storage = new MockStorage();
+
+    const app = createApp({
+      adapter,
+      storage,
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      uploads: {
+        content: { folder: "posts/gallery" },
+      },
+      hooks: {
+        beforeCreate: (data: any) => ({
+          ...data,
+          content: JSON.stringify(data.content),
+        }),
+      },
+      validator: z.object({
+        title: z.string(),
+        content: z.any().optional(),
+      }),
+    });
+
+    // Send an array of files plus an already uploaded URL string
+    const filesPayload = [
+      { name: "photo1.jpg", type: "image/jpeg" },
+      "https://existing-cdn.com/already-uploaded.jpg",
+      { name: "photo2.jpg", type: "image/jpeg" },
+    ];
+
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Gallery Post",
+        content: filesPayload,
+      }),
+    });
+
+    expect(createRes.status).toBe(201);
+    expect(storage.uploads.length).toBe(2);
+    expect(storage.uploads[0]?.options.name).toBe("photo1.jpg");
+    expect(storage.uploads[1]?.options.name).toBe("photo2.jpg");
+
+    const created = await createRes.json();
+    expect(JSON.parse(created.data.content)).toEqual([
+      "posts/gallery/photo1.jpg",
+      "https://existing-cdn.com/already-uploaded.jpg",
+      "posts/gallery/photo2.jpg",
+    ]);
+  });
 });

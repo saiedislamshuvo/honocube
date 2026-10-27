@@ -5,6 +5,7 @@ import {
   resolveValidators,
   parseBatchUpdateBody,
   parseBatchDeleteBody,
+  partialValidator,
 } from "../../src/core/validation.js";
 import { ValidationError } from "../../src/utils/errors.js";
 
@@ -40,15 +41,29 @@ describe("Validation & Standard Schema", () => {
     expect(single.create).toBe(createSchema);
     expect(single.update).toBeDefined();
 
-    // Tuple
+    // Tuple with both
     const tuple = resolveValidators([createSchema, updateSchema]);
     expect(tuple.create).toBe(createSchema);
     expect(tuple.update).toBe(updateSchema);
 
-    // Object
+    // Tuple with omitted update (defaults to partialValidator)
+    const tupleSingle = resolveValidators([createSchema]);
+    expect(tupleSingle.create).toBe(createSchema);
+    expect(tupleSingle.update).toBeDefined();
+
+    // Object with both
     const obj = resolveValidators({ create: createSchema, update: updateSchema });
     expect(obj.create).toBe(createSchema);
     expect(obj.update).toBe(updateSchema);
+
+    // Object with omitted update (defaults to partialValidator)
+    const objSingle = resolveValidators({ create: createSchema });
+    expect(objSingle.create).toBe(createSchema);
+    expect(objSingle.update).toBeDefined();
+
+    // Schema without .partial method returns unchanged
+    const nonPartialSchema: any = { "~standard": { version: 1, vendor: "custom", validate: () => {} } };
+    expect(partialValidator(nonPartialSchema)).toBe(nonPartialSchema);
   });
 
   it("parses valid and invalid batch update payloads", () => {
@@ -66,6 +81,11 @@ describe("Validation & Standard Schema", () => {
     expect(() => parseBatchUpdateBody({ ids: [], data: {} })).toThrow(ValidationError);
     // Non-object body
     expect(() => parseBatchUpdateBody("invalid" as any)).toThrow(ValidationError);
+    expect(() => parseBatchUpdateBody(null as any)).toThrow(ValidationError);
+    expect(() => parseBatchUpdateBody([] as any)).toThrow(ValidationError);
+
+    // Invalid id types inside ids array
+    expect(() => parseBatchUpdateBody({ ids: [true, {}] as any, data: {} })).toThrow(ValidationError);
   });
 
   it("parses valid and invalid batch delete payloads", () => {
@@ -77,5 +97,9 @@ describe("Validation & Standard Schema", () => {
     expect(() => parseBatchDeleteBody({})).toThrow(ValidationError);
     // Empty ids
     expect(() => parseBatchDeleteBody({ ids: [] })).toThrow(ValidationError);
+    // Non-object body
+    expect(() => parseBatchDeleteBody(null as any)).toThrow(ValidationError);
+    // Invalid id elements
+    expect(() => parseBatchDeleteBody({ ids: ["valid", false] as any })).toThrow(ValidationError);
   });
 });

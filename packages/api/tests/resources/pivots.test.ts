@@ -137,4 +137,67 @@ describe("Pivot (Many-to-Many) Relations & Append Strategy", () => {
     });
     expect(allComments.length).toBe(2);
   });
+
+  it("creates and updates pivots under imperative strategy: transaction", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter, strategy: "transaction" });
+
+    const tag1: any = await adapter.insert(tags, { name: "Design" });
+    const tag2: any = await adapter.insert(tags, { name: "CSS" });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string().optional() }),
+      relations: {
+        pivots: [
+          {
+            name: "tags",
+            table: postTags,
+            targetTable: tags,
+            foreignKey: "postId",
+            referenceKey: "tagId",
+            targetReferenceKey: "id",
+            relationName: "postTags",
+          },
+        ],
+      },
+    });
+
+    // 1. Create with pivot under transaction strategy (lines 1117-1124)
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Imperative Pivot Post",
+        tags: [{ tagId: tag1.id }],
+      }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    const postId = created.data.id;
+
+    // Verify post_tags has tag1
+    const initialTags = await adapter.findMany(postTags, {
+      where: (cols: any, { eq }: any) => eq(cols.postId, postId),
+    });
+    expect(initialTags.length).toBe(1);
+
+    // 2. PATCH with pivot under transaction strategy (lines 1324-1331)
+    const patchRes = await postsResource.request(`/${postId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Imperative Pivot Post Updated",
+        tags: [{ tagId: tag2.id }],
+      }),
+    });
+    expect(patchRes.status).toBe(200);
+
+    const updatedTags = await adapter.findMany(postTags, {
+      where: (cols: any, { eq }: any) => eq(cols.postId, postId),
+    });
+    expect(updatedTags.length).toBe(1);
+    expect((updatedTags[0] as any).tagId).toBe(tag2.id);
+  });
 });

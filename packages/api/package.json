@@ -70,6 +70,7 @@
   "devDependencies": {
     "@libsql/client": "^0.18.0",
     "@repo/eslint-config": "*",
+    "@vitest/coverage-v8": "^5.0.5",
     "drizzle-orm": "^0.45.2",
     "eslint": "^9.39.1",
     "hono": "^4.0.0",

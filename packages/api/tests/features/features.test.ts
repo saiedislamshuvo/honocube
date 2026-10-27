@@ -124,6 +124,28 @@ describe("Enterprise & Core Features", () => {
     const likeRes = await postsResource.request("/?status__like=act", { method: "GET" });
     const likeData = await likeRes.json();
     expect(likeData.data.length).toBe(2);
+
+    // Strict gt and lt range comparisons: price > 100 AND price < 300 (only matches 200)
+    const gtLtRes = await postsResource.request("/?price__gt=100&price__lt=300", { method: "GET" });
+    const gtLtData = await gtLtRes.json();
+    expect(gtLtData.data.length).toBe(1);
+    expect(gtLtData.data[0].title).toBe("Beta Banana");
+
+    // Empty query param and unallowed filter fields are safely ignored
+    const ignoreRes = await postsResource.request("/?status=&unallowed_field=hack", { method: "GET" });
+    expect(ignoreRes.status).toBe(200);
+
+    // Search term that matches nothing forces empty result
+    const noMatchRes = await postsResource.request("/?q=NonExistentKeywordXYZ", { method: "GET" });
+    expect(noMatchRes.status).toBe(200);
+    const noMatchData = await noMatchRes.json();
+    expect(noMatchData.data.length).toBe(0);
+
+    // Pagination overflow throws INVALID_PAGINATION
+    const overflowRes = await postsResource.request("/?page=999999999999999999999", { method: "GET" });
+    expect(overflowRes.status).toBe(400);
+    const overflowJson = await overflowRes.json();
+    expect(overflowJson.error.code).toBe("INVALID_PAGINATION");
   });
 
   it("handles data import with row chunk limits and updates existing records", async () => {

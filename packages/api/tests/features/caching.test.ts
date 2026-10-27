@@ -115,4 +115,58 @@ describe("Caching Engine & Scoping", () => {
     expect(cache.hitCount).toBe(0);
     expect(cache.store.size).toBe(0);
   });
+
+  it("caches detail and slug endpoints and handles missing keyBy", async () => {
+    const { adapter } = await createTestDb();
+    const cache = new MockCache();
+
+    const app = createApp({
+      adapter,
+      cache,
+      getContext: () => ({ user: "user-cache" }),
+    });
+
+    const p: any = await adapter.insert(posts, { title: "Cached Post", slug: "cached-slug" });
+
+    // 1. Missing keyBy leaves cache inactive
+    const noKeyResource = app.defineResource({
+      name: "posts_no_key",
+      table: posts,
+      cache: { enabled: true },
+      validator: z.object({ title: z.string() }),
+    });
+    await noKeyResource.request(`/${p.id}`, { method: "GET" });
+    expect(cache.store.size).toBe(0);
+
+    // 2. Resource with detail and slug cache
+    const cachedResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      slugs: ["slug"],
+      cache: {
+        enabled: true,
+        ttl: 120,
+        keyBy: (ctx) => ctx.user,
+      },
+      validator: z.object({ title: z.string() }),
+    });
+
+    // Detail: First call miss, second call hit
+    const detailRes1 = await cachedResource.request(`/${p.id}`, { method: "GET" });
+    expect(detailRes1.status).toBe(200);
+    const detailHitsBefore = cache.hitCount;
+
+    const detailRes2 = await cachedResource.request(`/${p.id}`, { method: "GET" });
+    expect(detailRes2.status).toBe(200);
+    expect(cache.hitCount).toBe(detailHitsBefore + 1);
+
+    // Slug: First call miss, second call hit
+    const slugRes1 = await cachedResource.request(`/slug/cached-slug`, { method: "GET" });
+    expect(slugRes1.status).toBe(200);
+    const slugHitsBefore = cache.hitCount;
+
+    const slugRes2 = await cachedResource.request(`/slug/cached-slug`, { method: "GET" });
+    expect(slugRes2.status).toBe(200);
+    expect(cache.hitCount).toBe(slugHitsBefore + 1);
+  });
 });

@@ -263,4 +263,59 @@ describe("Resource CRUD Operations", () => {
     expect(deleteErr.success).toBe(false);
     expect(deleteErr.error.code).toBe("NOT_FOUND");
   });
+
+  it("handles slug route edge cases: not found, soft-delete, tenant scope, and hooks", async () => {
+    const { adapter } = await createTestDb();
+    const tenant = "tenant-1";
+    const app = createApp<{ Bindings: Record<string, unknown> }, { tenantId: string }>({
+      adapter,
+      getContext: () => ({ tenantId: tenant }),
+    });
+
+    const slugHookCalls: string[] = [];
+    const resource = app.defineResource({
+      name: "posts",
+      table: posts,
+      slugs: ["slug"],
+      softDelete: "deletedAt",
+      scope: (cols, { eq }, ctx) => eq(cols.tenantId, ctx.tenantId),
+      hooks: {
+        beforeFetch: (_c, params) => {
+          if (params.slug) slugHookCalls.push(`before:${params.slug}:${params.detailId}`);
+        },
+        afterFetch: (rows) => {
+          slugHookCalls.push(`after:${rows.length}`);
+          return rows.map((r: any) => ({ ...r, slugHooked: true }));
+        },
+      },
+      validator: z.object({ title: z.string(), slug: z.string() }),
+    });
+
+    // 1. Missing slug -> 404
+    const notFoundRes = await resource.request("/slug/does-not-exist", { method: "GET" });
+    expect(notFoundRes.status).toBe(404);
+
+    // 2. Active record for tenant-1
+    await adapter.insert(posts, { title: "T1 Post", slug: "t1-slug", tenantId: "tenant-1" });
+    const successRes = await resource.request("/slug/t1-slug", { method: "GET" });
+    expect(successRes.status).toBe(200);
+    const successJson = await successRes.json();
+    expect(successJson.data.slugHooked).toBe(true);
+    expect(slugHookCalls).toContain("before:slug:t1-slug");
+
+    // 3. Soft-deleted record -> 404
+    await adapter.insert(posts, {
+      title: "Deleted Post",
+      slug: "deleted-slug",
+      tenantId: "tenant-1",
+      deletedAt: new Date().toISOString(),
+    });
+    const deletedRes = await resource.request("/slug/deleted-slug", { method: "GET" });
+    expect(deletedRes.status).toBe(404);
+
+    // 4. Record belonging to tenant-2 queried by tenant-1 -> 404 (isolation)
+    await adapter.insert(posts, { title: "T2 Post", slug: "t2-slug", tenantId: "tenant-2" });
+    const isolatedRes = await resource.request("/slug/t2-slug", { method: "GET" });
+    expect(isolatedRes.status).toBe(404);
+  });
 });

@@ -59,10 +59,16 @@ describe("Event Emitter Subsystem", () => {
       body: JSON.stringify({ ids: [postId] }),
     });
 
+    // 5. Single Delete
+    const p2: any = await adapter.insert(posts, { title: "Single Delete Post" });
+    const deleteRes = await postsResource.request(`/${p2.id}`, { method: "DELETE" });
+    expect(deleteRes.status).toBe(200);
+
     const types = emittedEvents.map((e) => e.type);
     expect(types).toContain("create");
     expect(types).toContain("update");
     expect(types).toContain("batch-update");
     expect(types).toContain("batch-delete");
+    expect(types).toContain("delete");
   });
 });

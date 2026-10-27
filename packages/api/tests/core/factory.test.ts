@@ -158,4 +158,124 @@ describe("Core Factory & App Configuration", () => {
     const calcJson = await calcRes.json();
     expect(calcJson).toEqual({ success: true, data: { doubled: 42 } });
   });
+
+  it("triggers app.defineApi, default logger methods, missing adapter error, and global onError", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    // 1. app.defineApi
+    const dummyResource = app.defineResource({
+      name: "users",
+      table: users,
+      validator: z.object({ name: z.string() }),
+    });
+    const definedApi = app.defineApi({ users: dummyResource });
+    expect(definedApi).toBeDefined();
+
+    // 2. Default logger methods
+    const appWithDefaultLogger = createApp({ adapter });
+    const logger = (appWithDefaultLogger as any).defineResource({
+      name: "test",
+      table: users,
+      validator: z.object({ name: z.string() }),
+    });
+    expect(logger).toBeDefined();
+
+    // 3. Missing adapter error
+    const noAdapterApp = createApp({} as any);
+    const noAdapterResource = noAdapterApp.defineResource({
+      name: "users",
+      table: users,
+      validator: z.object({ name: z.string() }),
+    });
+    const errRes = await noAdapterResource.request("/", { method: "GET" });
+    expect(errRes.status).toBe(500);
+    const errJson = await errRes.json();
+    expect(errJson.error.message).toContain("Adapter not found");
+
+    // 4. Global onError with ValidationError, ZodError, and unhandled Error with logger
+    const loggedErrors: any[] = [];
+    const customLogger = {
+      info: () => {},
+      warn: () => {},
+      error: (msg: any, err: any) => loggedErrors.push({ msg, err }),
+      debug: () => {},
+    };
+
+    const { ValidationError } = await import("../../src/utils/errors.js");
+    const errorApp = createApp({ adapter, logger: customLogger });
+    const errorResource = errorApp.defineResource({
+      name: "users",
+      table: users,
+      validator: z.object({ name: z.string() }),
+      actions: [
+        {
+          path: "/actions/throw-validation",
+          method: "get",
+          handler: () => {
+            throw new ValidationError([{ message: "Custom validation issue", path: ["field"] }]);
+          },
+        },
+        {
+          path: "/actions/throw-zod",
+          method: "get",
+          handler: () => {
+            const err = new Error("Zod validation failed");
+            err.name = "ZodError";
+            (err as any).issues = [{ message: "Zod issue" }];
+            throw err;
+          },
+        },
+        {
+          path: "/actions/throw-internal",
+          method: "get",
+          handler: () => {
+            throw new Error("Unexpected crash");
+          },
+        },
+      ],
+    });
+
+    const valRes = await errorResource.request("/actions/throw-validation", { method: "GET" });
+    expect(valRes.status).toBe(400);
+    const valJson = await valRes.json();
+    expect(valJson.error.code).toBe("VALIDATION_ERROR");
+
+    const zodRes = await errorResource.request("/actions/throw-zod", { method: "GET" });
+    expect(zodRes.status).toBe(400);
+    const zodJson = await zodRes.json();
+    expect(zodJson.error.code).toBe("VALIDATION_ERROR");
+
+    const intRes = await errorResource.request("/actions/throw-internal", { method: "GET" });
+    expect(intRes.status).toBe(500);
+    const intJson = await intRes.json();
+    expect(intJson.error.code).toBe("INTERNAL_ERROR");
+    expect(loggedErrors.length).toBe(1);
+  });
+
+  it("preserves custom finalized 404 response in isDefaultNotFound check", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({
+      adapter,
+      middleware: [
+        async (c, next) => {
+          if (c.req.path === "/custom-404") {
+            return c.json({ customNotFound: true }, 404);
+          }
+          await next();
+        },
+      ],
+    });
+
+    const resource = app.defineResource({
+      name: "users",
+      table: users,
+      validator: z.object({ name: z.string() }),
+    });
+
+    const res = await resource.request("/custom-404", { method: "GET" });
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json).toEqual({ customNotFound: true });
+  });
 });
