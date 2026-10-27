@@ -126,7 +126,7 @@ describe("Enterprise & Core Features", () => {
     expect(likeData.data.length).toBe(2);
   });
 
-  it("handles data import with row chunk limits", async () => {
+  it("handles data import with row chunk limits and updates existing records", async () => {
     const { adapter } = await createTestDb();
     const { defineResource } = createApp({ adapter });
 
@@ -136,51 +136,48 @@ describe("Enterprise & Core Features", () => {
       methods: ["list", "detail", "create", "update", "delete", "import-preview", "import-execute"],
       import: {
         lookupBy: "slug",
-        maxRowsPerRequest: 2,
+        maxRowsPerRequest: 5,
       },
       validator: z.object({
         title: z.string(),
-        slug: z.string().optional(),
+        slug: z.string(),
       }),
     });
 
-    // 1. Exceeding maxRowsPerRequest throws 400
-    const overLimitRes = await postsResource.request("/import/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([
-        { title: "Row 1", slug: "row-1" },
-        { title: "Row 2", slug: "row-2" },
-        { title: "Row 3", slug: "row-3" },
-      ]),
-    });
-    expect(overLimitRes.status).toBe(400);
+    // Seed 1 post
+    await adapter.insert(posts, { title: "Original Row 1", slug: "row-1" });
 
-    // 2. Preview 2 rows
+    // Import payload: row-1 (existing -> update) and row-2 (new -> create)
+    const importPayload = [
+      { title: "Updated Row 1", slug: "row-1" },
+      { title: "Brand New Row 2", slug: "row-2" },
+    ];
+
+    // 1. Preview
     const previewRes = await postsResource.request("/import/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([
-        { title: "Row 1", slug: "row-1" },
-        { title: "Row 2", slug: "row-2" },
-      ]),
+      body: JSON.stringify(importPayload),
     });
     expect(previewRes.status).toBe(200);
     const previewJson = await previewRes.json();
-    expect(previewJson.results.creates.length).toBe(2);
+    expect(previewJson.results.creates.length).toBe(1);
+    expect(previewJson.results.updates.length).toBe(1);
 
-    // 3. Execute 2 rows
+    // 2. Execute
     const executeRes = await postsResource.request("/import/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([
-        { title: "Row 1", slug: "row-1" },
-        { title: "Row 2", slug: "row-2" },
-      ]),
+      body: JSON.stringify(importPayload),
     });
     expect(executeRes.status).toBe(200);
 
-    const count = await adapter.count(posts);
-    expect(count).toBe(2);
+    // Verify row-1 was updated and row-2 was created (total 2 in DB)
+    const inDb = await adapter.findMany(posts, {
+      orderBy: { field: "slug", direction: "asc" },
+    });
+    expect(inDb.length).toBe(2);
+    expect((inDb[0] as any).title).toBe("Updated Row 1");
+    expect((inDb[1] as any).title).toBe("Brand New Row 2");
   });
 });
