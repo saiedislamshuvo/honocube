@@ -1,0 +1,321 @@
+import { describe, it, expect } from "vitest";
+import { z } from "zod";
+import { createApp } from "../../src/core/factory.js";
+import { createTestDb, posts } from "../fixtures/db.js";
+
+describe("Resource CRUD Operations", () => {
+  it("creates, reads, updates, and deletes records with timestamps", async () => {
+    const { adapter } = await createTestDb();
+    const { defineResource } = createApp({ adapter });
+
+    const postsResource = defineResource({
+      name: "posts",
+      table: posts,
+      timestamps: true,
+      slugs: ["slug"],
+      validator: z.object({
+        title: z.string().min(1),
+        content: z.string().optional(),
+        slug: z.string().optional(),
+        price: z.number().optional(),
+        status: z.string().optional(),
+      }),
+    });
+
+    // 1. Create (POST /) returns 201 Created
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Hello World",
+        content: "This is a test post",
+        slug: "hello-world",
+        price: 100,
+      }),
+    });
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.success).toBe(true);
+    expect(created.data.id).toBeDefined();
+    expect(created.data.title).toBe("Hello World");
+    expect(created.data.createdAt).toBeDefined();
+    expect(created.data.updatedAt).toBeDefined();
+    const postId = created.data.id;
+
+    // 2. Read Detail (GET /:id)
+    const detailRes = await postsResource.request(`/${postId}`, { method: "GET" });
+    expect(detailRes.status).toBe(200);
+    const detail = await detailRes.json();
+    expect(detail.success).toBe(true);
+    expect(detail.data.id).toBe(postId);
+    expect(detail.data.title).toBe("Hello World");
+
+    // 3. Slug Lookup (GET /:slug/:value)
+    const slugRes = await postsResource.request(`/slug/hello-world`, { method: "GET" });
+    expect(slugRes.status).toBe(200);
+    const slugData = await slugRes.json();
+    expect(slugData.success).toBe(true);
+    expect(slugData.data.id).toBe(postId);
+
+    // 4. Update (PATCH /:id)
+    const updateRes = await postsResource.request(`/${postId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Updated Hello World",
+        price: 150,
+      }),
+    });
+
+    expect(updateRes.status).toBe(200);
+    const updated = await updateRes.json();
+    expect(updated.success).toBe(true);
+    expect(updated.data.title).toBe("Updated Hello World");
+    expect(updated.data.price).toBe(150);
+
+    // 5. List (GET /)
+    const listRes = await postsResource.request("/?limit=10&page=1", { method: "GET" });
+    expect(listRes.status).toBe(200);
+    const list = await listRes.json();
+    expect(list.success).toBe(true);
+    expect(list.data.length).toBe(1);
+    expect(list.meta).toEqual({
+      total: 1,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    });
+
+    // 6. Delete (DELETE /:id)
+    const deleteRes = await postsResource.request(`/${postId}`, { method: "DELETE" });
+    expect(deleteRes.status).toBe(200);
+    const deleted = await deleteRes.json();
+    expect(deleted.success).toBe(true);
+
+    // Verify it is gone
+    const verifyRes = await postsResource.request(`/${postId}`, { method: "GET" });
+    expect(verifyRes.status).toBe(404);
+  });
+
+  it("enforces pagination validation and caps at maxLimit", async () => {
+    const { adapter } = await createTestDb();
+    const { defineResource } = createApp({ adapter });
+
+    const postsResource = defineResource({
+      name: "posts",
+      table: posts,
+      pagination: {
+        defaultLimit: 5,
+        maxLimit: 25,
+      },
+      validator: z.object({ title: z.string() }),
+    });
+
+    // Invalid limit: 0
+    const zeroLimitRes = await postsResource.request("/?limit=0", { method: "GET" });
+    expect(zeroLimitRes.status).toBe(400);
+
+    // Invalid limit: negative
+    const negLimitRes = await postsResource.request("/?limit=-5", { method: "GET" });
+    expect(negLimitRes.status).toBe(400);
+
+    // Invalid limit: non-integer string
+    const stringLimitRes = await postsResource.request("/?limit=abc", { method: "GET" });
+    expect(stringLimitRes.status).toBe(400);
+
+    // Invalid page: 0
+    const zeroPageRes = await postsResource.request("/?page=0", { method: "GET" });
+    expect(zeroPageRes.status).toBe(400);
+
+    // Capping at maxLimit (25)
+    const cappedRes = await postsResource.request("/?limit=50", { method: "GET" });
+    expect(cappedRes.status).toBe(200);
+    const json = await cappedRes.json();
+    expect(json.meta.limit).toBe(25);
+  });
+
+  it("triggers lifecycle hooks on CRUD operations", async () => {
+    const { adapter } = await createTestDb();
+    const { defineResource } = createApp({ adapter });
+
+    const events: string[] = [];
+
+    const postsResource = defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string(),
+        content: z.string().optional(),
+      }),
+      hooks: {
+        beforeCreate: (data) => {
+          events.push("beforeCreate");
+          return { ...data, content: "hook-modified-content" };
+        },
+        afterCreate: (record) => {
+          events.push(`afterCreate:${record.id}`);
+        },
+        beforeUpdate: (id, data) => {
+          events.push(`beforeUpdate:${id}`);
+          return data;
+        },
+        afterUpdate: (record) => {
+          events.push(`afterUpdate:${record.id}`);
+        },
+        beforeDelete: (id) => {
+          events.push(`beforeDelete:${id}`);
+        },
+        afterDelete: (id) => {
+          events.push(`afterDelete:${id}`);
+        },
+      },
+    });
+
+    // Create
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Hook Test" }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.data.content).toBe("hook-modified-content");
+
+    // Update
+    await postsResource.request(`/${created.data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Hook Test Updated" }),
+    });
+
+    // Delete
+    await postsResource.request(`/${created.data.id}`, { method: "DELETE" });
+
+    expect(events).toEqual([
+      "beforeCreate",
+      `afterCreate:${created.data.id}`,
+      `beforeUpdate:${created.data.id}`,
+      `afterUpdate:${created.data.id}`,
+      `beforeDelete:${created.data.id}`,
+      `afterDelete:${created.data.id}`,
+    ]);
+  });
+
+  it("restricts available endpoints when methods are explicitly configured", async () => {
+    const { adapter, db } = await createTestDb();
+    const { defineResource } = createApp({ adapter });
+
+    // Seed one row
+    const [inserted] = await db
+      .insert(posts)
+      .values({ title: "Existing Post", slug: "existing" })
+      .returning();
+
+    // Resource with only 'list' and 'detail' enabled
+    const readOnlyResource = defineResource({
+      name: "posts",
+      table: posts,
+      methods: ["list", "detail"],
+      validator: z.object({ title: z.string() }),
+    });
+
+    // 1. GET / (list) is allowed
+    const listRes = await readOnlyResource.request("/", { method: "GET" });
+    expect(listRes.status).toBe(200);
+    const listJson = await listRes.json();
+    expect(listJson.success).toBe(true);
+    expect(listJson.data.length).toBe(1);
+
+    // 2. GET /:id (detail) is allowed
+    const detailRes = await readOnlyResource.request(`/${inserted.id}`, { method: "GET" });
+    expect(detailRes.status).toBe(200);
+    const detailJson = await detailRes.json();
+    expect(detailJson.success).toBe(true);
+    expect(detailJson.data.id).toBe(inserted.id);
+
+    // 3. POST / (create) is disabled -> 404 NOT_FOUND
+    const createRes = await readOnlyResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Disallowed Post" }),
+    });
+    expect(createRes.status).toBe(404);
+    const createErr = await createRes.json();
+    expect(createErr.success).toBe(false);
+    expect(createErr.error.code).toBe("NOT_FOUND");
+
+    // 4. PATCH /:id (update) is disabled -> 404 NOT_FOUND
+    const updateRes = await readOnlyResource.request(`/${inserted.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated Disallowed" }),
+    });
+    expect(updateRes.status).toBe(404);
+    const updateErr = await updateRes.json();
+    expect(updateErr.success).toBe(false);
+    expect(updateErr.error.code).toBe("NOT_FOUND");
+
+    // 5. DELETE /:id (delete) is disabled -> 404 NOT_FOUND
+    const deleteRes = await readOnlyResource.request(`/${inserted.id}`, { method: "DELETE" });
+    expect(deleteRes.status).toBe(404);
+    const deleteErr = await deleteRes.json();
+    expect(deleteErr.success).toBe(false);
+    expect(deleteErr.error.code).toBe("NOT_FOUND");
+  });
+
+  it("handles slug route edge cases: not found, soft-delete, tenant scope, and hooks", async () => {
+    const { adapter } = await createTestDb();
+    const tenant = "tenant-1";
+    const app = createApp<{ Bindings: Record<string, unknown> }, { tenantId: string }>({
+      adapter,
+      getContext: () => ({ tenantId: tenant }),
+    });
+
+    const slugHookCalls: string[] = [];
+    const resource = app.defineResource({
+      name: "posts",
+      table: posts,
+      slugs: ["slug"],
+      softDelete: "deletedAt",
+      scope: (cols, { eq }, ctx) => eq(cols.tenantId, ctx.tenantId),
+      hooks: {
+        beforeFetch: (_c, params) => {
+          if (params.slug) slugHookCalls.push(`before:${params.slug}:${params.detailId}`);
+        },
+        afterFetch: (rows) => {
+          slugHookCalls.push(`after:${rows.length}`);
+          return rows.map((r: any) => ({ ...r, slugHooked: true }));
+        },
+      },
+      validator: z.object({ title: z.string(), slug: z.string() }),
+    });
+
+    // 1. Missing slug -> 404
+    const notFoundRes = await resource.request("/slug/does-not-exist", { method: "GET" });
+    expect(notFoundRes.status).toBe(404);
+
+    // 2. Active record for tenant-1
+    await adapter.insert(posts, { title: "T1 Post", slug: "t1-slug", tenantId: "tenant-1" });
+    const successRes = await resource.request("/slug/t1-slug", { method: "GET" });
+    expect(successRes.status).toBe(200);
+    const successJson = await successRes.json();
+    expect(successJson.data.slugHooked).toBe(true);
+    expect(slugHookCalls).toContain("before:slug:t1-slug");
+
+    // 3. Soft-deleted record -> 404
+    await adapter.insert(posts, {
+      title: "Deleted Post",
+      slug: "deleted-slug",
+      tenantId: "tenant-1",
+      deletedAt: new Date().toISOString(),
+    });
+    const deletedRes = await resource.request("/slug/deleted-slug", { method: "GET" });
+    expect(deletedRes.status).toBe(404);
+
+    // 4. Record belonging to tenant-2 queried by tenant-1 -> 404 (isolation)
+    await adapter.insert(posts, { title: "T2 Post", slug: "t2-slug", tenantId: "tenant-2" });
+    const isolatedRes = await resource.request("/slug/t2-slug", { method: "GET" });
+    expect(isolatedRes.status).toBe(404);
+  });
+});
