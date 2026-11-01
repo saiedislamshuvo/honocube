@@ -940,17 +940,69 @@ export function defineResource<
     return `${prefix}${formattedNumber}${suffix}`;
   };
 
-  const finalize = async (row: any, appContext: any, localConfig: any = config): Promise<any> => {
+  const finalize = async (
+    row: any,
+    appContext: any,
+    localConfig: any = config,
+    c?: Context,
+    method: "list" | "detail" = "detail"
+  ): Promise<any> => {
     if (!row) return row;
     
     // 1. Handle Array
     if (Array.isArray(row)) {
-      return await Promise.all(row.map(r => finalize(r, appContext, localConfig)));
+      return await Promise.all(row.map(r => finalize(r, appContext, localConfig, c, method)));
     }
 
     const currentConfig = localConfig === config ? config : localConfig;
     const hidden = new Set(currentConfig.hidden as string[] ?? []);
     let out = { ...row };
+
+    // 1.5 Evaluate Computed / Virtual Fields
+    const computedConfig = {
+      ...(typeof currentConfig.virtualFields === "object" && currentConfig.virtualFields !== null ? currentConfig.virtualFields : {}),
+      ...(typeof currentConfig.computed === "object" && currentConfig.computed !== null ? currentConfig.computed : {}),
+    };
+
+    if (Object.keys(computedConfig).length > 0) {
+      for (const [fieldName, def] of Object.entries(computedConfig as Record<string, any>)) {
+        if (!def) continue;
+        if (typeof def === "object" && def.methods && Array.isArray(def.methods) && !def.methods.includes(method)) {
+          continue;
+        }
+        try {
+          if (typeof def === "function") {
+            out[fieldName] = await def(out, c, appContext);
+          } else if (typeof def.resolve === "function") {
+            try {
+              out[fieldName] = await def.resolve(out, c, appContext);
+            } catch (err) {
+              if ("fallback" in def) {
+                out[fieldName] = def.fallback;
+              } else {
+                if (globalConfig?.logger?.error) {
+                  globalConfig.logger.error(`Error computing virtual field '${fieldName}':`, err);
+                } else {
+                  console.error(`[HonoCube ERROR] Error computing virtual field '${fieldName}':`, err);
+                }
+                out[fieldName] = null;
+              }
+            }
+          }
+        } catch (err) {
+          if (typeof def === "object" && "fallback" in def) {
+            out[fieldName] = def.fallback;
+          } else {
+            if (globalConfig?.logger?.error) {
+              globalConfig.logger.error(`Error computing virtual field '${fieldName}':`, err);
+            } else {
+              console.error(`[HonoCube ERROR] Error computing virtual field '${fieldName}':`, err);
+            }
+            out[fieldName] = null;
+          }
+        }
+      }
+    }
 
     // 2. Hide local fields
     for (const key of hidden) {
@@ -994,7 +1046,7 @@ export function defineResource<
         // Ensure we only recurse if the property is actually a relation object/array,
         // and NOT just a simple string URL from an upload field.
         if (out[rel.name] !== undefined && isRecursable(out[rel.name])) {
-          out[rel.name] = await finalize(out[rel.name], appContext, rel);
+          out[rel.name] = await finalize(out[rel.name], appContext, rel, c, method);
         }
       }
     }
@@ -1630,7 +1682,7 @@ export function defineResource<
 
       const response = {
         success: true,
-        data: await Promise.all(resultRows.map(r => finalize(r, appContext))),
+        data: await Promise.all(resultRows.map(r => finalize(r, appContext, config, c, "list"))),
         meta: {
           total,
           page,
@@ -1988,7 +2040,7 @@ export function defineResource<
 
       const response = {
         success: true,
-        data: await finalize(resultRow as TSelect, appContext)
+        data: await finalize(resultRow as TSelect, appContext, config, c, "detail")
       };
 
       if (cacheKey) {
@@ -2061,7 +2113,7 @@ export function defineResource<
 
         const response = {
           success: true,
-          data: await finalize(resultRow as TSelect, appContext)
+          data: await finalize(resultRow as TSelect, appContext, config, c, "detail")
         };
 
         if (cacheKey) {
@@ -2340,7 +2392,7 @@ export function defineResource<
 
       return c.json({
         success: true,
-        data: await finalize(finalRecord as TSelect, appContext)
+        data: await finalize(finalRecord as TSelect, appContext, config, c, "detail")
       }, 201);
     });
   }
@@ -2913,7 +2965,7 @@ export function defineResource<
 
       return c.json({
         success: true,
-        data: await finalize(finalRecord as TSelect, appContext)
+        data: await finalize(finalRecord as TSelect, appContext, config, c, "detail")
       });
     });
   }

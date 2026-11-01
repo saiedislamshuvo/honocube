@@ -245,6 +245,43 @@ export type FieldRule<AppContext = any, TRecord = any> = {
 
 export type FieldViolationStrategy = "strip" | "reject";
 
+export type ComputedFieldResolver<TRecord = any, AppContext = any, TResult = any> = (
+  record: TRecord,
+  c?: Context,
+  appContext?: AppContext
+) => TResult | Promise<TResult>;
+
+export interface ComputedFieldConfig<TRecord = any, AppContext = any, TResult = any> {
+  /**
+   * The calculation function to produce the virtual field value.
+   * Can be synchronous or asynchronous.
+   */
+  resolve: ComputedFieldResolver<TRecord, AppContext, TResult>;
+
+  /**
+   * Optional restriction on which methods evaluate this computed field.
+   * - `["detail"]`: only evaluated on single-record lookups (detail, slug, update response).
+   * - `["list"]`: only evaluated on list queries.
+   * Defaults to evaluating on all read methods (`["list", "detail"]`).
+   */
+  methods?: ("list" | "detail")[];
+
+  /**
+   * Fallback value returned if the resolver throws an error.
+   * If omitted, errors are logged and the field value falls back to null.
+   */
+  fallback?: any;
+
+  /**
+   * Optional description for documentation or schema introspection.
+   */
+  description?: string;
+}
+
+export type ComputedFieldDefinition<TRecord = any, AppContext = any, TResult = any> =
+  | ComputedFieldResolver<TRecord, AppContext, TResult>
+  | ComputedFieldConfig<TRecord, AppContext, TResult>;
+
 export type MethodRoles = {
   list?: string[];
   detail?: string[];
@@ -894,7 +931,9 @@ export interface ResourceConfig<
   namingSeries?: NamingSeriesConfig<AppContext, TSelect>;
   workflow?: WorkflowConfig<AppContext, TSelect>;
   audit?: boolean | AuditConfig<AppContext, TSelect>;
-  outbox?: boolean | ResourceOutboxConfig; 
+  outbox?: boolean | ResourceOutboxConfig;
+  computed?: Record<string, ComputedFieldDefinition<TSelect, AppContext>>;
+  virtualFields?: Record<string, ComputedFieldDefinition<TSelect, AppContext>>; 
   
   import?: {
     lookupBy: string | string[] | string[][];
