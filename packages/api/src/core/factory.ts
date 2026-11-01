@@ -291,6 +291,124 @@ export function defineResource<
     }
     return data;
   };
+  const generateSeriesNumber = async (
+    data: any,
+    appContext: any,
+    tenancy: any,
+    tx: any,
+    localSeriesTracker?: Map<string, number>
+  ): Promise<string> => {
+    if (!config.namingSeries) return "";
+
+    const { field, pattern, counter } = config.namingSeries;
+
+    // 1. Resolve pattern string (supports function or template string)
+    const rawPattern = typeof pattern === "function"
+      ? await pattern(appContext, data)
+      : pattern;
+
+    // 2. Resolve date tokens
+    const now = new Date();
+    const YYYY = String(now.getFullYear());
+    const YY = String(now.getFullYear()).slice(-2);
+    const MM = String(now.getMonth() + 1).padStart(2, "0");
+    const DD = String(now.getDate()).padStart(2, "0");
+
+    let resolved = rawPattern
+      .replace(/\{YYYY\}|\.YYYY\./g, YYYY)
+      .replace(/\{YY\}|\.YY\./g, YY)
+      .replace(/\{MM\}|\.MM\./g, MM)
+      .replace(/\{DD\}|\.DD\./g, DD);
+
+    // 3. Resolve tenant token
+    if (resolved.includes("{tenantId}") || resolved.includes(".tenantId.")) {
+      const tVal = tenancy?.tenantVal;
+      const tenantStr = tVal != null
+        ? (Array.isArray(tVal) ? (tVal[0] != null ? String(tVal[0]) : "") : String(tVal))
+        : "";
+      resolved = resolved
+        .replace(/\{tenantId\}/g, tenantStr)
+        .replace(/\.tenantId\./g, tenantStr);
+    }
+
+    // 4. Resolve record/payload tokens: {field} (skip hash counter placeholders like {#####})
+    resolved = resolved.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+      if (/^#+$/.test(key)) return match;
+      return data[key] !== undefined && data[key] !== null ? String(data[key]) : "";
+    });
+
+    // 5. Match counter token: {#####} or .#####. or ##### or #+
+    const counterMatch = resolved.match(/(\.?\{#+\}\.?|\.?#+\.?)/);
+    let prefix: string;
+    let suffix: string;
+    let padLength = 5;
+
+    if (counterMatch && counterMatch.index !== undefined) {
+      prefix = resolved.slice(0, counterMatch.index);
+      suffix = resolved.slice(counterMatch.index + counterMatch[0].length);
+      const hashCount = counterMatch[0].replace(/[^#]/g, "").length;
+      if (hashCount > 0) padLength = hashCount;
+    } else {
+      prefix = resolved;
+      suffix = "";
+    }
+
+    // 6. Resolve next sequence number
+    let nextNum: number;
+    const activeCounter = counter ?? globalConfig?.namingSeries?.counter;
+
+    if (activeCounter) {
+      const tVal = tenancy?.tenantVal;
+      const tenantStr = tVal != null
+        ? (Array.isArray(tVal) ? (tVal[0] != null ? String(tVal[0]) : undefined) : String(tVal))
+        : undefined;
+      nextNum = await activeCounter.getNext(prefix, tenantStr, tx);
+    } else if (localSeriesTracker && localSeriesTracker.has(prefix)) {
+      nextNum = localSeriesTracker.get(prefix)! + 1;
+      localSeriesTracker.set(prefix, nextNum);
+    } else {
+      const dbAdapter = tx;
+      const ops = dbAdapter.getOperators();
+      const col = dbAdapter.getColumn(config.table, field);
+      const conditions: any[] = [ops.like(col, `${prefix}%`)];
+
+      if (tenancy?.tenantCondition) {
+        conditions.push(tenancy.tenantCondition);
+      }
+
+      if (config.softDelete) {
+        const cols = dbAdapter.getColumns(config.table as any) as any;
+        if (cols[config.softDelete]) {
+          conditions.push(ops.isNull(cols[config.softDelete]));
+        }
+      }
+
+      const existing = await dbAdapter.findMany(config.table, {
+        where: ops.and(...conditions),
+        limit: 1,
+        orderBy: { field, direction: "desc" },
+      });
+
+      if (existing && existing.length > 0 && existing[0][field]) {
+        const rawVal = String(existing[0][field]);
+        let numPart = rawVal.startsWith(prefix) ? rawVal.slice(prefix.length) : rawVal;
+        if (suffix && numPart.endsWith(suffix)) {
+          numPart = numPart.slice(0, -suffix.length);
+        }
+        const parsedNum = parseInt(numPart, 10);
+        nextNum = !isNaN(parsedNum) ? parsedNum + 1 : 1;
+      } else {
+        nextNum = 1;
+      }
+
+      if (localSeriesTracker) {
+        localSeriesTracker.set(prefix, nextNum);
+      }
+    }
+
+    const formattedNumber = String(nextNum).padStart(padLength, "0");
+    return `${prefix}${formattedNumber}${suffix}`;
+  };
 
   const finalize = async (row: any, appContext: any, localConfig: any = config): Promise<any> => {
     if (!row) return row;
@@ -1355,6 +1473,15 @@ export function defineResource<
         // Sanitize write payload (FLAC)
         data = await sanitizeWritePayload(data, appContext);
 
+        // Naming Series Generation
+        if (config.namingSeries) {
+          const sField = config.namingSeries.field;
+          const allowManual = config.namingSeries.allowManual ?? false;
+          if (!allowManual || data[sField] === undefined || data[sField] === null || data[sField] === "") {
+            data[sField] = await generateSeriesNumber(data, appContext, tenancy, tx);
+          }
+        }
+
         if (config.hooks?.beforeCreate) {
           const hooked = await config.hooks.beforeCreate(data, c, tx, appContext, stmts);
           if (hooked) data = hooked;
@@ -1962,6 +2089,7 @@ export function defineResource<
         const ts = getTimestampFields();
         const stmts: any[] = [];
         const strategy = resolveStrategy(tx);
+        const importSeriesTracker = new Map<string, number>();
 
         for (let i = 0; i < body.length; i++) {
            const rawRow = body[i];
@@ -1982,6 +2110,14 @@ export function defineResource<
            }
 
            const isUpdate = !!existing;
+
+           if (!isUpdate && config.namingSeries) {
+              const sField = config.namingSeries.field;
+              const allowManual = config.namingSeries.allowManual ?? false;
+              if (!allowManual || rawRow[sField] === undefined || rawRow[sField] === null || rawRow[sField] === "") {
+                 rawRow[sField] = await generateSeriesNumber(rawRow, appContext, tenancy, tx, importSeriesTracker);
+              }
+           }
 
            let validatedRow: any;
            try {

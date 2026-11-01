@@ -146,10 +146,11 @@ flowchart LR
 ```
 
 - **v2.0.0 (Current Release):** Release the peer-dependency decoupling, Standard Schema v1 adoption, and core batch fixes.
-- **v2.1.0 (Tenancy, RBAC & Security):**
+- **v2.1.0 (Tenancy, RBAC & Document Governance):**
   - Built-in Multi-Tenancy engine (subdomain/header resolution, holding company support, Better Auth integration).
   - Granular with relation loading (list vs detail vs slug).
   - Field-Level Access Control (FLAC), field masking, and declarative method-level RBAC.
+  - Configurable Naming Series engine (`{PREFIX}-{YYYY}-{#####}`) with tenant isolation and custom counter providers.
 - **v2.2.0 (Tenancy & Security):**
   - Add built-in Multi-Tenancy middleware (subdomain/header resolution).
   - Add Field-Level Access Control (FLAC) and field masking.
