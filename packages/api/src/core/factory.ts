@@ -1473,6 +1473,13 @@ export function defineResource<
         // Sanitize write payload (FLAC)
         data = await sanitizeWritePayload(data, appContext);
 
+        // Document Workflow: Stamp initial state
+        if (config.workflow) {
+          const statusField = config.workflow.field ?? "status";
+          const initialStatus = config.workflow.initial ?? "draft";
+          data[statusField] = initialStatus;
+        }
+
         // Naming Series Generation
         if (config.namingSeries) {
           const sField = config.namingSeries.field;
@@ -1688,6 +1695,136 @@ export function defineResource<
       // Sanitize write payload (FLAC)
       body = await sanitizeWritePayload(body, appContext, existingRecord);
 
+      let workflowAfterHook: (() => Promise<void>) | null = null;
+
+      // Document Workflow: Enforce state transitions & per-state field locks
+      if (config.workflow) {
+        const statusField = config.workflow.field ?? "status";
+        const initialStatus = config.workflow.initial ?? "draft";
+        const currentState = existingRecord[statusField] ?? initialStatus;
+        const targetState = body[statusField];
+        const isTransitionAttempted = targetState !== undefined && targetState !== currentState;
+
+        const stateConfig = config.workflow.states?.[currentState];
+        const defaultEditableStates = config.workflow.editableStates ?? [initialStatus];
+        const isStateFullyEditable = stateConfig ? (stateConfig.editable === true) : defaultEditableStates.includes(currentState);
+
+        // Check state-level roles if defined
+        if (stateConfig?.roles) {
+          const userRoles = await getUserRoles(appContext);
+          const hasRole = userRoles.some(r => stateConfig.roles!.includes(r));
+          if (!hasRole) {
+            throw new ApiError(403, "WORKFLOW_FORBIDDEN", `Not authorized to modify documents in state '${currentState}'.`);
+          }
+        }
+
+        if (!isTransitionAttempted) {
+          // Document remains in current state
+          if (!isStateFullyEditable) {
+            const allowedFields = stateConfig?.allowFields ?? [];
+            const fieldsAttempted = Object.keys(body).filter(k => k !== statusField);
+
+            if (allowedFields.length === 0) {
+              throw new ApiError(403, "WORKFLOW_LOCKED", `Document in state '${currentState}' is locked and cannot be modified.`);
+            }
+
+            for (const f of fieldsAttempted) {
+              if (!allowedFields.includes(f)) {
+                if (config.fieldViolationStrategy === "reject") {
+                  throw new ApiError(403, "FIELD_FORBIDDEN", `Field '${f}' cannot be modified while document is in state '${currentState}'.`);
+                } else {
+                  delete body[f];
+                }
+              }
+            }
+          }
+        } else {
+          // State transition is attempted: currentState -> targetState
+          const matchingTransition = config.workflow.transitions.find(t => {
+            if (t.to !== targetState) return false;
+            if (t.from === "*") return true;
+            if (Array.isArray(t.from)) return t.from.includes(currentState);
+            return t.from === currentState;
+          });
+
+          if (!matchingTransition) {
+            throw new ApiError(400, "INVALID_TRANSITION", `Cannot transition document from '${currentState}' to '${targetState}'.`);
+          }
+
+          if (matchingTransition.roles) {
+            const userRoles = await getUserRoles(appContext);
+            const hasRole = userRoles.some(r => matchingTransition.roles!.includes(r));
+            if (!hasRole) {
+              throw new ApiError(403, "FORBIDDEN", `Not authorized to execute transition to '${targetState}'.`);
+            }
+          }
+
+          if (matchingTransition.permission && globalConfig?.auth?.can) {
+            const hasPerm = await globalConfig.auth.can(appContext, matchingTransition.permission, existingRecord);
+            if (!hasPerm) {
+              throw new ApiError(403, "FORBIDDEN", `Permission '${matchingTransition.permission}' required to transition to '${targetState}'.`);
+            }
+          }
+
+          if (matchingTransition.guard) {
+            const isAllowed = await matchingTransition.guard(appContext, existingRecord);
+            if (!isAllowed) {
+              throw new ApiError(403, "TRANSITION_GUARD_FAILED", `Transition to '${targetState}' is not permitted by guard condition.`);
+            }
+          }
+
+          // Check if other fields in payload are allowed in currentState
+          if (!isStateFullyEditable) {
+            const allowedFields = stateConfig?.allowFields ?? [];
+            const otherFields = Object.keys(body).filter(k => k !== statusField);
+            for (const f of otherFields) {
+              if (!allowedFields.includes(f)) {
+                if (config.fieldViolationStrategy === "reject") {
+                  throw new ApiError(403, "FIELD_FORBIDDEN", `Field '${f}' cannot be modified while document is in state '${currentState}'.`);
+                } else {
+                  delete body[f];
+                }
+              }
+            }
+          }
+
+          // Automatically merge transition fields (e.g. approvedBy, approvedAt)
+          if (matchingTransition.fields) {
+            const extraFields = typeof matchingTransition.fields === "function"
+              ? await matchingTransition.fields(appContext, existingRecord)
+              : matchingTransition.fields;
+            if (extraFields && typeof extraFields === "object") {
+              Object.assign(body, extraFields);
+            }
+          }
+
+          if (config.workflow.hooks?.beforeTransition) {
+            const hookRes = await config.workflow.hooks.beforeTransition(
+              { from: currentState, to: targetState, action: matchingTransition.action },
+              existingRecord,
+              c,
+              adapter,
+              appContext
+            );
+            if (hookRes && typeof hookRes === "object") {
+              Object.assign(body, hookRes);
+            }
+          }
+
+          if (config.workflow.hooks?.afterTransition) {
+            workflowAfterHook = async () => {
+              await config.workflow!.hooks!.afterTransition!(
+                { from: currentState, to: targetState, action: matchingTransition.action },
+                record,
+                c,
+                adapter,
+                appContext
+              );
+            };
+          }
+        }
+      }
+
       // Prevent tenant-hopping
       if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in body) {
         const attemptedTenant = body[tenancy.tenantField];
@@ -1880,6 +2017,10 @@ export function defineResource<
         }
       });
 
+      if (workflowAfterHook) {
+        await workflowAfterHook();
+      }
+
       await emitEvent(appContext, "update", record);
       await invalidateCache();
 
@@ -1923,6 +2064,20 @@ export function defineResource<
       if (!existingRecord) throw ApiError.notFound();
 
       await checkAccess(appContext, "delete", existingRecord);
+
+      // Document Workflow: Lock against delete in non-editable states
+      if (config.workflow) {
+        const statusField = config.workflow.field ?? "status";
+        const initialStatus = config.workflow.initial ?? "draft";
+        const currentState = existingRecord[statusField] ?? initialStatus;
+        const stateConfig = config.workflow.states?.[currentState];
+        const defaultEditableStates = config.workflow.editableStates ?? [initialStatus];
+        const isEditable = stateConfig ? (stateConfig.editable === true) : defaultEditableStates.includes(currentState);
+
+        if (!isEditable) {
+          throw new ApiError(403, "WORKFLOW_LOCKED", `Document in state '${currentState}' is locked and cannot be deleted.`);
+        }
+      }
 
       await runTransaction(c, async (tx) => {
         const stmts: any[] = [];

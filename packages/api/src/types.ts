@@ -292,6 +292,117 @@ export interface NamingSeriesConfig<AppContext = any, _TRecord = any> {
   counter?: NamingSeriesCounter;
 }
 
+export interface WorkflowStateConfig {
+  /**
+   * Whether all fields can be edited in this state.
+   * If true, regular updates are permitted.
+   * If false or omitted, only fields in `allowFields` can be updated.
+   */
+  editable?: boolean;
+
+  /**
+   * Whitelist of fields permitted to be modified in this state.
+   * If empty and editable is not true, document is locked against field modifications.
+   */
+  allowFields?: string[];
+
+  /**
+   * Roles authorized to perform updates when the document is in this state.
+   */
+  roles?: string[];
+}
+
+export interface WorkflowTransition<AppContext = any, TRecord = any> {
+  /**
+   * Source state(s) allowed for this transition.
+   * Can be a single state string, an array of states, or "*" for any state.
+   */
+  from: string | string[];
+
+  /**
+   * Target state for this transition.
+   */
+  to: string;
+
+  /**
+   * Optional action name/identifier for the transition (e.g. "submit", "approve", "reject").
+   */
+  action?: string;
+
+  /**
+   * Roles authorized to execute this transition.
+   */
+  roles?: string[];
+
+  /**
+   * Permission name evaluated via auth.can.
+   */
+  permission?: string;
+
+  /**
+   * Dynamic business rule callback (e.g. preventing self-approval).
+   */
+  guard?: (appContext: AppContext, record: TRecord) => boolean | Promise<boolean>;
+
+  /**
+   * Fields automatically assigned on transition.
+   * Can be an object or a function returning fields.
+   * e.g. (ctx) => ({ approvedBy: ctx.userId, approvedAt: new Date().toISOString() })
+   */
+  fields?: Record<string, any> | ((appContext: AppContext, record: TRecord) => Record<string, any> | Promise<Record<string, any>>);
+}
+
+export interface WorkflowConfig<AppContext = any, TRecord = any> {
+  /**
+   * Column storing the document state.
+   * Defaults to "status".
+   */
+  field?: string;
+
+  /**
+   * Initial state assigned when a record is created.
+   * Defaults to "draft".
+   */
+  initial?: string;
+
+  /**
+   * States where all regular field updates and deletes are permitted.
+   * Defaults to [initial] (e.g. ["draft"]).
+   */
+  editableStates?: string[];
+
+  /**
+   * Fine-grained per-state field editing rules.
+   */
+  states?: Record<string, WorkflowStateConfig>;
+
+  /**
+   * Allowed state transitions.
+   */
+  transitions: WorkflowTransition<AppContext, TRecord>[];
+
+  /**
+   * Optional lifecycle hooks.
+   */
+  hooks?: {
+    beforeTransition?: (
+      transition: { from: string; to: string; action?: string },
+      record: TRecord,
+      c: Context,
+      tx: any,
+      appContext: AppContext
+    ) => Promise<boolean | void | Record<string, any>>;
+
+    afterTransition?: (
+      transition: { from: string; to: string; action?: string },
+      record: TRecord,
+      c: Context,
+      tx: any,
+      appContext: AppContext
+    ) => Promise<void>;
+  };
+}
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -340,7 +451,8 @@ export interface ResourceConfig<
   roles?: string[] | MethodRoles;
   fields?: Record<string, FieldRule<AppContext, TSelect>>;
   fieldViolationStrategy?: FieldViolationStrategy;
-  namingSeries?: NamingSeriesConfig<AppContext, TSelect>; 
+  namingSeries?: NamingSeriesConfig<AppContext, TSelect>;
+  workflow?: WorkflowConfig<AppContext, TSelect>; 
   
   import?: {
     lookupBy: string | string[] | string[][];
