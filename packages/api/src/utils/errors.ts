@@ -5,7 +5,8 @@ export class ApiError extends Error {
     public status: ApiErrorStatus,
     public code: string,
     message: string,
-    public details?: any
+    public details?: any,
+    public headers?: Record<string, string>
   ) {
     super(message);
     this.name = "ApiError";
@@ -21,6 +22,14 @@ export class ApiError extends Error {
 
   static forbidden(message = "Forbidden") {
     return new ApiError(403, "FORBIDDEN", message);
+  }
+
+  static locked(message = "Resource is locked", headers?: Record<string, string>) {
+    return new ApiError(409, "IDEMPOTENCY_KEY_LOCKED", message, undefined, headers);
+  }
+
+  static unprocessableEntity(message = "Unprocessable Entity", details?: any) {
+    return new ApiError(422, "UNPROCESSABLE_ENTITY", message, details);
   }
 
   static tooManyRequests(message = "Too Many Requests") {
