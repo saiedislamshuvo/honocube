@@ -54,6 +54,9 @@ const isDefaultNotFound = async (res: Response): Promise<boolean> => {
 /**
  * Creates the resource framework with global configuration.
  */
+export const RESOURCE_CONFIG = Symbol.for("honocube.resource_config");
+export const API_CONFIG = Symbol.for("honocube.api_config");
+
 export function createApp<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any>(
   globalConfig: AppConfig<Env, AppContext>
 ) {
@@ -1850,6 +1853,7 @@ export function defineResource<
     return c.json({ success: false, error: { code: "INTERNAL_ERROR", message: "Internal Server Error", debug: err.message } }, 500);
   });
 
+  (app as any)[RESOURCE_CONFIG] = config;
   return app;
 }
 
@@ -1863,11 +1867,15 @@ export function defineApi<Env extends Record<string, unknown> = Record<string, u
     api.route(`/${path}`, resourceApp);
   }
 
+  const apiConfig = { resources, version };
+
   if (version) {
     const versionedApi = new Hono<{ Bindings: Env }>();
     versionedApi.route(`/${version}`, api);
+    (versionedApi as any)[API_CONFIG] = apiConfig;
     return versionedApi;
   }
   
+  (api as any)[API_CONFIG] = apiConfig;
   return api;
 }

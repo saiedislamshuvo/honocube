@@ -320,3 +320,5 @@ export interface ManyConfig<TTable = any> {
   search?: string[]; // searchable fields in this relation
   hidden?: string[]; // hidden fields in this relation
 }
+
+export type * from "./testing/types.js";
