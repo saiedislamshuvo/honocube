@@ -36,6 +36,7 @@ export interface FindFirstOptions {
   where: unknown;
   with?: unknown;
   queryKey?: string;
+  orderBy?: { field: string; direction: "asc" | "desc" };
 }
 
 export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = unknown> {

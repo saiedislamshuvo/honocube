@@ -257,6 +257,41 @@ export type MethodRoles = {
   "import-execute"?: string[];
 };
 
+export interface NamingSeriesCounter {
+  getNext: (prefix: string, tenantId?: string, tx?: any) => Promise<number> | number;
+}
+
+export interface NamingSeriesConfig<AppContext = any, _TRecord = any> {
+  /**
+   * The column name where the generated sequence is saved.
+   * e.g. "code", "invoiceNumber", "orderNumber"
+   */
+  field: string;
+
+  /**
+   * Pattern template or dynamic pattern selector function.
+   * Examples:
+   * - "INV-{YYYY}-{#####}" -> "INV-2026-00001"
+   * - "PO-{YY}-{MM}-{####}" -> "PO-26-11-0001"
+   * - "DOC-{#####}" -> "DOC-00001"
+   * - (ctx, data) => data.isExport ? "EXP-{YYYY}-{#####}" : "INV-{YYYY}-{#####}"
+   */
+  pattern: string | ((appContext: AppContext, data: any) => string | Promise<string>);
+
+  /**
+   * Whether to allow the client to manually supply a value.
+   * - `false` (default): Any client-provided value is overridden with the generated sequence.
+   * - `true`: Generates sequence only if the client omitted the field.
+   */
+  allowManual?: boolean;
+
+  /**
+   * Optional custom sequence provider or counter store.
+   * If omitted, Honocube manages the sequence automatically.
+   */
+  counter?: NamingSeriesCounter;
+}
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -273,6 +308,9 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   auth?: {
     can?: (appContext: AppContext, permission: string, record?: any) => boolean | Promise<boolean>;
     getRole?: (appContext: AppContext) => string | string[] | null | undefined | Promise<string | string[] | null | undefined>;
+  };
+  namingSeries?: {
+    counter?: NamingSeriesCounter;
   };
 }
 
@@ -301,7 +339,8 @@ export interface ResourceConfig<
   tenancy?: boolean | ResourceTenancyConfig;
   roles?: string[] | MethodRoles;
   fields?: Record<string, FieldRule<AppContext, TSelect>>;
-  fieldViolationStrategy?: FieldViolationStrategy; 
+  fieldViolationStrategy?: FieldViolationStrategy;
+  namingSeries?: NamingSeriesConfig<AppContext, TSelect>; 
   
   import?: {
     lookupBy: string | string[] | string[][];

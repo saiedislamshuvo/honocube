@@ -138,10 +138,16 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     const db = this.getDbInstance(options);
 
     if (options.queryKey && db.query?.[options.queryKey]) {
-      return await db.query[options.queryKey].findFirst({
+      const relOptions: any = {
         where: options.where,
         with: options.with
-      });
+      };
+      if (options.orderBy) {
+        const { field, direction } = options.orderBy;
+        relOptions.orderBy = (cols: any) => 
+          direction === "desc" ? desc(cols[field]) : asc(cols[field]);
+      }
+      return await db.query[options.queryKey].findFirst(relOptions);
     }
 
     const results = await this.findMany(table, { ...options, limit: 1 });
