@@ -212,6 +212,51 @@ export interface ScopedWithConfig {
 
 export type ResourceWithConfig = Record<string, any> | ScopedWithConfig;
 
+
+export type FieldRule<AppContext = any, TRecord = any> = {
+  /**
+   * Controls read access for this field.
+   * - `true`: anyone authorized to access the resource can read the field.
+   * - `false`: field is hidden/stripped from all read responses.
+   * - `string[]`: allowed roles (matched against `auth.getRole` or context role).
+   * - `string`: required permission name (evaluated via `auth.can`).
+   * - `(appContext: AppContext, record: TRecord) => boolean | Promise<boolean>`: dynamic ownership/predicate function.
+   */
+  read?: boolean | string | string[] | ((appContext: AppContext, record: TRecord) => boolean | Promise<boolean>);
+
+  /**
+   * Optional masking replacement when read access is denied.
+   * If omitted, the field is stripped completely from the response.
+   * - `string`: static replacement string (e.g. `"***"`).
+   * - `(val: any) => any`: dynamic masking function (e.g. `(v) => \`***\${v.slice(-4)}\``).
+   */
+  mask?: string | ((value: any) => any);
+
+  /**
+   * Controls write access for this field on `create`, `update`, `batch-update`, and `import`.
+   * - `true`: anyone authorized to access the resource can write the field.
+   * - `false`: field cannot be written by clients.
+   * - `string[]`: allowed roles.
+   * - `string`: required permission name.
+   * - `(appContext: AppContext, record?: TRecord) => boolean | Promise<boolean>`: dynamic predicate function.
+   */
+  write?: boolean | string | string[] | ((appContext: AppContext, record?: TRecord) => boolean | Promise<boolean>);
+};
+
+export type FieldViolationStrategy = "strip" | "reject";
+
+export type MethodRoles = {
+  list?: string[];
+  detail?: string[];
+  create?: string[];
+  update?: string[];
+  delete?: string[];
+  "batch-update"?: string[];
+  "batch-delete"?: string[];
+  "import-preview"?: string[];
+  "import-execute"?: string[];
+};
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -226,7 +271,8 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   getContext?: (c: Context<{ Bindings: Env }>) => Promise<AppContext> | AppContext;
   tenancy?: TenancyConfig<Env, AppContext>;
   auth?: {
-    can: (appContext: AppContext, permission: string, record?: any) => boolean | Promise<boolean>;
+    can?: (appContext: AppContext, permission: string, record?: any) => boolean | Promise<boolean>;
+    getRole?: (appContext: AppContext) => string | string[] | null | undefined | Promise<string | string[] | null | undefined>;
   };
 }
 
@@ -252,7 +298,10 @@ export interface ResourceConfig<
   methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute")[];
   softDelete?: string; 
   slugs?: string[];
-  tenancy?: boolean | ResourceTenancyConfig; 
+  tenancy?: boolean | ResourceTenancyConfig;
+  roles?: string[] | MethodRoles;
+  fields?: Record<string, FieldRule<AppContext, TSelect>>;
+  fieldViolationStrategy?: FieldViolationStrategy; 
   
   import?: {
     lookupBy: string | string[] | string[][];
