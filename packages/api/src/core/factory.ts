@@ -1,5 +1,5 @@
 import { Hono, Context } from "hono";
-import { ResourceConfig, AppConfig, TenancyValue } from "../types.js";
+import { ResourceConfig, AppConfig, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff } from "../types.js";
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -139,6 +139,74 @@ const parsePage = (raw: string | undefined): number | undefined => {
   return value;
 };
 
+
+// Audit Engine Helpers
+const getClientIp = (c: Context): string | null => {
+  return (
+    c.req.header("cf-connecting-ip") ??
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    c.req.header("x-real-ip") ??
+    null
+  );
+};
+
+const getUserAgent = (c: Context): string | null => {
+  return c.req.header("user-agent") ?? null;
+};
+
+const computeFieldDiff = (
+  oldRecord: Record<string, unknown> | null | undefined,
+  newRecord: Record<string, unknown> | null | undefined,
+  excludeFields: Set<string>,
+  maskFields: Set<string>,
+  maskString: string = "********"
+): AuditFieldDiff[] => {
+  const diff: AuditFieldDiff[] = [];
+  if (!oldRecord && !newRecord) return diff;
+
+  const allKeys = new Set([
+    ...Object.keys(oldRecord ?? {}),
+    ...Object.keys(newRecord ?? {}),
+  ]);
+
+  for (const key of allKeys) {
+    if (excludeFields.has(key)) continue;
+
+    const oldVal = oldRecord ? oldRecord[key] : undefined;
+    const newVal = newRecord ? newRecord[key] : undefined;
+
+    const isDifferent =
+      oldVal !== newVal &&
+      JSON.stringify(oldVal) !== JSON.stringify(newVal);
+
+    if (isDifferent) {
+      const isMasked = maskFields.has(key);
+      diff.push({
+        field: key,
+        from: isMasked ? (oldVal !== undefined ? maskString : undefined) : oldVal,
+        to: isMasked ? (newVal !== undefined ? maskString : undefined) : newVal,
+      });
+    }
+  }
+
+  return diff;
+};
+
+const sanitizeAuditSnapshot = (
+  record: Record<string, unknown> | null | undefined,
+  excludeFields: Set<string>,
+  maskFields: Set<string>,
+  maskString: string = "********"
+): Record<string, unknown> | null => {
+  if (!record) return null;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (excludeFields.has(key)) continue;
+    sanitized[key] = maskFields.has(key) ? maskString : value;
+  }
+  return sanitized;
+};
+
 export function defineResource<
   TTable, 
   TSelect, 
@@ -160,6 +228,104 @@ export function defineResource<
   };
 
   const methods = new Set(config.methods ?? ["list", "detail", "create", "update", "delete"]);
+  // Audit Configuration Resolution
+  const isAuditEnabled = Boolean(
+    config.audit === true ||
+    (typeof config.audit === "object" && config.audit.enabled !== false) ||
+    (config.audit === undefined && Boolean(globalConfig?.audit?.table || globalConfig?.audit?.store))
+  );
+
+  const auditConfigObj = typeof config.audit === "object" ? config.audit : undefined;
+
+  const allowedAuditActions = new Set<AuditAction>(
+    auditConfigObj?.actions ?? [
+      "create",
+      "update",
+      "delete",
+      "batch-update",
+      "batch-delete",
+      "transition",
+    ]
+  );
+
+  const shouldAuditAction = (action: AuditAction) => isAuditEnabled && allowedAuditActions.has(action);
+
+  const auditExcludeFields = new Set<string>([
+    ...(globalConfig?.audit?.excludeFields ?? []),
+    ...(auditConfigObj?.excludeFields ?? []),
+  ]);
+
+  const auditMaskFields = new Set<string>([
+    ...(globalConfig?.audit?.maskFields ?? []),
+    ...(auditConfigObj?.maskFields ?? []),
+  ]);
+
+  const auditMaskString = auditConfigObj?.maskString ?? globalConfig?.audit?.maskString ?? "********";
+
+  const resolveActorId = async (c: Context, appContext: any): Promise<string | number | null> => {
+    if (globalConfig?.audit?.getActorId) {
+      const res = await globalConfig.audit.getActorId(appContext, c as any);
+      return res ?? null;
+    }
+    if (appContext && typeof appContext === "object") {
+      return (
+        appContext.userId ??
+        appContext.user?.id ??
+        appContext.actorId ??
+        appContext.sub ??
+        null
+      );
+    }
+    return null;
+  };
+
+  const dispatchAudit = async (entry: AuditEntry<AppContext>, c: Context, appContext: AppContext) => {
+    const auditPromise = (async () => {
+      try {
+        if (globalConfig?.audit?.store) {
+          await globalConfig.audit.store(entry, c as any, appContext);
+        }
+
+        if (globalConfig?.audit?.table) {
+          const adapter = getAdapter(c);
+          const auditPayload: Record<string, any> = {
+            resource: entry.resource,
+            recordId: String(entry.recordId),
+            action: entry.action,
+            actorId: entry.actorId !== null && entry.actorId !== undefined ? String(entry.actorId) : null,
+            tenantId: entry.tenantId !== null && entry.tenantId !== undefined ? String(entry.tenantId) : null,
+            diff: entry.diff ? JSON.stringify(entry.diff) : null,
+            oldData: entry.oldData ? JSON.stringify(entry.oldData) : null,
+            newData: entry.newData ? JSON.stringify(entry.newData) : null,
+            metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
+            ip: entry.ip ?? null,
+            userAgent: entry.userAgent ?? null,
+            timestamp: entry.timestamp,
+          };
+          await adapter.insert(globalConfig.audit.table, auditPayload);
+        }
+      } catch (err) {
+        if (globalConfig?.logger?.error) {
+          globalConfig.logger.error("Audit logging failed:", err);
+        } else {
+          console.error("[HonoCube ERROR] Audit logging failed:", err);
+        }
+      }
+    })();
+
+    const mode = globalConfig?.audit?.mode ?? "async";
+    if (mode === "sync") {
+      await auditPromise;
+    } else {
+      const executionCtx = (c as any).executionCtx;
+      if (executionCtx && typeof executionCtx.waitUntil === "function") {
+        executionCtx.waitUntil(auditPromise);
+      } else {
+        auditPromise.catch(() => {});
+      }
+    }
+  };
+
 
   // Register parent lock relations if defined
   if (config.workflow?.lockRelations && globalConfig) {
@@ -1332,6 +1498,24 @@ export function defineResource<
       await emitEvent(appContext, "batch-update", validatedData, targetIds);
       await invalidateCache();
 
+      if (shouldAuditAction("batch-update")) {
+        const actorId = await resolveActorId(c, appContext);
+        for (const targetId of targetIds) {
+          await dispatchAudit({
+            resource: config.name,
+            recordId: targetId,
+            action: "batch-update",
+            actorId,
+            tenantId: tenancy.isTenancyActive ? String(tenancy.tenantVal) : null,
+            diff: computeFieldDiff(null, validatedData, auditExcludeFields, auditMaskFields, auditMaskString),
+            newData: auditConfigObj?.includeSnapshots ? sanitizeAuditSnapshot(validatedData, auditExcludeFields, auditMaskFields, auditMaskString) : null,
+            ip: getClientIp(c),
+            userAgent: getUserAgent(c),
+            timestamp: new Date().toISOString(),
+          }, c, appContext);
+        }
+      }
+
       return c.json({ success: true, updated: record });
     });
   }
@@ -1411,6 +1595,23 @@ export function defineResource<
 
       await emitEvent(appContext, "batch-delete", undefined, targetIds);
       await invalidateCache();
+
+      if (shouldAuditAction("batch-delete")) {
+        const actorId = await resolveActorId(c, appContext);
+        for (const targetId of targetIds) {
+          await dispatchAudit({
+            resource: config.name,
+            recordId: targetId,
+            action: "batch-delete",
+            actorId,
+            tenantId: tenancy.isTenancyActive ? String(tenancy.tenantVal) : null,
+            diff: [],
+            ip: getClientIp(c),
+            userAgent: getUserAgent(c),
+            timestamp: new Date().toISOString(),
+          }, c, appContext);
+        }
+      }
 
       return c.json({ success: true, deleted: targetIds.length });
     });
@@ -1770,6 +1971,29 @@ export function defineResource<
         if (reloaded) finalRecord = reloaded;
       }
 
+      if (shouldAuditAction("create")) {
+        const actorId = await resolveActorId(c, appContext);
+        const diff = computeFieldDiff(null, record, auditExcludeFields, auditMaskFields, auditMaskString);
+        let customMeta: Record<string, unknown> | undefined;
+        if (auditConfigObj?.metadata) {
+          customMeta = await auditConfigObj.metadata(c, appContext, record as any);
+        }
+        await dispatchAudit({
+          resource: config.name,
+          recordId: (record as any).id,
+          action: "create",
+          actorId,
+          tenantId: tenancy.isTenancyActive ? String(tenancy.tenantVal) : null,
+          diff,
+          oldData: null,
+          newData: auditConfigObj?.includeSnapshots ? sanitizeAuditSnapshot(record, auditExcludeFields, auditMaskFields, auditMaskString) : null,
+          metadata: customMeta,
+          ip: getClientIp(c),
+          userAgent: getUserAgent(c),
+          timestamp: new Date().toISOString(),
+        }, c, appContext);
+      }
+
       return c.json({
         success: true,
         data: await finalize(finalRecord as TSelect, appContext)
@@ -1810,6 +2034,9 @@ export function defineResource<
 
       let workflowAfterHook: (() => Promise<void>) | null = null;
       let workflowMatchingTransition: any = null;
+      let workflowCurrentState: string | undefined;
+      let workflowTargetState: string | undefined;
+      let isWorkflowTransitionAttempted = false;
 
       // Document Workflow: Enforce state transitions & per-state field locks
       if (config.workflow) {
@@ -1818,6 +2045,10 @@ export function defineResource<
         const currentState = existingRecord[statusField] ?? initialStatus;
         const targetState = body[statusField];
         const isTransitionAttempted = targetState !== undefined && targetState !== currentState;
+
+        workflowCurrentState = currentState;
+        workflowTargetState = targetState;
+        isWorkflowTransitionAttempted = isTransitionAttempted;
 
         const stateConfig = config.workflow.states?.[currentState];
         const defaultEditableStates = config.workflow.editableStates ?? [initialStatus];
@@ -2251,6 +2482,42 @@ export function defineResource<
         if (reloaded) finalRecord = reloaded;
       }
 
+      const isTransition = isWorkflowTransitionAttempted && Boolean(workflowMatchingTransition);
+      const auditAction: AuditAction = isTransition ? "transition" : "update";
+
+      if (shouldAuditAction(auditAction) || (isTransition && shouldAuditAction("update"))) {
+        const actorId = await resolveActorId(c, appContext);
+        const diff = computeFieldDiff(existingRecord, record, auditExcludeFields, auditMaskFields, auditMaskString);
+        let customMeta: Record<string, unknown> | undefined;
+        if (auditConfigObj?.metadata) {
+          customMeta = await auditConfigObj.metadata(c, appContext, record as any);
+        }
+        if (isTransition) {
+          customMeta = {
+            ...customMeta,
+            workflow: {
+              from: workflowCurrentState,
+              to: workflowTargetState,
+              action: workflowMatchingTransition?.action,
+            },
+          };
+        }
+        await dispatchAudit({
+          resource: config.name,
+          recordId: id,
+          action: auditAction,
+          actorId,
+          tenantId: tenancy.isTenancyActive ? String(tenancy.tenantVal) : null,
+          diff,
+          oldData: auditConfigObj?.includeSnapshots ? sanitizeAuditSnapshot(existingRecord, auditExcludeFields, auditMaskFields, auditMaskString) : null,
+          newData: auditConfigObj?.includeSnapshots ? sanitizeAuditSnapshot(record, auditExcludeFields, auditMaskFields, auditMaskString) : null,
+          metadata: customMeta,
+          ip: getClientIp(c),
+          userAgent: getUserAgent(c),
+          timestamp: new Date().toISOString(),
+        }, c, appContext);
+      }
+
       return c.json({
         success: true,
         data: await finalize(finalRecord as TSelect, appContext)
@@ -2314,6 +2581,28 @@ export function defineResource<
 
       await emitEvent(appContext, "delete", undefined, [id]);
       await invalidateCache();
+
+      if (shouldAuditAction("delete")) {
+        const actorId = await resolveActorId(c, appContext);
+        let customMeta: Record<string, unknown> | undefined;
+        if (auditConfigObj?.metadata) {
+          customMeta = await auditConfigObj.metadata(c, appContext, existingRecord as any);
+        }
+        await dispatchAudit({
+          resource: config.name,
+          recordId: id,
+          action: "delete",
+          actorId,
+          tenantId: tenancy.isTenancyActive ? String(tenancy.tenantVal) : null,
+          diff: [],
+          oldData: auditConfigObj?.includeSnapshots ? sanitizeAuditSnapshot(existingRecord, auditExcludeFields, auditMaskFields, auditMaskString) : null,
+          newData: null,
+          metadata: customMeta,
+          ip: getClientIp(c),
+          userAgent: getUserAgent(c),
+          timestamp: new Date().toISOString(),
+        }, c, appContext);
+      }
 
       return c.json({ success: true });
     });

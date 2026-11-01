@@ -152,6 +152,7 @@ flowchart LR
   - Field-Level Access Control (FLAC), field masking, and declarative method-level RBAC.
   - Configurable Naming Series engine (`{PREFIX}-{YYYY}-{#####}`) with tenant isolation and custom counter providers.
   - Document Workflow and State Machine engine with per-state field permissions, relation cascades, and lock propagation.
+  - Automated Audit Trail and Field-Level Diff Logging engine with sensitive field masking and async dispatch.
 - **v2.2.0 (Tenancy & Security):**
   - Add built-in Multi-Tenancy middleware (subdomain/header resolution).
   - Add Field-Level Access Control (FLAC) and field masking.
