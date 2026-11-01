@@ -100,9 +100,11 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
       };
 
       if (options.orderBy) {
-        const { field, direction } = options.orderBy;
+        const orderList = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
         relOptions.orderBy = (cols: any) => 
-          direction === "desc" ? desc(cols[field]) : asc(cols[field]);
+          orderList.map(({ field, direction }) =>
+            direction === "desc" ? desc(cols[field]) : asc(cols[field])
+          );
       }
 
       return await db.query[options.queryKey].findMany(relOptions);
@@ -121,10 +123,15 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
     }
 
     if (options.orderBy) {
-      const { field, direction } = options.orderBy;
-      const column = table[field];
-      if (column) {
-        query.orderBy(direction === "desc" ? desc(column) : asc(column));
+      const orderList = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
+      const clauses = orderList
+        .map(({ field, direction }) => {
+          const column = table[field];
+          return column ? (direction === "desc" ? desc(column) : asc(column)) : undefined;
+        })
+        .filter(Boolean);
+      if (clauses.length > 0) {
+        query.orderBy(...clauses);
       }
     }
 
@@ -143,9 +150,11 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
         with: options.with
       };
       if (options.orderBy) {
-        const { field, direction } = options.orderBy;
+        const orderList = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
         relOptions.orderBy = (cols: any) => 
-          direction === "desc" ? desc(cols[field]) : asc(cols[field]);
+          orderList.map(({ field, direction }) =>
+            direction === "desc" ? desc(cols[field]) : asc(cols[field])
+          );
       }
       return await db.query[options.queryKey].findFirst(relOptions);
     }

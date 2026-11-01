@@ -283,6 +283,14 @@ export type ComputedFieldDefinition<TRecord = any, AppContext = any, TResult = a
   | ComputedFieldConfig<TRecord, AppContext, TResult>;
 
 
+
+export interface ResourcePaginationConfig {
+  type?: "offset" | "cursor" | "both";
+  defaultLimit?: number;
+  maxLimit?: number;
+  cursorColumn?: string;
+}
+
 export interface ResourceAggregateConfig {
   enabled?: boolean;
   defaultMetrics?: string[];
@@ -1040,8 +1048,8 @@ export interface ResourceConfig<
     allow?: (keyof TSelect | string)[];
   };
 
-  defaultSort?: { field: string; direction: "asc" | "desc" };
-  pagination?: { defaultLimit?: number; maxLimit?: number };
+  defaultSort?: { field: string; direction: "asc" | "desc" } | { field: string; direction: "asc" | "desc" }[];
+  pagination?: ResourcePaginationConfig;
   
   // Relations
   relations?: {
