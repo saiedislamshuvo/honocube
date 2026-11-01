@@ -1,5 +1,6 @@
 import { Hono, Context } from "hono";
-import { ResourceConfig, AppConfig, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff } from "../types.js";
+import { ResourceConfig, AppConfig, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff, OutboxEvent, OutboxRecord, OutboxStatus, WebhookEndpointConfig } from "../types.js";
+import { dispatchSingleWebhook, isWebhookEventMatch, calculateRetryBackoff } from "../utils/webhooks.js";
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -322,6 +323,285 @@ export function defineResource<
         executionCtx.waitUntil(auditPromise);
       } else {
         auditPromise.catch(() => {});
+      }
+    }
+  };
+
+  // Outbox Configuration Resolution
+  const isOutboxEnabled = Boolean(
+    config.outbox === true ||
+    (typeof config.outbox === "object" && config.outbox.enabled !== false) ||
+    (config.outbox === undefined &&
+      (Boolean(globalConfig?.outbox?.table || globalConfig?.outbox?.sink) ||
+       Boolean(globalConfig?.webhooks?.endpoints)) &&
+      globalConfig?.outbox?.enabledByDefault !== false)
+  );
+
+  const outboxConfigObj = typeof config.outbox === "object" ? config.outbox : undefined;
+
+  const allowedOutboxEvents = new Set<string>(
+    outboxConfigObj?.events ?? [
+      "create",
+      "update",
+      "delete",
+      "batch-update",
+      "batch-delete",
+      "transition",
+    ]
+  );
+
+  const shouldRecordOutboxEvent = (event: string) => isOutboxEnabled && allowedOutboxEvents.has(event);
+
+  const createOutboxEntry = (
+    event: OutboxEvent,
+    recordId: string | number,
+    payload: any,
+    tenancyVal?: any
+  ): OutboxRecord => {
+    const id = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2) + Date.now().toString(36);
+    return {
+      id,
+      resource: config.name,
+      recordId,
+      event,
+      payload,
+      tenantId: tenancyVal !== undefined && tenancyVal !== null ? String(tenancyVal) : null,
+      status: "pending",
+      attempts: 0,
+      createdAt: new Date().toISOString(),
+    };
+  };
+
+  const persistOutboxEntry = async (
+    outboxEntry: OutboxRecord,
+    tx: DatabaseAdapter<any, any, any>,
+    c: Context,
+    appContext: AppContext,
+    stmts?: any[]
+  ) => {
+    if (globalConfig?.outbox?.sink) {
+      await globalConfig.outbox.sink(outboxEntry, tx, c as any, appContext);
+    }
+    if (globalConfig?.outbox?.table) {
+      const outboxTable = globalConfig.outbox.table;
+      const columnNames = tx.getColumnNames(outboxTable);
+
+      let payloadVal: string;
+      if (typeof outboxEntry.payload === "string") {
+        payloadVal = outboxEntry.payload;
+      } else {
+        try {
+          payloadVal = JSON.stringify(outboxEntry.payload);
+        } catch {
+          payloadVal = JSON.stringify(outboxEntry.payload, (_k, v) => {
+            if (typeof v === "object" && v !== null && (typeof v.toQuery === "function" || v.constructor?.name?.includes("SQL") || v.constructor?.name?.includes("Table"))) {
+              return undefined;
+            }
+            return v;
+          });
+        }
+      }
+
+      const row: Record<string, any> = {
+        id: outboxEntry.id,
+        resource: outboxEntry.resource,
+        event: outboxEntry.event,
+        status: outboxEntry.status,
+        attempts: outboxEntry.attempts,
+      };
+
+      const recordIdVal = typeof outboxEntry.recordId === "object" && outboxEntry.recordId !== null
+        ? outboxEntry.recordId
+        : String(outboxEntry.recordId);
+
+      if (columnNames.includes("record_id")) row.record_id = recordIdVal;
+      else if (columnNames.includes("recordId")) row.recordId = recordIdVal;
+      else row.recordId = recordIdVal;
+
+      if (columnNames.includes("payload")) row.payload = payloadVal;
+
+      if (outboxEntry.headers) {
+        if (columnNames.includes("headers")) row.headers = JSON.stringify(outboxEntry.headers);
+      }
+
+      if (columnNames.includes("tenant_id")) row.tenant_id = outboxEntry.tenantId ?? null;
+      else if (columnNames.includes("tenantId")) row.tenantId = outboxEntry.tenantId ?? null;
+
+      if (columnNames.includes("created_at")) row.created_at = outboxEntry.createdAt;
+      else if (columnNames.includes("createdAt")) row.createdAt = outboxEntry.createdAt;
+
+      if (stmts) {
+        stmts.push(tx.insertStmt(outboxTable, row));
+      } else {
+        await tx.insert(outboxTable, row);
+      }
+    }
+  };
+
+  const dispatchWebhooks = async (
+    outboxEntry: OutboxRecord,
+    c: Context,
+    appContext: AppContext
+  ) => {
+    if (globalConfig?.outbox?.autoDispatch === false) {
+      return;
+    }
+
+    const webhookConfig = globalConfig?.webhooks;
+    if (!webhookConfig) {
+      return;
+    }
+
+    const dispatchPromise = (async () => {
+      try {
+        let endpoints: WebhookEndpointConfig[] = [];
+        if (typeof webhookConfig.endpoints === "function") {
+          endpoints = await webhookConfig.endpoints(c as any, appContext);
+        } else if (Array.isArray(webhookConfig.endpoints)) {
+          endpoints = webhookConfig.endpoints;
+        }
+
+        if (!endpoints || endpoints.length === 0) return;
+
+        const matchingEndpoints = endpoints.filter(
+          (ep) => !ep.disabled && isWebhookEventMatch(ep.events, outboxEntry.resource, outboxEntry.event)
+        );
+
+        if (matchingEndpoints.length === 0) return;
+
+        const adapter = getAdapter(c);
+        let allSuccess = true;
+        let lastError: string | null = null;
+        const currentAttempt = (outboxEntry.attempts ?? 0) + 1;
+
+        for (const ep of matchingEndpoints) {
+          if (ep.filter) {
+            const allowed = await ep.filter(outboxEntry);
+            if (!allowed) continue;
+          }
+
+          const delivery = await dispatchSingleWebhook(ep, outboxEntry, {
+            fetchFn: webhookConfig.fetch,
+          });
+
+          if (webhookConfig.deliverySink) {
+            try {
+              await webhookConfig.deliverySink(delivery, c as any, appContext);
+            } catch (sinkErr) {
+              if (globalConfig?.logger?.error) {
+                globalConfig.logger.error("Webhook deliverySink error:", sinkErr);
+              }
+            }
+          }
+
+          if (webhookConfig.deliveryTable) {
+            try {
+              const deliveryTable = webhookConfig.deliveryTable;
+              const colNames = adapter.getColumnNames(deliveryTable);
+              const deliveryPayload: Record<string, any> = {
+                id: delivery.id,
+                endpointUrl: delivery.endpointUrl,
+                event: delivery.event,
+                attempt: delivery.attempt,
+                durationMs: delivery.durationMs,
+                timestamp: delivery.timestamp,
+              };
+
+              if (delivery.outboxId) {
+                if (colNames.includes("outbox_id")) deliveryPayload.outbox_id = delivery.outboxId;
+                else if (colNames.includes("outboxId")) deliveryPayload.outboxId = delivery.outboxId;
+              }
+
+              if (delivery.statusCode !== null && delivery.statusCode !== undefined) {
+                if (colNames.includes("status_code")) deliveryPayload.status_code = delivery.statusCode;
+                else if (colNames.includes("statusCode")) deliveryPayload.statusCode = delivery.statusCode;
+              }
+
+              if (delivery.error) deliveryPayload.error = delivery.error;
+
+              if (delivery.requestHeaders) {
+                const hVal = JSON.stringify(delivery.requestHeaders);
+                if (colNames.includes("request_headers")) deliveryPayload.request_headers = hVal;
+                else if (colNames.includes("requestHeaders")) deliveryPayload.requestHeaders = hVal;
+              }
+
+              if (delivery.requestPayload) {
+                const pVal = JSON.stringify(delivery.requestPayload);
+                if (colNames.includes("request_payload")) deliveryPayload.request_payload = pVal;
+                else if (colNames.includes("requestPayload")) deliveryPayload.requestPayload = pVal;
+              }
+
+              if (delivery.responseBody) {
+                if (colNames.includes("response_body")) deliveryPayload.response_body = delivery.responseBody;
+                else if (colNames.includes("responseBody")) deliveryPayload.responseBody = delivery.responseBody;
+              }
+
+              await adapter.insert(deliveryTable, deliveryPayload);
+            } catch (tableErr) {
+              if (globalConfig?.logger?.error) {
+                globalConfig.logger.error("Webhook deliveryTable error:", tableErr);
+              }
+            }
+          }
+
+          if (delivery.error || (delivery.statusCode && (delivery.statusCode < 200 || delivery.statusCode >= 300))) {
+            allSuccess = false;
+            lastError = delivery.error ?? ("HTTP " + delivery.statusCode);
+          }
+        }
+
+        if (globalConfig?.outbox?.table) {
+          try {
+            const maxAttempts = webhookConfig.maxAttempts ?? 3;
+            const newStatus: OutboxStatus = allSuccess
+              ? "delivered"
+              : currentAttempt >= maxAttempts
+              ? "failed"
+              : "pending";
+
+            const nextRetryAt =
+              !allSuccess && currentAttempt < maxAttempts
+                ? new Date(Date.now() + calculateRetryBackoff(currentAttempt, webhookConfig.retryBackoffMs)).toISOString()
+                : null;
+
+            const columnNames = adapter.getColumnNames(globalConfig.outbox.table);
+            const mappedUpdate: Record<string, any> = {};
+            if (columnNames.includes("status")) mappedUpdate.status = newStatus;
+            if (columnNames.includes("attempts")) mappedUpdate.attempts = currentAttempt;
+            if (columnNames.includes("last_error")) mappedUpdate.last_error = lastError;
+            else if (columnNames.includes("lastError")) mappedUpdate.lastError = lastError;
+            if (columnNames.includes("next_retry_at")) mappedUpdate.next_retry_at = nextRetryAt;
+            else if (columnNames.includes("nextRetryAt")) mappedUpdate.nextRetryAt = nextRetryAt;
+            if (columnNames.includes("updated_at")) mappedUpdate.updated_at = new Date().toISOString();
+            else if (columnNames.includes("updatedAt")) mappedUpdate.updatedAt = new Date().toISOString();
+
+            await adapter.update(globalConfig.outbox.table, outboxEntry.id, mappedUpdate);
+          } catch (updateErr) {
+            if (globalConfig?.logger?.error) {
+              globalConfig.logger.error("Webhook outbox status update error:", updateErr);
+            }
+          }
+        }
+      } catch (err) {
+        if (globalConfig?.logger?.error) {
+          globalConfig.logger.error("Webhook dispatch error:", err);
+        } else {
+          console.error("[HonoCube ERROR] Webhook dispatch error:", err);
+        }
+      }
+    })();
+
+    const mode = webhookConfig.mode ?? "async";
+    if (mode === "sync") {
+      await dispatchPromise;
+    } else {
+      const executionCtx = (c as any).executionCtx;
+      if (executionCtx && typeof executionCtx.waitUntil === "function") {
+        executionCtx.waitUntil(dispatchPromise);
+      } else {
+        dispatchPromise.catch(() => {});
       }
     }
   };
@@ -1445,6 +1725,7 @@ export function defineResource<
         validatedData[ts.updated] = new Date().toISOString();
       }
 
+      let batchUpdateOutboxEntry: OutboxRecord | undefined;
       const record = await runTransaction(c, async (tx) => {
         const stmts: any[] = [];
         // Apply Batch Hook
@@ -1488,12 +1769,26 @@ export function defineResource<
         // Handle different driver result formats
         const updatedCount = result.changes ?? result.rowCount ?? targetIds.length;
 
+        if (shouldRecordOutboxEvent("batch-update")) {
+          batchUpdateOutboxEntry = createOutboxEntry(
+            "batch-update",
+            targetIds.join(","),
+            { ids: targetIds, data: validatedData, tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null },
+            tenancy.isTenancyActive ? tenancy.tenantVal : null
+          );
+          await persistOutboxEntry(batchUpdateOutboxEntry, tx, c, appContext);
+        }
+
         if (config.hooks?.afterBatchUpdate) {
           await config.hooks.afterBatchUpdate(targetIds, c, tx, appContext);
         }
 
         return updatedCount;
       });
+
+      if (batchUpdateOutboxEntry) {
+        await dispatchWebhooks(batchUpdateOutboxEntry, c, appContext);
+      }
 
       await emitEvent(appContext, "batch-update", validatedData, targetIds);
       await invalidateCache();
@@ -1549,6 +1844,7 @@ export function defineResource<
         }
       }
 
+      let batchDeleteOutboxEntry: OutboxRecord | undefined;
       await runTransaction(c, async (tx) => {
         const stmts: any[] = [];
         // Apply Batch Hook
@@ -1578,6 +1874,16 @@ export function defineResource<
           conditions.push(scopedWhere);
         }
 
+        if (shouldRecordOutboxEvent("batch-delete")) {
+          batchDeleteOutboxEntry = createOutboxEntry(
+            "batch-delete",
+            targetIds.join(","),
+            { ids: targetIds, tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null },
+            tenancy.isTenancyActive ? tenancy.tenantVal : null
+          );
+          await persistOutboxEntry(batchDeleteOutboxEntry, tx, c, appContext);
+        }
+
         // A row that is already soft-deleted is not deleted again.
         if (config.softDelete) {
           conditions.push(ops.isNull(cols[config.softDelete]));
@@ -1592,6 +1898,10 @@ export function defineResource<
 
         return targetIds.length;
       });
+
+      if (batchDeleteOutboxEntry) {
+        await dispatchWebhooks(batchDeleteOutboxEntry, c, appContext);
+      }
 
       await emitEvent(appContext, "batch-delete", undefined, targetIds);
       await invalidateCache();
@@ -1778,6 +2088,7 @@ export function defineResource<
       // 0. Recursive File Upload Processing
       body = await processUploads(body);
 
+      let createdOutboxEntry: OutboxRecord | undefined;
       const record = await runTransaction(c, async (tx) => {
         let data = body;
 
@@ -1859,13 +2170,15 @@ export function defineResource<
         // inserted. Without either, relations cannot be written in a batch and
         // we fall back to the imperative strategy below.
         const hasRelations = !!(config.relations?.many?.length || config.relations?.pivots?.length);
+        const hasOutbox = shouldRecordOutboxEvent("create") && Boolean(globalConfig?.outbox?.table || globalConfig?.outbox?.sink);
+        const needsParentId = hasRelations || hasOutbox;
         const explicitParentId = (validated as any).id;
-        const batchParentId = !hasRelations
+        const batchParentId = !needsParentId
           ? undefined
           : explicitParentId != null
             ? explicitParentId
             : tx.parentIdExpression?.(config.table);
-        const useBatch = strategy === "batch" && (!hasRelations || batchParentId !== undefined);
+        const useBatch = strategy === "batch" && (!needsParentId || batchParentId !== undefined);
 
         if (useBatch) {
           // 1. Add Parent Statement
@@ -1904,8 +2217,25 @@ export function defineResource<
             }
           }
 
+          if (shouldRecordOutboxEvent("create")) {
+            createdOutboxEntry = createOutboxEntry(
+              "create",
+              explicitParentId ?? batchParentId ?? "0",
+              { id: explicitParentId != null ? explicitParentId : null, data: validated, tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null },
+              tenancy.isTenancyActive ? tenancy.tenantVal : null
+            );
+            await persistOutboxEntry(createdOutboxEntry, tx, c, appContext, stmts);
+          }
+
           const results = await tx.batch(stmts);
           const inserted = Array.isArray(results[0]) ? results[0][0] : results[0];
+
+          if (createdOutboxEntry) {
+            const finalId = (inserted as any)?.id ?? createdOutboxEntry.recordId;
+            createdOutboxEntry.recordId = finalId;
+            createdOutboxEntry.payload.id = finalId;
+            createdOutboxEntry.payload.data = inserted;
+          }
 
           if (config.hooks?.afterCreate) {
             await config.hooks.afterCreate(inserted as TSelect, c, tx, appContext);
@@ -1945,6 +2275,16 @@ export function defineResource<
             }
           }
 
+          if (shouldRecordOutboxEvent("create")) {
+            createdOutboxEntry = createOutboxEntry(
+              "create",
+              parentId,
+              { id: parentId, data: inserted, tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null },
+              tenancy.isTenancyActive ? tenancy.tenantVal : null
+            );
+            await persistOutboxEntry(createdOutboxEntry, tx, c, appContext);
+          }
+
           if (config.hooks?.afterCreate) {
             await config.hooks.afterCreate(inserted as TSelect, c, tx, appContext);
           }
@@ -1952,6 +2292,10 @@ export function defineResource<
           return inserted;
         }
       });
+
+      if (createdOutboxEntry) {
+        await dispatchWebhooks(createdOutboxEntry, c, appContext);
+      }
 
       await emitEvent(appContext, "create", record);
       await invalidateCache();
@@ -2245,6 +2589,7 @@ export function defineResource<
       // 0. Recursive File Upload Processing
       body = await processUploads(body);
 
+      let updatedOutboxEntry: OutboxRecord | undefined;
       const record = await runTransaction(c, async (tx) => {
         let data = body;
         const stmts: any[] = [];
@@ -2355,6 +2700,28 @@ export function defineResource<
             }
           }
 
+          const isTransition = isWorkflowTransitionAttempted && Boolean(workflowMatchingTransition);
+          const outboxEvent: OutboxEvent = isTransition ? "transition" : "update";
+          if (shouldRecordOutboxEvent(outboxEvent) || (isTransition && shouldRecordOutboxEvent("update"))) {
+            const diff = computeFieldDiff(existingRecord, validated, auditExcludeFields, auditMaskFields, auditMaskString);
+            const payloadData: Record<string, any> = {
+              id,
+              data: validated,
+              previous: existingRecord,
+              diff,
+              tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null,
+            };
+            if (isTransition) {
+              payloadData.workflow = {
+                from: workflowCurrentState,
+                to: workflowTargetState,
+                action: workflowMatchingTransition?.action,
+              };
+            }
+            updatedOutboxEntry = createOutboxEntry(outboxEvent, id, payloadData, tenancy.isTenancyActive ? tenancy.tenantVal : null);
+            await persistOutboxEntry(updatedOutboxEntry, tx, c, appContext, stmts);
+          }
+
           let updated: any;
           if (stmts.length > 0) {
             const results = await tx.batch(stmts);
@@ -2455,6 +2822,28 @@ export function defineResource<
             }
           }
 
+          const isTransitionImperative = isWorkflowTransitionAttempted && Boolean(workflowMatchingTransition);
+          const outboxEventImperative: OutboxEvent = isTransitionImperative ? "transition" : "update";
+          if (shouldRecordOutboxEvent(outboxEventImperative) || (isTransitionImperative && shouldRecordOutboxEvent("update"))) {
+            const diff = computeFieldDiff(existingRecord, updated, auditExcludeFields, auditMaskFields, auditMaskString);
+            const payloadData: Record<string, any> = {
+              id,
+              data: updated,
+              previous: existingRecord,
+              diff,
+              tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null,
+            };
+            if (isTransitionImperative) {
+              payloadData.workflow = {
+                from: workflowCurrentState,
+                to: workflowTargetState,
+                action: workflowMatchingTransition?.action,
+              };
+            }
+            updatedOutboxEntry = createOutboxEntry(outboxEventImperative, id, payloadData, tenancy.isTenancyActive ? tenancy.tenantVal : null);
+            await persistOutboxEntry(updatedOutboxEntry, tx, c, appContext);
+          }
+
           if (config.hooks?.afterUpdate) {
             await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
           }
@@ -2465,6 +2854,10 @@ export function defineResource<
 
       if (workflowAfterHook) {
         await workflowAfterHook();
+      }
+
+      if (updatedOutboxEntry) {
+        await dispatchWebhooks(updatedOutboxEntry, c, appContext);
       }
 
       await emitEvent(appContext, "update", record);
@@ -2562,10 +2955,25 @@ export function defineResource<
         }
       }
 
+      let deletedOutboxEntry: OutboxRecord | undefined;
       await runTransaction(c, async (tx) => {
         const stmts: any[] = [];
         if (config.hooks?.beforeDelete) {
           await config.hooks.beforeDelete(id, c, tx, appContext, stmts);
+        }
+
+        if (shouldRecordOutboxEvent("delete")) {
+          deletedOutboxEntry = createOutboxEntry(
+            "delete",
+            id,
+            {
+              id,
+              previous: existingRecord,
+              tenantId: tenancy.isTenancyActive ? tenancy.tenantVal : null,
+            },
+            tenancy.isTenancyActive ? tenancy.tenantVal : null
+          );
+          await persistOutboxEntry(deletedOutboxEntry, tx, c, appContext);
         }
 
         if (config.softDelete) {
@@ -2578,6 +2986,10 @@ export function defineResource<
           await config.hooks.afterDelete(id, c, tx, appContext);
         }
       });
+
+      if (deletedOutboxEntry) {
+        await dispatchWebhooks(deletedOutboxEntry, c, appContext);
+      }
 
       await emitEvent(appContext, "delete", undefined, [id]);
       await invalidateCache();
