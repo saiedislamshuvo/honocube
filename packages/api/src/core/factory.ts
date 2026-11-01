@@ -161,6 +161,90 @@ export function defineResource<
 
   const methods = new Set(config.methods ?? ["list", "detail", "create", "update", "delete"]);
 
+  // Register parent lock relations if defined
+  if (config.workflow?.lockRelations && globalConfig) {
+    const locks: any[] = ((globalConfig as any)._workflowLocks = (globalConfig as any)._workflowLocks ?? []);
+    for (const item of config.workflow.lockRelations) {
+      const relName = typeof item === "string" ? item : item.relation;
+      const rel = config.relations?.many?.find(r => r.name === relName);
+      if (rel) {
+        const editableStates = typeof item === "object" && item.editableStates
+          ? item.editableStates
+          : (config.workflow.editableStates ?? [config.workflow.initial ?? "draft"]);
+
+        locks.push({
+          childTable: rel.table,
+          foreignKey: rel.foreignKey,
+          parentTable: config.table,
+          parentReferenceKey: rel.referenceKey ?? "id",
+          parentStatusField: config.workflow.field ?? "status",
+          parentInitialStatus: config.workflow.initial ?? "draft",
+          editableStates,
+        });
+      }
+    }
+  }
+
+  const checkWorkflowParentLock = async (adapter: any, record: any) => {
+    if (config.workflow?.parentLock) {
+      const pLock = config.workflow.parentLock;
+      const parentId = record[pLock.foreignKey];
+      if (parentId !== undefined && parentId !== null) {
+        const refKey = pLock.referenceKey ?? "id";
+        const statusField = pLock.field ?? "status";
+        const initialStatus = pLock.initial ?? "draft";
+        const editableStates = pLock.editableStates ?? [initialStatus];
+
+        const parentRecord: any = await adapter.findFirst(pLock.table, {
+          where: (cols: any, { eq }: any) => eq(cols[refKey], parentId),
+        });
+
+        if (parentRecord) {
+          const parentStatus = parentRecord[statusField] ?? initialStatus;
+          if (!editableStates.includes(parentStatus)) {
+            throw new ApiError(
+              403,
+              "WORKFLOW_LOCKED",
+              `Cannot modify or delete record: parent document is in locked state '${parentStatus}'.`,
+              { parentStatus, editableStates }
+            );
+          }
+        }
+      }
+    }
+
+    if (globalConfig) {
+      const registeredLocks = ((globalConfig as any)._workflowLocks ?? []).filter(
+        (l: any) => l.childTable === config.table
+      );
+      for (const pLock of registeredLocks) {
+        const parentId = record[pLock.foreignKey];
+        if (parentId !== undefined && parentId !== null) {
+          const refKey = pLock.parentReferenceKey ?? "id";
+          const statusField = pLock.parentStatusField ?? "status";
+          const initialStatus = pLock.parentInitialStatus ?? "draft";
+          const editableStates = pLock.editableStates ?? [initialStatus];
+
+          const parentRecord: any = await adapter.findFirst(pLock.parentTable, {
+            where: (cols: any, { eq }: any) => eq(cols[refKey], parentId),
+          });
+
+          if (parentRecord) {
+            const parentStatus = parentRecord[statusField] ?? initialStatus;
+            if (!editableStates.includes(parentStatus)) {
+              throw new ApiError(
+                403,
+                "WORKFLOW_LOCKED",
+                `Cannot modify or delete record: parent document is in locked state '${parentStatus}'.`,
+                { parentStatus, editableStates }
+              );
+            }
+          }
+        }
+      }
+    }
+  };
+
   /**
    * Resolves the execution strategy to use for a request.
    *
@@ -1143,10 +1227,24 @@ export function defineResource<
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
+      const hasParentLockConfigured = !!(
+        config.workflow?.parentLock ||
+        ((globalConfig as any)?._workflowLocks?.some((l: any) => l.childTable === config.table))
+      );
+
       const body = await c.req.json();
       const parsed = parseBatchUpdateBody(body);
       let targetIds = parsed.ids;
       let updateData = parsed.data;
+
+      if (hasParentLockConfigured && targetIds.length > 0) {
+        const existingRecords: any[] = await adapter.findMany(config.table, {
+          where: (cols: any, { inArray }: any) => inArray(cols.id, targetIds),
+        }) as any[];
+        for (const rec of existingRecords) {
+          await checkWorkflowParentLock(adapter, rec);
+        }
+      }
 
       // Sanitize write payload (FLAC)
       updateData = await sanitizeWritePayload(updateData, appContext);
@@ -1249,9 +1347,23 @@ export function defineResource<
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
+      const hasParentLockForDelete = !!(
+        config.workflow?.parentLock ||
+        ((globalConfig as any)?._workflowLocks?.some((l: any) => l.childTable === config.table))
+      );
+
       const body = await c.req.json();
       const parsed = parseBatchDeleteBody(body);
       let targetIds = parsed.ids;
+
+      if (hasParentLockForDelete && targetIds.length > 0) {
+        const existingRecords: any[] = await adapter.findMany(config.table, {
+          where: (cols: any, { inArray }: any) => inArray(cols.id, targetIds),
+        }) as any[];
+        for (const rec of existingRecords) {
+          await checkWorkflowParentLock(adapter, rec);
+        }
+      }
 
       await runTransaction(c, async (tx) => {
         const stmts: any[] = [];
@@ -1689,6 +1801,7 @@ export function defineResource<
       if (!existingRecord) throw ApiError.notFound();
 
       await checkAccess(appContext, "update", existingRecord);
+      await checkWorkflowParentLock(adapter, existingRecord);
 
       let body = await c.req.json();
 
@@ -1696,6 +1809,7 @@ export function defineResource<
       body = await sanitizeWritePayload(body, appContext, existingRecord);
 
       let workflowAfterHook: (() => Promise<void>) | null = null;
+      let workflowMatchingTransition: any = null;
 
       // Document Workflow: Enforce state transitions & per-state field locks
       if (config.workflow) {
@@ -1751,6 +1865,8 @@ export function defineResource<
             throw new ApiError(400, "INVALID_TRANSITION", `Cannot transition document from '${currentState}' to '${targetState}'.`);
           }
 
+          workflowMatchingTransition = matchingTransition;
+
           if (matchingTransition.roles) {
             const userRoles = await getUserRoles(appContext);
             const hasRole = userRoles.some(r => matchingTransition.roles!.includes(r));
@@ -1770,6 +1886,61 @@ export function defineResource<
             const isAllowed = await matchingTransition.guard(appContext, existingRecord);
             if (!isAllowed) {
               throw new ApiError(403, "TRANSITION_GUARD_FAILED", `Transition to '${targetState}' is not permitted by guard condition.`);
+            }
+          }
+
+          // Check declarative child requirements (requireChildren)
+          if (matchingTransition.requireChildren && matchingTransition.requireChildren.length > 0) {
+            for (const req of matchingTransition.requireChildren) {
+              const rel = config.relations?.many?.find(r => r.name === req.relation);
+              if (!rel) {
+                throw new ApiError(500, "CONFIG_ERROR", `Relation '${req.relation}' not found in resource '${config.name}' relations.many.`);
+              }
+
+              const children: any[] = await adapter.findMany(rel.table, {
+                where: (cols: any, { eq }: any) => eq(cols[rel.foreignKey], id),
+              }) as any[];
+
+              if (req.minCount !== undefined && children.length < req.minCount) {
+                throw new ApiError(
+                  400,
+                  "WORKFLOW_REQUIREMENT_FAILED",
+                  `Transition to '${targetState}' requires at least ${req.minCount} '${req.relation}' (found ${children.length}).`,
+                  { relation: req.relation, requiredMin: req.minCount, actual: children.length }
+                );
+              }
+
+              if (req.maxCount !== undefined && children.length > req.maxCount) {
+                throw new ApiError(
+                  400,
+                  "WORKFLOW_REQUIREMENT_FAILED",
+                  `Transition to '${targetState}' allows at most ${req.maxCount} '${req.relation}' (found ${children.length}).`,
+                  { relation: req.relation, requiredMax: req.maxCount, actual: children.length }
+                );
+              }
+
+              if (req.match) {
+                for (const child of children) {
+                  for (const [matchKey, expectedVal] of Object.entries(req.match)) {
+                    if (child[matchKey] !== expectedVal) {
+                      throw new ApiError(
+                        400,
+                        "WORKFLOW_REQUIREMENT_FAILED",
+                        `Child '${req.relation}' item with id '${child.id}' does not match required ${matchKey}='${expectedVal}' (current: '${child[matchKey]}').`,
+                        { relation: req.relation, childId: child.id, field: matchKey, expected: expectedVal, actual: child[matchKey] }
+                      );
+                    }
+                  }
+                }
+              }
+
+              if (req.validate) {
+                const valResult = await req.validate(children, appContext, existingRecord);
+                if (valResult === false || typeof valResult === "string") {
+                  const errorMsg = typeof valResult === "string" ? valResult : `Child validation failed for '${req.relation}'.`;
+                  throw new ApiError(400, "WORKFLOW_REQUIREMENT_FAILED", errorMsg, { relation: req.relation });
+                }
+              }
             }
           }
 
@@ -1930,6 +2101,29 @@ export function defineResource<
             }
           }
 
+          // 3. Workflow Cascade (if defined on transition)
+          if (workflowMatchingTransition?.cascade?.length) {
+            for (const cas of workflowMatchingTransition.cascade) {
+              const rel = config.relations?.many?.find(r => r.name === cas.relation);
+              if (!rel) {
+                throw new ApiError(500, "CONFIG_ERROR", `Relation '${cas.relation}' not found in resource '${config.name}' relations.many.`);
+              }
+
+              const setValues = typeof cas.set === "function"
+                ? await cas.set(appContext, existingRecord)
+                : cas.set;
+
+              if (setValues && Object.keys(setValues).length > 0) {
+                stmts.push(
+                  tx.getDb()
+                    .update(rel.table)
+                    .set(setValues)
+                    .where(ops.eq(adapter.getColumn(rel.table, rel.foreignKey), id))
+                );
+              }
+            }
+          }
+
           let updated: any;
           if (stmts.length > 0) {
             const results = await tx.batch(stmts);
@@ -2009,6 +2203,27 @@ export function defineResource<
             }
           }
 
+          // 3. Workflow Cascade (if defined on transition)
+          if (workflowMatchingTransition?.cascade?.length) {
+            for (const cas of workflowMatchingTransition.cascade) {
+              const rel = config.relations?.many?.find(r => r.name === cas.relation);
+              if (!rel) {
+                throw new ApiError(500, "CONFIG_ERROR", `Relation '${cas.relation}' not found in resource '${config.name}' relations.many.`);
+              }
+
+              const setValues = typeof cas.set === "function"
+                ? await cas.set(appContext, existingRecord)
+                : cas.set;
+
+              if (setValues && Object.keys(setValues).length > 0) {
+                await tx.getDb()
+                  .update(rel.table)
+                  .set(setValues)
+                  .where(ops.eq(adapter.getColumn(rel.table, rel.foreignKey), id));
+              }
+            }
+          }
+
           if (config.hooks?.afterUpdate) {
             await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
           }
@@ -2064,6 +2279,7 @@ export function defineResource<
       if (!existingRecord) throw ApiError.notFound();
 
       await checkAccess(appContext, "delete", existingRecord);
+      await checkWorkflowParentLock(adapter, existingRecord);
 
       // Document Workflow: Lock against delete in non-editable states
       if (config.workflow) {
