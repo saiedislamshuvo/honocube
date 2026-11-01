@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500;
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
 
 /**
  * The Standard Schema interface (version 1).
@@ -283,6 +283,32 @@ export type ComputedFieldDefinition<TRecord = any, AppContext = any, TResult = a
   | ComputedFieldConfig<TRecord, AppContext, TResult>;
 
 
+
+export interface IdempotencyResponse {
+  status: number;
+  headers?: Record<string, string>;
+  body: any;
+}
+
+export interface IdempotencyRecord {
+  status: "in_flight" | "completed";
+  fingerprint: string;
+  response?: IdempotencyResponse;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface IdempotencyStorage {
+  get(key: string): Promise<IdempotencyRecord | null | undefined> | IdempotencyRecord | null | undefined;
+  set(key: string, record: IdempotencyRecord, ttlMs: number): Promise<void> | void;
+  delete?(key: string): Promise<void> | void;
+}
+
+export interface IdempotencyConfig {
+  enabled?: boolean;
+  ttlMs?: number; // default 24h (86400000ms)
+  storage?: IdempotencyStorage;
+}
 
 export interface ResourcePaginationConfig {
   type?: "offset" | "cursor" | "both";
@@ -917,6 +943,7 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   namingSeries?: {
     counter?: NamingSeriesCounter;
   };
+  idempotency?: IdempotencyConfig;
   audit?: AppAuditConfig<Env, AppContext>;
   outbox?: AppOutboxConfig<Env, AppContext>;
   webhooks?: AppWebhookConfig<Env, AppContext>;
@@ -1050,6 +1077,7 @@ export interface ResourceConfig<
 
   defaultSort?: { field: string; direction: "asc" | "desc" } | { field: string; direction: "asc" | "desc" }[];
   pagination?: ResourcePaginationConfig;
+  idempotency?: IdempotencyConfig;
   
   // Relations
   relations?: {

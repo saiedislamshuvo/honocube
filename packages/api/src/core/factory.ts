@@ -1,7 +1,8 @@
 import { Hono, Context } from "hono";
-import { ResourceConfig, AppConfig, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff, OutboxEvent, OutboxRecord, OutboxStatus, WebhookEndpointConfig } from "../types.js";
+import { ResourceConfig, AppConfig, IdempotencyStorage, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff, OutboxEvent, OutboxRecord, OutboxStatus, WebhookEndpointConfig } from "../types.js";
 import { dispatchSingleWebhook, isWebhookEventMatch, calculateRetryBackoff } from "../utils/webhooks.js";
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
+import { MemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
   parseBatchDeleteBody,
@@ -64,6 +65,13 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   // Copy the config so the caller's object is never mutated. The defaults are
   // applied to the copy, not written back into the object the caller holds.
   const appConfig: AppConfig<Env, AppContext> = { ...globalConfig };
+
+  if (appConfig.idempotency && !appConfig.idempotency.storage) {
+    appConfig.idempotency = {
+      ...appConfig.idempotency,
+      storage: new MemoryIdempotencyStorage(),
+    };
+  }
 
   // Set default strategy to batch if not provided
   if (!appConfig.strategy) {
@@ -766,6 +774,170 @@ export function defineResource<
   if (config.middleware) {
     app.use(...config.middleware);
   }
+
+  // Idempotency Engine
+  const isIdempotencyEnabled =
+    config.idempotency?.enabled !== undefined
+      ? config.idempotency.enabled
+      : globalConfig?.idempotency?.enabled !== undefined
+      ? globalConfig.idempotency.enabled
+      : Boolean(config.idempotency || globalConfig?.idempotency);
+
+  const idempotencyStorage: IdempotencyStorage =
+    config.idempotency?.storage ??
+    globalConfig?.idempotency?.storage ??
+    new MemoryIdempotencyStorage();
+
+  const idempotencyTtlMs: number =
+    config.idempotency?.ttlMs ??
+    globalConfig?.idempotency?.ttlMs ??
+    86400000; // 24 hours
+
+  if (isIdempotencyEnabled) {
+    app.use("*", async (c, next) => {
+      const method = c.req.method.toUpperCase();
+      if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        return await next();
+      }
+
+      const idempotencyKey =
+        c.req.header("idempotency-key") || c.req.header("x-idempotency-key");
+      if (!idempotencyKey || !idempotencyKey.trim()) {
+        return await next();
+      }
+
+      const trimmedKey = idempotencyKey.trim();
+
+      // Read raw body without consuming the request stream
+      const rawBody = c.req.raw ? await c.req.raw.clone().text() : "";
+
+      let reqPath = c.req.path;
+      try {
+        const url = new URL(c.req.url);
+        if (url.search) reqPath += url.search;
+      } catch {
+        // fallback to c.req.path
+      }
+
+      const fingerprint = await computeFingerprint(method, reqPath, rawBody);
+
+      // Check existing idempotency record
+      const existing = await idempotencyStorage.get(trimmedKey);
+      if (existing) {
+        if (existing.fingerprint !== fingerprint) {
+          throw new ApiError(
+            422,
+            "IDEMPOTENCY_KEY_MISMATCH",
+            `Idempotency key '${trimmedKey}' was previously used with a different request payload.`
+          );
+        }
+
+        if (existing.status === "in_flight") {
+          c.header("Retry-After", "1");
+          throw new ApiError(
+            409,
+            "IDEMPOTENCY_KEY_LOCKED",
+            `A request with idempotency key '${trimmedKey}' is currently being processed.`,
+            undefined,
+            { "Retry-After": "1" }
+          );
+        }
+
+        if (existing.status === "completed" && existing.response) {
+          c.header("Idempotent-Replayed", "true");
+          if (existing.response.headers) {
+            for (const [k, v] of Object.entries(existing.response.headers)) {
+              if (k.toLowerCase() !== "content-length") {
+                c.header(k, v);
+              }
+            }
+          }
+          if (
+            existing.response.body === null ||
+            existing.response.body === undefined ||
+            existing.response.body === ""
+          ) {
+            return c.body(null, existing.response.status as any);
+          }
+          return c.json(existing.response.body, existing.response.status as any);
+        }
+      }
+
+      // Mark in_flight
+      await idempotencyStorage.set(
+        trimmedKey,
+        {
+          status: "in_flight",
+          fingerprint,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + idempotencyTtlMs,
+        },
+        idempotencyTtlMs
+      );
+
+      let nextThrew = false;
+      try {
+        await next();
+      } catch (err) {
+        nextThrew = true;
+        await idempotencyStorage.delete?.(trimmedKey);
+        throw err;
+      }
+
+      // If handler resulted in a 5xx error, release the lock so caller can retry
+      if (c.res && c.res.status >= 500) {
+        await idempotencyStorage.delete?.(trimmedKey);
+        return;
+      }
+
+      // Cache successful or 4xx responses
+      if (c.res && !nextThrew) {
+        try {
+          const resClone = c.res.clone();
+          const resText = await resClone.text();
+          let body: any;
+          try {
+            body = JSON.parse(resText);
+          } catch {
+            body = resText;
+          }
+
+          const headers: Record<string, string> = {};
+          resClone.headers.forEach((val, key) => {
+            if (
+              !["content-length", "idempotent-replayed"].includes(
+                key.toLowerCase()
+              )
+            ) {
+              headers[key] = val;
+            }
+          });
+
+          await idempotencyStorage.set(
+            trimmedKey,
+            {
+              status: "completed",
+              fingerprint,
+              response: {
+                status: c.res.status,
+                headers,
+                body,
+              },
+              createdAt: Date.now(),
+              expiresAt: Date.now() + idempotencyTtlMs,
+            },
+            idempotencyTtlMs
+          );
+        } catch (saveErr) {
+          globalConfig?.logger?.error?.(
+            "Failed to cache idempotent response:",
+            saveErr
+          );
+        }
+      }
+    });
+  }
+
 
   const getUserRoles = async (appContext: any): Promise<string[]> => {
     if (globalConfig?.auth?.getRole) {
@@ -4298,6 +4470,11 @@ function buildDateBucketSql(
 
   app.onError((err, c) => {
     if (err instanceof ApiError) {
+      if (err.headers) {
+        for (const [k, v] of Object.entries(err.headers)) {
+          c.header(k, v);
+        }
+      }
       return c.json(errorBody(err), err.status);
     }
     if (err instanceof ValidationError) {
