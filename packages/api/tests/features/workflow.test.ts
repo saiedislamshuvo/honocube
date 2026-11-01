@@ -447,4 +447,267 @@ describe("Document Workflow and State Machine Engine", () => {
     expect(inDb.status).toBe("approved");
     expect(inDb.slug).toBe("APPROVED-STAMPED-CODE");
   });
+  it("supports wildcard 'from: *' and multiple source states array", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      workflow: {
+        field: "status",
+        initial: "draft",
+        states: {
+          draft: { editable: true },
+          step1: { editable: true },
+          step2: { editable: true },
+        },
+        transitions: [
+          { from: "draft", to: "step1" },
+          { from: "step1", to: "step2" },
+          // Multi-state array: can reject from either step1 or step2
+          { from: ["step1", "step2"], to: "rejected" },
+          // Wildcard: can cancel from ANY state
+          { from: "*", to: "cancelled" },
+        ],
+      },
+    });
+
+    const seed: any = await adapter.insert(posts, { title: "Wildcard Test", status: "step2" });
+
+    // 1. Can reject from step2 (matched via array)
+    const rejectRes = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "rejected" }),
+    });
+    expect(rejectRes.status).toBe(200);
+    const rejectData = await rejectRes.json();
+    expect(rejectData.data.status).toBe("rejected");
+
+    // 2. Can cancel from rejected (matched via wildcard '*')
+    const cancelRes = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    expect(cancelRes.status).toBe(200);
+    const cancelData = await cancelRes.json();
+    expect(cancelData.data.status).toBe("cancelled");
+  });
+
+  it("checks transition permission via global auth.can and state-level roles", async () => {
+    const { adapter } = await createTestDb();
+
+    let userRole = "qa_inspector";
+    let permissions = ["posts.approve_qa"];
+
+    const app = createApp<{ Bindings: Record<string, unknown> }, { role: string }>({
+      adapter,
+      getContext: () => ({ role: userRole }),
+      auth: {
+        can: async (ctx, perm) => permissions.includes(perm),
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string().optional(),
+        content: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      workflow: {
+        field: "status",
+        initial: "submit_qa",
+        states: {
+          submit_qa: {
+            editable: true,
+            // Only QA inspector role can modify documents while in submit_qa
+            roles: ["qa_inspector"],
+          },
+        },
+        transitions: [
+          {
+            from: "submit_qa",
+            to: "approved",
+            permission: "posts.approve_qa",
+          },
+        ],
+      },
+    });
+
+    const seed: any = await adapter.insert(posts, { title: "QA Item", status: "submit_qa" });
+
+    // 1. Another role (sales) cannot edit document in submit_qa
+    userRole = "sales";
+    const failEdit = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "Sales update" }),
+    });
+    expect(failEdit.status).toBe(403);
+    const failErr = await failEdit.json();
+    expect(failErr.error.code).toBe("WORKFLOW_FORBIDDEN");
+
+    // 2. QA inspector can edit document
+    userRole = "qa_inspector";
+    const okEdit = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "QA Inspection Notes" }),
+    });
+    expect(okEdit.status).toBe(200);
+
+    // 3. Transition blocked without 'posts.approve_qa' permission
+    permissions = [];
+    const failPerm = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved" }),
+    });
+    expect(failPerm.status).toBe(403);
+
+    // 4. Transition succeeds when permission is present
+    permissions = ["posts.approve_qa"];
+    const okPerm = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved" }),
+    });
+    expect(okPerm.status).toBe(200);
+    const okData = await okPerm.json();
+    expect(okData.data.status).toBe("approved");
+  });
+
+  it("silently strips disallowed fields under default 'strip' strategy during state edits", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      // default strategy is 'strip'
+      validator: z.object({
+        title: z.string().optional(),
+        content: z.string().optional(),
+        price: z.number().optional(),
+        status: z.string().optional(),
+      }),
+      workflow: {
+        field: "status",
+        initial: "in_review",
+        states: {
+          in_review: {
+            // Only content can be updated
+            allowFields: ["content"],
+          },
+        },
+        transitions: [
+          { from: "in_review", to: "done" },
+        ],
+      },
+    });
+
+    const seed: any = await adapter.insert(posts, {
+      title: "Untouchable Title",
+      content: "Old Content",
+      price: 100,
+      status: "in_review",
+    });
+
+    // Client attempts to update title, price, and content
+    const res = await postsResource.request(`/${seed.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: "Hacked Title",
+        price: 9999,
+        content: "Permitted Review Content",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // content updated
+    expect(body.data.content).toBe("Permitted Review Content");
+    // title and price stripped (unchanged)
+    expect(body.data.title).toBe("Untouchable Title");
+    expect(body.data.price).toBe(100);
+
+    // Verify in DB directly
+    const inDb: any = await adapter.findFirst(posts, {
+      where: (cols: any, { eq }: any) => eq(cols.id, seed.id),
+    });
+    expect(inDb.title).toBe("Untouchable Title");
+    expect(inDb.price).toBe(100);
+    expect(inDb.content).toBe("Permitted Review Content");
+  });
+
+  it("coexists seamlessly with namingSeries on the same resource", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string(),
+        slug: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      namingSeries: {
+        field: "slug",
+        pattern: "PO-{#####}",
+      },
+      workflow: {
+        field: "status",
+        initial: "draft",
+        states: {
+          draft: { editable: true },
+          confirmed: { editable: false },
+        },
+        transitions: [
+          { from: "draft", to: "confirmed" },
+        ],
+      },
+    });
+
+    // 1. Create document: gets series number AND initial status simultaneously
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Series Workflow Test" }),
+    });
+
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.data.slug).toBe("PO-00001");
+    expect(created.data.status).toBe("draft");
+
+    // 2. Transition to confirmed
+    const patchRes = await postsResource.request(`/${created.data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "confirmed" }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patched = await patchRes.json();
+    expect(patched.data.slug).toBe("PO-00001");
+    expect(patched.data.status).toBe("confirmed");
+
+    // 3. Now locked against updates
+    const lockedRes = await postsResource.request(`/${created.data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Change after confirmed" }),
+    });
+    expect(lockedRes.status).toBe(403);
+  });
+
 });
