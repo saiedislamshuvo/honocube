@@ -494,4 +494,203 @@ describe("Automated Audit Trail and Field-Level Diff Logging Engine", () => {
     const diff = JSON.parse(updateLog.diff);
     expect(diff).toEqual([{ field: "price", from: 300, to: 400 }]);
   });
+  it("respects explicit audit: false to opt out of globally configured auditing", async () => {
+    const { adapter } = await createTestDb();
+    const capturedEntries: AuditEntry[] = [];
+
+    const app = createApp({
+      adapter,
+      audit: {
+        mode: "sync",
+        store: (entry) => {
+          capturedEntries.push(entry);
+        },
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string() }),
+      // Explicitly disabled on this resource
+      audit: false,
+    });
+
+    // 1. Create should not be audited
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Unaudited Post" }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(capturedEntries.length).toBe(0);
+
+    // 2. Update should not be audited
+    const patchRes = await postsResource.request(`/${created.data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Unaudited Post Modified" }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect(capturedEntries.length).toBe(0);
+
+    // 3. Delete should not be audited
+    const delRes = await postsResource.request(`/${created.data.id}`, {
+      method: "DELETE",
+    });
+    expect(delRes.status).toBe(200);
+    expect(capturedEntries.length).toBe(0);
+  });
+
+  it("filters audited events via selective actions configuration", async () => {
+    const { adapter } = await createTestDb();
+    const capturedEntries: AuditEntry[] = [];
+
+    const app = createApp({
+      adapter,
+      audit: {
+        mode: "sync",
+        store: (entry) => {
+          capturedEntries.push(entry);
+        },
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string().optional() }),
+      audit: {
+        // Only audit deletions!
+        actions: ["delete"],
+      },
+    });
+
+    // 1. Create -> not audited
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Delete-only audit" }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(capturedEntries.length).toBe(0);
+
+    // 2. Update -> not audited
+    const patchRes = await postsResource.request(`/${created.data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Updated title" }),
+    });
+    expect(patchRes.status).toBe(200);
+    expect(capturedEntries.length).toBe(0);
+
+    // 3. Delete -> audited!
+    const delRes = await postsResource.request(`/${created.data.id}`, {
+      method: "DELETE",
+    });
+    expect(delRes.status).toBe(200);
+    expect(capturedEntries.length).toBe(1);
+    expect(capturedEntries[0].action).toBe("delete");
+  });
+
+  it("invokes custom getActorId and custom metadata enrichment callback", async () => {
+    const { adapter } = await createTestDb();
+    const capturedEntries: AuditEntry[] = [];
+
+    const app = createApp<{ Bindings: Record<string, unknown> }, { sessionUser: { email: string; sub: string } }>({
+      adapter,
+      getContext: () => ({ sessionUser: { email: "lead@example.com", sub: "auth0|98765" } }),
+      audit: {
+        mode: "sync",
+        // Custom actor extraction function
+        getActorId: (ctx) => ctx.sessionUser.sub,
+        store: (entry) => {
+          capturedEntries.push(entry);
+        },
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string() }),
+      audit: {
+        // Custom metadata callback extracting headers and context
+        metadata: (c, ctx, record) => ({
+          changeReason: c.req.header("X-Change-Reason"),
+          userEmail: ctx.sessionUser.email,
+          titleEcho: record?.title,
+        }),
+      },
+    });
+
+    const res = await postsResource.request("/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Change-Reason": "Emergency Patch Order",
+      },
+      body: JSON.stringify({ title: "Custom Actor PO" }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(capturedEntries.length).toBe(1);
+
+    const entry = capturedEntries[0];
+    expect(entry.actorId).toBe("auth0|98765");
+    expect(entry.metadata).toEqual({
+      changeReason: "Emergency Patch Order",
+      userEmail: "lead@example.com",
+      titleEcho: "Custom Actor PO",
+    });
+  });
+
+  it("is resilient to audit store failures and does not crash the client request", async () => {
+    const { adapter } = await createTestDb();
+
+    const app = createApp({
+      adapter,
+      audit: {
+        mode: "sync",
+        store: () => {
+          // Simulate audit backend / Datadog / DB connection crash
+          throw new Error("Audit Sink Connection Refused");
+        },
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string().optional() }),
+      audit: true,
+    });
+
+    // Create should succeed with 201 despite audit store throwing
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Resilient Post" }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(created.data.title).toBe("Resilient Post");
+
+    // Update should succeed with 200 despite audit store throwing
+    const updateRes = await postsResource.request(`/${created.data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Resilient Post Modified" }),
+    });
+    expect(updateRes.status).toBe(200);
+
+    // Delete should succeed with 200 despite audit store throwing
+    const deleteRes = await postsResource.request(`/${created.data.id}`, {
+      method: "DELETE",
+    });
+    expect(deleteRes.status).toBe(200);
+  });
+
 });
