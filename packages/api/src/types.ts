@@ -312,6 +312,97 @@ export interface WorkflowStateConfig {
   roles?: string[];
 }
 
+export interface WorkflowParentLockConfig<TTable = unknown> {
+  /**
+   * Parent database table.
+   */
+  table: TTable;
+
+  /**
+   * Foreign key column on the child table pointing to the parent document.
+   */
+  foreignKey: string;
+
+  /**
+   * Primary or unique reference key column on the parent table.
+   * Defaults to "id".
+   */
+  referenceKey?: string;
+
+  /**
+   * Column storing the workflow status on the parent table.
+   * Defaults to "status".
+   */
+  field?: string;
+
+  /**
+   * Initial status on the parent table if undefined.
+   * Defaults to "draft".
+   */
+  initial?: string;
+
+  /**
+   * States of the parent document where child modifications and deletions are permitted.
+   * Defaults to ["draft"].
+   */
+  editableStates?: string[];
+}
+
+export interface WorkflowRelationLockConfig {
+  /**
+   * Name of the relation (from relations.many) to lock.
+   */
+  relation: string;
+
+  /**
+   * Parent states in which the child records are allowed to be modified or deleted.
+   * Defaults to the parent workflow's editableStates.
+   */
+  editableStates?: string[];
+}
+
+export interface WorkflowCascadeConfig<AppContext = any, TRecord = any> {
+  /**
+   * Name of the relation (from relations.many) to cascade updates to.
+   */
+  relation: string;
+
+  /**
+   * Fields to update on the related child records.
+   * Can be an object or a function returning fields.
+   */
+  set:
+    | Record<string, unknown>
+    | ((appContext: AppContext, record: TRecord) => Record<string, unknown> | Promise<Record<string, unknown>>);
+}
+
+export interface WorkflowChildRequirement<AppContext = any, TRecord = any> {
+  /**
+   * Name of the relation (from relations.many) to validate.
+   */
+  relation: string;
+
+  /**
+   * Minimum count of child records required for the transition.
+   */
+  minCount?: number;
+
+  /**
+   * Maximum count of child records allowed for the transition.
+   */
+  maxCount?: number;
+
+  /**
+   * Field criteria that every child record must match (e.g. { status: "ready" }).
+   */
+  match?: Record<string, unknown>;
+
+  /**
+   * Custom validator callback for child records.
+   */
+  validate?: (children: any[], appContext: AppContext, parentRecord: TRecord) => boolean | string | Promise<boolean | string>;
+}
+
 export interface WorkflowTransition<AppContext = any, TRecord = any> {
   /**
    * Source state(s) allowed for this transition.
@@ -350,6 +441,16 @@ export interface WorkflowTransition<AppContext = any, TRecord = any> {
    * e.g. (ctx) => ({ approvedBy: ctx.userId, approvedAt: new Date().toISOString() })
    */
   fields?: Record<string, any> | ((appContext: AppContext, record: TRecord) => Record<string, any> | Promise<Record<string, any>>);
+
+  /**
+   * Declarative child record validations before executing this transition.
+   */
+  requireChildren?: WorkflowChildRequirement<AppContext, TRecord>[];
+
+  /**
+   * Declarative cascades to update related child records upon transition.
+   */
+  cascade?: WorkflowCascadeConfig<AppContext, TRecord>[];
 }
 
 export interface WorkflowConfig<AppContext = any, TRecord = any> {
@@ -380,6 +481,19 @@ export interface WorkflowConfig<AppContext = any, TRecord = any> {
    * Allowed state transitions.
    */
   transitions: WorkflowTransition<AppContext, TRecord>[];
+
+  /**
+   * Relations that inherit the parent document's lock status.
+   * When the parent document is in a non-editable state, child records belonging
+   * to this parent cannot be modified or deleted.
+   */
+  lockRelations?: Array<string | WorkflowRelationLockConfig>;
+
+  /**
+   * Direct parent lock configuration for child resources.
+   * Locks this resource against updates and deletions when the referenced parent document is in a non-editable state.
+   */
+  parentLock?: WorkflowParentLockConfig;
 
   /**
    * Optional lifecycle hooks.
