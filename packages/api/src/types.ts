@@ -189,6 +189,29 @@ export interface ResourceTenancyConfig {
   skip?: boolean;
 }
 
+
+export interface ScopedWithConfig {
+  /**
+   * Relations to load on list queries (`GET /`).
+   * Set to `false` to disable relation joins on list queries.
+   */
+  list?: Record<string, any> | false;
+
+  /**
+   * Relations to load on detail queries (`GET /:id`).
+   * Also serves as the default fallback for `slug` queries and mutation reloads unless overridden.
+   */
+  detail?: Record<string, any> | false;
+
+  /**
+   * Relations to load on slug queries (`GET /:slugField/:value`).
+   * Defaults to `detail` if omitted. Set to `false` to disable relation joins on slug queries.
+   */
+  slug?: Record<string, any> | false;
+}
+
+export type ResourceWithConfig = Record<string, any> | ScopedWithConfig;
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -332,7 +355,7 @@ export interface ResourceConfig<
     many?: ManyConfig<any>[];
   };
 
-  with?: Record<string, any>; // Explicit control over which relations are returned
+  with?: ResourceWithConfig; // Explicit control over which relations are returned
 
   hooks?: ResourceHooks<TSelect, TInsert, Env>;
 
