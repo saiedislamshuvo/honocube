@@ -639,6 +639,207 @@ export interface AppAuditConfig<
   mode?: "async" | "sync";
 }
 
+export type OutboxEvent =
+  | "create"
+  | "update"
+  | "delete"
+  | "batch-update"
+  | "batch-delete"
+  | "transition"
+  | string;
+
+export type OutboxStatus = "pending" | "processing" | "delivered" | "failed";
+
+export interface OutboxRecord<TPayload = any> {
+  id: string;
+  resource: string;
+  recordId: string | number;
+  event: OutboxEvent;
+  payload: TPayload;
+  headers?: Record<string, string>;
+  tenantId?: string | number | null;
+  status: OutboxStatus;
+  attempts: number;
+  lastError?: string | null;
+  nextRetryAt?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface ResourceOutboxConfig {
+  /**
+   * Whether outbox recording is enabled for this resource. Defaults to true if outbox config is defined.
+   */
+  enabled?: boolean;
+
+  /**
+   * Actions / events to record in the outbox. Defaults to all mutation events ("create", "update", "delete", "batch-update", "batch-delete", "transition").
+   */
+  events?: OutboxEvent[];
+}
+
+export interface AppOutboxConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  /**
+   * Database table used to store outbox event entries.
+   */
+  table?: any;
+
+  /**
+   * Custom transactional sink / handler to persist or handle outbox records.
+   * Invoked within the active transaction adapter.
+   */
+  sink?: (
+    record: OutboxRecord,
+    tx: DatabaseAdapter<any, any, any>,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<void> | void;
+
+  /**
+   * Whether to automatically dispatch webhooks immediately after transaction commit.
+   * Defaults to true if webhook endpoints are configured.
+   */
+  autoDispatch?: boolean;
+
+  /**
+   * Whether outbox recording is enabled by default for all resources when outbox table/sink is configured.
+   * Defaults to true.
+   */
+  enabledByDefault?: boolean;
+}
+
+export interface WebhookEndpointConfig {
+  /**
+   * Webhook subscriber destination URL.
+   */
+  url: string;
+
+  /**
+   * Cryptographic secret key used to compute the HMAC-SHA256 signature.
+   */
+  secret: string;
+
+  /**
+   * Events to subscribe to. Supports exact matches ("orders.create", "orders.transition"),
+   * wildcards ("orders.*", "*"), or bare action names ("create", "update").
+   * Defaults to ["*"] (all events).
+   */
+  events?: string[];
+
+  /**
+   * Optional custom HTTP headers to include with the webhook POST request.
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Optional synchronous or asynchronous predicate filter. If returns false, delivery is skipped.
+   */
+  filter?: (record: OutboxRecord) => boolean | Promise<boolean>;
+
+  /**
+   * Whether this endpoint is temporarily disabled.
+   */
+  disabled?: boolean;
+}
+
+export interface WebhookDeliveryRecord {
+  id: string;
+  outboxId?: string;
+  endpointUrl: string;
+  event: string;
+  attempt: number;
+  statusCode?: number | null;
+  durationMs: number;
+  error?: string | null;
+  requestHeaders?: Record<string, string>;
+  requestPayload?: any;
+  responseBody?: string | null;
+  timestamp: string;
+}
+
+export interface AppWebhookConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  /**
+   * Registered webhook subscriber endpoints, or a function resolving them from context.
+   */
+  endpoints?:
+    | WebhookEndpointConfig[]
+    | ((c: Context<{ Bindings: Env }>, appContext: AppContext) => WebhookEndpointConfig[] | Promise<WebhookEndpointConfig[]>);
+
+  /**
+   * Maximum timestamp drift tolerance in seconds for signature verification.
+   * Defaults to 300 (5 minutes).
+   */
+  toleranceSeconds?: number;
+
+  /**
+   * Maximum delivery retry attempts for failed requests. Defaults to 3.
+   */
+  maxAttempts?: number;
+
+  /**
+   * Base retry backoff in milliseconds. Defaults to 1000ms.
+   */
+  retryBackoffMs?: number;
+
+  /**
+   * Custom fetch function (useful for testing or custom proxies/transports).
+   */
+  fetch?: typeof fetch;
+
+  /**
+   * Optional database table used to log webhook delivery attempts and responses.
+   */
+  deliveryTable?: any;
+
+  /**
+   * Optional custom sink / callback to store or report webhook delivery attempts.
+   */
+  deliverySink?: (
+    delivery: WebhookDeliveryRecord,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<void> | void;
+
+  /**
+   * Dispatch mode: "async" (non-blocking via c.executionCtx.waitUntil or background promise)
+   * or "sync" (awaited before sending HTTP response).
+   * Defaults to "async".
+   */
+  mode?: "async" | "sync";
+}
+
+export interface VerifyWebhookSignatureOptions {
+  /**
+   * Maximum allowed timestamp drift in seconds. Defaults to 300.
+   * Set to 0 or Infinity to disable timestamp check.
+   */
+  toleranceSeconds?: number;
+
+  /**
+   * Current timestamp in seconds (defaults to Math.floor(Date.now() / 1000)).
+   */
+  now?: number;
+}
+
+export interface VerifyWebhookSignatureResult {
+  valid: boolean;
+  reason?:
+    | "MISSING_HEADER"
+    | "MALFORMED_HEADER"
+    | "MISSING_SIGNATURE"
+    | "MISSING_TIMESTAMP"
+    | "TIMESTAMP_EXPIRED"
+    | "INVALID_SIGNATURE";
+  timestamp?: number;
+  signature?: string;
+}
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -660,6 +861,8 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
     counter?: NamingSeriesCounter;
   };
   audit?: AppAuditConfig<Env, AppContext>;
+  outbox?: AppOutboxConfig<Env, AppContext>;
+  webhooks?: AppWebhookConfig<Env, AppContext>;
 }
 
 export interface ResourceConfig<
@@ -690,7 +893,8 @@ export interface ResourceConfig<
   fieldViolationStrategy?: FieldViolationStrategy;
   namingSeries?: NamingSeriesConfig<AppContext, TSelect>;
   workflow?: WorkflowConfig<AppContext, TSelect>;
-  audit?: boolean | AuditConfig<AppContext, TSelect>; 
+  audit?: boolean | AuditConfig<AppContext, TSelect>;
+  outbox?: boolean | ResourceOutboxConfig; 
   
   import?: {
     lookupBy: string | string[] | string[][];
