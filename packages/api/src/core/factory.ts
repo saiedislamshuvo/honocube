@@ -123,6 +123,40 @@ const parseLimit = (raw: string | undefined, maxLimit: number): number | undefin
  * The page decides the offset, so a page below 1 would ask the database for
  * a negative offset — which some drivers read as "from the beginning".
  */
+
+const toBase64Url = (str: string): string => {
+  const nodeBuf = (globalThis as any).Buffer;
+  if (nodeBuf) {
+    return nodeBuf.from(str, "utf8").toString("base64url");
+  }
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) {
+    bin += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(bin)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+};
+
+const fromBase64Url = (base64UrlStr: string): string => {
+  const nodeBuf = (globalThis as any).Buffer;
+  if (nodeBuf) {
+    return nodeBuf.from(base64UrlStr, "base64url").toString("utf8");
+  }
+  let base64 = base64UrlStr.replace(/-/g, "+").replace(/_/g, "/");
+  while (base64.length % 4) {
+    base64 += "=";
+  }
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+};
+
 const parsePage = (raw: string | undefined): number | undefined => {
   if (raw === undefined) return undefined;
 
@@ -1525,16 +1559,98 @@ export function defineResource<
       const requestedLimit = parseLimit(queryParams.limit, maxLimit);
       const limit = Math.min(requestedLimit ?? config.pagination?.defaultLimit ?? 20, maxLimit);
 
-      const page = parsePage(queryParams.page) ?? 1;
-      const offset = (page - 1) * limit;
-      if (!Number.isSafeInteger(offset)) {
+      const rawCursor = queryParams.cursor || queryParams.after || queryParams.before;
+      const paginationType = config.pagination?.type ?? "both";
+
+      if (paginationType === "cursor" && queryParams.page !== undefined && !rawCursor) {
         throw new ApiError(
           400,
-          "INVALID_PAGINATION",
-          `Invalid 'page': the resulting offset is not a valid number.`,
-          { page: queryParams.page, limit }
+          "PAGINATION_TYPE_MISMATCH",
+          `Resource '${config.name}' is configured for cursor-based pagination only. Use 'cursor', 'after', or 'before' instead of 'page'.`
         );
       }
+
+      if (paginationType === "offset" && rawCursor) {
+        throw new ApiError(
+          400,
+          "PAGINATION_TYPE_MISMATCH",
+          `Resource '${config.name}' is configured for offset-based pagination only. Use 'page' instead of 'cursor'.`
+        );
+      }
+
+      const isCursorRequest = Boolean(rawCursor) || Boolean(queryParams.direction) || (paginationType === "cursor" && queryParams.page === undefined);
+
+      let direction: "next" | "prev" = "next";
+      if (queryParams.before) {
+        direction = "prev";
+      } else if (queryParams.after) {
+        direction = "next";
+      } else if (queryParams.direction?.toLowerCase() === "prev") {
+        direction = "prev";
+      }
+
+      let cursorObj: Record<string, any> | undefined = undefined;
+      if (rawCursor) {
+        try {
+          const jsonStr = fromBase64Url(rawCursor);
+          const parsed = JSON.parse(jsonStr);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("Invalid format");
+          }
+          cursorObj = parsed;
+        } catch {
+          throw new ApiError(
+            400,
+            "INVALID_CURSOR",
+            "The provided pagination cursor is invalid or malformed."
+          );
+        }
+      }
+
+      let page: number | undefined = undefined;
+      let offset: number | undefined = undefined;
+
+      if (!rawCursor && paginationType !== "cursor") {
+        page = parsePage(queryParams.page) ?? 1;
+        offset = (page - 1) * limit;
+        if (!Number.isSafeInteger(offset)) {
+          throw new ApiError(
+            400,
+            "INVALID_PAGINATION",
+            `Invalid 'page': the resulting offset is not a valid number.`,
+            { page: queryParams.page, limit }
+          );
+        }
+      }
+
+      const defaultSortConfig = config.defaultSort
+        ? (Array.isArray(config.defaultSort) ? config.defaultSort[0] : config.defaultSort)
+        : undefined;
+
+      const cursorCol = config.pagination?.cursorColumn;
+      const sortField: string = queryParams.sort || defaultSortConfig?.field || cursorCol || "id";
+      const sortDirection: "asc" | "desc" = queryParams.order?.toLowerCase() === "asc"
+        ? "asc"
+        : (defaultSortConfig?.direction ?? "desc");
+
+      const isComposite = sortField !== "id";
+
+      let sqlOrderBy: any;
+      if (isCursorRequest) {
+        if (direction === "next") {
+          sqlOrderBy = isComposite
+            ? [{ field: sortField, direction: sortDirection }, { field: "id", direction: sortDirection }]
+            : [{ field: "id", direction: sortDirection }];
+        } else {
+          const invDirection: "asc" | "desc" = sortDirection === "desc" ? "asc" : "desc";
+          sqlOrderBy = isComposite
+            ? [{ field: sortField, direction: invDirection }, { field: "id", direction: invDirection }]
+            : [{ field: "id", direction: invDirection }];
+        }
+      } else {
+        sqlOrderBy = config.defaultSort ?? { field: 'id', direction: 'desc' };
+      }
+
       const q = queryParams.q;
 
       // 1. Resolve 'with' object (Explicit only)
@@ -1597,7 +1713,7 @@ export function defineResource<
         }
       }
 
-      const where = (cols: any, ops: any) => {
+      const baseWhere = (cols: any, ops: any) => {
         const { and, eq, like, gt, gte, lt, lte, isNull, or } = ops;
         const conditions: any[] = [];
 
@@ -1619,18 +1735,16 @@ export function defineResource<
 
         // Apply Search (via Subqueries to avoid parameter limits)
         if (searchSubqueries.length > 0) {
-          // Use raw sql to force Drizzle to treat it as a subquery, not an array of values
           const sqlTag = adapter.getSql();
           conditions.push(or(...searchSubqueries.map(sq => sqlTag`${cols.id} IN (${sq})`)));
         } else if (q && config.search) {
-          // If search term provided but no fields/relations matched, force empty result
           conditions.push(eq(cols.id, -1));
         }
 
         // Direct Filters
         const allowedFilters = config.filter?.allow || [];
         for (const [key, value] of Object.entries(queryParams)) {
-          if (['limit', 'page', 'q', 'sort', 'order'].includes(key)) continue;
+          if (['limit', 'page', 'q', 'sort', 'order', 'cursor', 'after', 'before', 'direction'].includes(key)) continue;
           if (value === "" || value == null) continue;
 
           const rangeMatch = key.match(/^(.+)__(gte|lte|gt|lt|like)$/);
@@ -1647,7 +1761,6 @@ export function defineResource<
             else if (suffix === 'like') op = like;
           }
 
-          // Strict filtering: only allow fields in 'filter.allow'
           if (allowedFilters.length > 0 && !allowedFilters.includes(field as string)) {
              continue;
           }
@@ -1661,34 +1774,134 @@ export function defineResource<
         return conditions.length > 0 ? and(...conditions) : undefined;
       };
 
-      const queryKey = config.queryKey ?? config.name;
+      const dataWhere = (cols: any, ops: any) => {
+        const base = baseWhere(cols, ops);
+        if (!cursorObj) return base;
 
-      const [rows, total] = await Promise.all([
+        const isForward = direction === "next";
+        const isDesc = sortDirection === "desc";
+        let keysetCond: any;
+
+        if (!isComposite) {
+          const cursorId = cursorObj.id;
+          if (cursorId == null) {
+            throw new ApiError(400, "INVALID_CURSOR", "Cursor is missing required 'id' field.");
+          }
+          if (isForward) {
+            keysetCond = isDesc ? ops.lt(cols.id, cursorId) : ops.gt(cols.id, cursorId);
+          } else {
+            keysetCond = isDesc ? ops.gt(cols.id, cursorId) : ops.lt(cols.id, cursorId);
+          }
+        } else {
+          const cursorVal = cursorObj[sortField];
+          const cursorId = cursorObj.id;
+          if (cursorVal === undefined || cursorId == null) {
+            throw new ApiError(400, "INVALID_CURSOR", `Cursor is missing required '${sortField}' or 'id' field.`);
+          }
+
+          if (isForward) {
+            keysetCond = isDesc
+              ? ops.or(
+                  ops.lt(cols[sortField], cursorVal),
+                  ops.and(ops.eq(cols[sortField], cursorVal), ops.lt(cols.id, cursorId))
+                )
+              : ops.or(
+                  ops.gt(cols[sortField], cursorVal),
+                  ops.and(ops.eq(cols[sortField], cursorVal), ops.gt(cols.id, cursorId))
+                );
+          } else {
+            keysetCond = isDesc
+              ? ops.or(
+                  ops.gt(cols[sortField], cursorVal),
+                  ops.and(ops.eq(cols[sortField], cursorVal), ops.gt(cols.id, cursorId))
+                )
+              : ops.or(
+                  ops.lt(cols[sortField], cursorVal),
+                  ops.and(ops.eq(cols[sortField], cursorVal), ops.lt(cols.id, cursorId))
+                );
+          }
+        }
+
+        return base ? ops.and(base, keysetCond) : keysetCond;
+      };
+
+      const queryKey = config.queryKey ?? config.name;
+      const fetchLimit = isCursorRequest ? limit + 1 : limit;
+
+      const [rawRows, total] = await Promise.all([
         adapter.findMany(config.table, {
-          limit,
+          limit: fetchLimit,
           offset,
-          orderBy: config.defaultSort ?? { field: 'id', direction: 'desc' },
-          where,
+          orderBy: sqlOrderBy,
+          where: cursorObj ? dataWhere : baseWhere,
           with: withTree,
           queryKey
         }),
-        adapter.count(config.table, where)
+        adapter.count(config.table, baseWhere)
       ]);
 
-      let resultRows = rows;
-      if (config.hooks?.afterFetch) {
-        resultRows = await config.hooks.afterFetch(rows as TSelect[], c, appContext);
+      let hasNext = false;
+      let hasPrev = false;
+      let pageRows: any[] = rawRows;
+
+      if (isCursorRequest) {
+        const hasExtra = rawRows.length > limit;
+        pageRows = hasExtra ? rawRows.slice(0, limit) : rawRows;
+
+        if (direction === "next") {
+          hasNext = hasExtra;
+          hasPrev = Boolean(rawCursor);
+        } else {
+          hasPrev = hasExtra;
+          hasNext = true;
+          pageRows.reverse();
+        }
+      } else {
+        const curPage = page ?? 1;
+        hasPrev = curPage > 1;
+        hasNext = (curPage * limit) < total;
       }
+
+      let resultRows = pageRows;
+      if (config.hooks?.afterFetch) {
+        resultRows = await config.hooks.afterFetch(pageRows as TSelect[], c, appContext);
+      }
+
+      const encodeCursor = (record: any) => {
+        const payload: Record<string, any> = { id: record.id };
+        if (isComposite && record[sortField] !== undefined) {
+          payload[sortField] = record[sortField];
+        }
+        return toBase64Url(JSON.stringify(payload));
+      };
+
+      const nextCursor = (hasNext && resultRows.length > 0)
+        ? encodeCursor(resultRows[resultRows.length - 1])
+        : null;
+
+      const prevCursor = (hasPrev && resultRows.length > 0)
+        ? encodeCursor(resultRows[0])
+        : null;
+
+      const includeCursorMeta = Boolean(rawCursor) || Boolean(queryParams.direction) || paginationType === "cursor";
+      const includeOffsetMeta = page !== undefined && paginationType !== "cursor" && !rawCursor;
+      const totalPages = limit > 0 ? Math.ceil(total / limit) : 0;
+
+      const meta: Record<string, any> = {
+        total,
+        ...(includeOffsetMeta ? { page, limit, totalPages } : { limit }),
+        ...(includeCursorMeta ? {
+          nextCursor,
+          prevCursor,
+          hasNext,
+          hasPrev
+        } : {})
+      };
 
       const response = {
         success: true,
         data: await Promise.all(resultRows.map(r => finalize(r, appContext, config, c, "list"))),
-        meta: {
-          total,
-          page,
-          limit,
-          totalPages: limit > 0 ? Math.ceil(total / limit) : 0
-        }
+        meta
       };
 
       if (cacheKey) {
