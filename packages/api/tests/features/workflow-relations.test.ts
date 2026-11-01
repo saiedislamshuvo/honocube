@@ -480,4 +480,238 @@ describe("Workflow Relations: Cascades, Preconditions & Lock Propagation", () =>
     expect(batchDeleteRes.status).toBe(403);
     expect((await batchDeleteRes.json()).error.code).toBe("WORKFLOW_LOCKED");
   });
+  it("enforces requireChildren maxCount and rejects invalid relation configurations with 500 CONFIG_ERROR", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      relations: {
+        many: [
+          {
+            name: "comments",
+            table: comments,
+            foreignKey: "postId",
+            referenceKey: "id",
+            schema: z.object({ author: z.string(), content: z.string() }),
+          },
+        ],
+      },
+      workflow: {
+        field: "status",
+        initial: "draft",
+        transitions: [
+          {
+            from: "draft",
+            to: "capped",
+            requireChildren: [
+              {
+                relation: "comments",
+                maxCount: 2, // Allows at most 2 items
+              },
+            ],
+          },
+          {
+            from: "draft",
+            to: "broken",
+            requireChildren: [
+              {
+                relation: "non_existent_relation",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const post: any = await adapter.insert(posts, { title: "Capped Post", status: "draft" });
+
+    // Seed 3 comments (exceeds maxCount 2)
+    await adapter.insert(comments, { postId: post.id, author: "A", content: "1" });
+    await adapter.insert(comments, { postId: post.id, author: "B", content: "2" });
+    await adapter.insert(comments, { postId: post.id, author: "C", content: "3" });
+
+    // 1. Fails maxCount
+    const maxFail = await postsResource.request(`/${post.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "capped" }),
+    });
+    expect(maxFail.status).toBe(400);
+    const maxErr = await maxFail.json();
+    expect(maxErr.error.code).toBe("WORKFLOW_REQUIREMENT_FAILED");
+    expect(maxErr.error.details.requiredMax).toBe(2);
+    expect(maxErr.error.details.actual).toBe(3);
+
+    // 2. Misconfigured relation name throws 500 CONFIG_ERROR
+    const brokenFail = await postsResource.request(`/${post.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "broken" }),
+    });
+    expect(brokenFail.status).toBe(500);
+    const brokenErr = await brokenFail.json();
+    expect(brokenErr.error.code).toBe("CONFIG_ERROR");
+  });
+
+  it("supports custom editableStates in lockRelations object syntax", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      relations: {
+        many: [
+          {
+            name: "items",
+            table: comments,
+            foreignKey: "postId",
+            referenceKey: "id",
+            schema: z.object({ author: z.string(), content: z.string() }),
+          },
+        ],
+      },
+      workflow: {
+        field: "status",
+        initial: "draft",
+        states: {
+          draft: { editable: true },
+          qa_review: { editable: false }, // Parent post itself is locked
+          approved: { editable: false },
+        },
+        transitions: [
+          { from: "draft", to: "qa_review" },
+          { from: "qa_review", to: "approved" },
+        ],
+        // Allow child items to be modified in BOTH draft and qa_review!
+        lockRelations: [
+          { relation: "items", editableStates: ["draft", "qa_review"] },
+        ],
+      },
+    });
+
+    const commentsResource = app.defineResource({
+      name: "comments",
+      table: comments,
+      validator: z.object({
+        content: z.string().optional(),
+      }),
+    });
+
+    const post: any = await adapter.insert(posts, { title: "Custom Lock PO", status: "draft" });
+    const item: any = await adapter.insert(comments, { postId: post.id, author: "QA", content: "Original" });
+
+    // Transition post to qa_review (parent post fields are locked)
+    await postsResource.request(`/${post.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "qa_review" }),
+    });
+
+    // 1. Child item CAN still be updated during qa_review (custom editableStates)
+    const qaItemUpdate = await commentsResource.request(`/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "QA Inspection Completed" }),
+    });
+    expect(qaItemUpdate.status).toBe(200);
+
+    // Transition post to approved
+    await postsResource.request(`/${post.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved" }),
+    });
+
+    // 2. Now in approved state, child item is completely locked
+    const approvedItemUpdate = await commentsResource.request(`/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "Post-approval tamper" }),
+    });
+    expect(approvedItemUpdate.status).toBe(403);
+    expect((await approvedItemUpdate.json()).error.code).toBe("WORKFLOW_LOCKED");
+  });
+
+  it("permits batch updates when parent is in editable state and handles null parentId gracefully", async () => {
+    const { adapter } = await createTestDb();
+    const app = createApp({ adapter });
+
+    app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string().optional(),
+        status: z.string().optional(),
+      }),
+      workflow: {
+        field: "status",
+        initial: "draft",
+        states: {
+          draft: { editable: true },
+          locked: { editable: false },
+        },
+        transitions: [{ from: "draft", to: "locked" }],
+      },
+    });
+
+    const commentsResource = app.defineResource({
+      name: "comments",
+      table: comments,
+      methods: ["list", "detail", "create", "update", "delete", "batch-update", "batch-delete"],
+      validator: z.object({
+        author: z.string().optional(),
+        content: z.string().optional(),
+      }),
+      workflow: {
+        parentLock: {
+          table: posts,
+          foreignKey: "postId",
+          editableStates: ["draft"],
+        },
+      },
+    });
+
+    const draftParent: any = await adapter.insert(posts, { title: "Draft PO", status: "draft" });
+    const item1: any = await adapter.insert(comments, { postId: draftParent.id, author: "U1", content: "C1" });
+    const item2: any = await adapter.insert(comments, { postId: draftParent.id, author: "U2", content: "C2" });
+
+    // Standalone item with no parent (postId is null)
+    const unparentedItem: any = await adapter.insert(comments, { postId: null, author: "U3", content: "Independent" });
+
+    // 1. Batch update succeeds when parent is in draft
+    const batchOk = await commentsResource.request("/batch-update", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ids: [item1.id, item2.id],
+        data: { content: "Updated in draft" },
+      }),
+    });
+    expect(batchOk.status).toBe(200);
+
+    // 2. Standalone item with null postId can be updated and deleted without error
+    const unparentedPatch = await commentsResource.request(`/${unparentedItem.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "Updated standalone" }),
+    });
+    expect(unparentedPatch.status).toBe(200);
+
+    const unparentedDelete = await commentsResource.request(`/${unparentedItem.id}`, {
+      method: "DELETE",
+    });
+    expect(unparentedDelete.status).toBe(200);
+  });
+
 });
