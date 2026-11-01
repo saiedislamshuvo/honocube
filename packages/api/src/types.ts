@@ -517,6 +517,128 @@ export interface WorkflowConfig<AppContext = any, TRecord = any> {
   };
 }
 
+export interface AuditFieldDiff {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+export type AuditAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "batch-update"
+  | "batch-delete"
+  | "transition";
+
+export interface AuditEntry<_AppContext = any> {
+  id?: string | number;
+  resource: string;
+  recordId: string | number;
+  action: AuditAction;
+  actorId?: string | number | null;
+  tenantId?: string | number | null;
+  diff?: AuditFieldDiff[];
+  oldData?: Record<string, unknown> | null;
+  newData?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown>;
+  ip?: string | null;
+  userAgent?: string | null;
+  timestamp: string;
+}
+
+export interface AuditConfig<AppContext = any, TRecord = any> {
+  /**
+   * Whether auditing is enabled for this resource. Defaults to true if audit config is defined.
+   */
+  enabled?: boolean;
+
+  /**
+   * Actions to audit. Defaults to all actions ("create", "update", "delete", "batch-update", "batch-delete", "transition").
+   */
+  actions?: AuditAction[];
+
+  /**
+   * Fields to exclude entirely from diffs and snapshots (e.g. "password", "token").
+   */
+  excludeFields?: string[];
+
+  /**
+   * Fields whose values should be masked in diffs (e.g. "creditCard").
+   */
+  maskFields?: string[];
+
+  /**
+   * Mask replacement string. Defaults to "********".
+   */
+  maskString?: string;
+
+  /**
+   * Whether to include full oldData and newData snapshots in the audit entry.
+   * Defaults to false (diff-only).
+   */
+  includeSnapshots?: boolean;
+
+  /**
+   * Custom metadata callback to enrich the audit entry.
+   */
+  metadata?: (
+    c: Context,
+    appContext: AppContext,
+    record?: TRecord
+  ) => Record<string, unknown> | Promise<Record<string, unknown>>;
+}
+
+export interface AppAuditConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  /**
+   * Database table used to store audit log entries.
+   */
+  table?: any;
+
+  /**
+   * Custom sink / handler to persist or dispatch audit entries.
+   */
+  store?: (
+    entry: AuditEntry<AppContext>,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<void> | void;
+
+  /**
+   * Resolves the actor identifier from the application context.
+   * Defaults to checking appContext.userId ?? appContext.user?.id ?? appContext.actorId.
+   */
+  getActorId?: (
+    appContext: AppContext,
+    c: Context<{ Bindings: Env }>
+  ) => string | number | null | undefined | Promise<string | number | null | undefined>;
+
+  /**
+   * Global fields to exclude from audit diffs across all resources.
+   */
+  excludeFields?: string[];
+
+  /**
+   * Global fields to mask in audit diffs across all resources.
+   */
+  maskFields?: string[];
+
+  /**
+   * Mask replacement string. Defaults to "********".
+   */
+  maskString?: string;
+
+  /**
+   * Execution mode: "async" (non-blocking via c.executionCtx.waitUntil or background promise)
+   * or "sync" (awaited before sending HTTP response).
+   * Defaults to "async".
+   */
+  mode?: "async" | "sync";
+}
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -537,6 +659,7 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   namingSeries?: {
     counter?: NamingSeriesCounter;
   };
+  audit?: AppAuditConfig<Env, AppContext>;
 }
 
 export interface ResourceConfig<
@@ -566,7 +689,8 @@ export interface ResourceConfig<
   fields?: Record<string, FieldRule<AppContext, TSelect>>;
   fieldViolationStrategy?: FieldViolationStrategy;
   namingSeries?: NamingSeriesConfig<AppContext, TSelect>;
-  workflow?: WorkflowConfig<AppContext, TSelect>; 
+  workflow?: WorkflowConfig<AppContext, TSelect>;
+  audit?: boolean | AuditConfig<AppContext, TSelect>; 
   
   import?: {
     lookupBy: string | string[] | string[][];
