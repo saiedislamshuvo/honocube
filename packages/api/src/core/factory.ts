@@ -394,6 +394,39 @@ export function defineResource<
    * The operators and the columns come from the adapter, so the predicate is
    * built with the functions the driver understands.
    */
+  /**
+   * Resolves the Drizzle 'with' tree for a specific query target:
+   * - "list" for GET /
+   * - "detail" for GET /:id and mutation reloads
+   * - "slug" for GET /:slugField/:value
+   *
+   * Supports uniform `with: { author: true }`, or scoped `with: { list: false, detail: { ... }, slug: { ... } }`.
+   */
+  const resolveWith = (target: "list" | "detail" | "slug"): Record<string, any> | undefined => {
+    if (!config.with) return undefined;
+
+    const isScoped =
+      typeof config.with === "object" &&
+      ("list" in config.with || "detail" in config.with || "slug" in config.with);
+
+    if (isScoped) {
+      const scoped = config.with as any;
+      if (target === "list") {
+        return scoped.list === false ? undefined : scoped.list;
+      }
+      if (target === "slug") {
+        if (scoped.slug === false) return undefined;
+        if (scoped.slug !== undefined) return scoped.slug;
+        return scoped.detail === false ? undefined : scoped.detail;
+      }
+      if (target === "detail") {
+        return scoped.detail === false ? undefined : scoped.detail;
+      }
+    }
+
+    return config.with as Record<string, any>;
+  };
+
   const buildConstraintConditions = (
     appContext: AppContext,
     adapter: DatabaseAdapter<any, any, any>,
@@ -679,7 +712,7 @@ export function defineResource<
       const q = queryParams.q;
 
       // 1. Resolve 'with' object (Explicit only)
-      const withTree: any = config.with;
+      const withTree = resolveWith("list");
 
       // 2. Build Search Subqueries
       const searchSubqueries: any[] = [];
@@ -1043,7 +1076,7 @@ export function defineResource<
         await config.hooks.beforeFetch(c, { detailId: id }, appContext);
       }
 
-      const withTree: any = config.with;
+      const withTree = resolveWith("detail");
 
       const queryKey = config.queryKey ?? config.name;
       const row = await adapter.findFirst(config.table, {
@@ -1116,7 +1149,7 @@ export function defineResource<
           await config.hooks.beforeFetch(c, { detailId: value, slug: slugField }, appContext);
         }
 
-        const withTree: any = config.with;
+        const withTree = resolveWith("slug");
         const queryKey = config.queryKey ?? config.name;
 
         const row = await adapter.findFirst(config.table, {
@@ -1347,10 +1380,11 @@ export function defineResource<
       const idCol = (adapter.getColumns(config.table as any) as any).id;
       const recordId = record[idCol.name] || record.id;
       
-      if (config.with && recordId) {
+      const reloadWith = resolveWith("detail");
+      if (reloadWith && recordId) {
         const reloaded = await adapter.findFirst(config.table, {
           where: (cols: any, { eq }: any) => eq(cols.id, recordId),
-          with: config.with,
+          with: reloadWith,
           queryKey: config.queryKey ?? config.name
         });
         if (reloaded) finalRecord = reloaded;
@@ -1572,10 +1606,11 @@ export function defineResource<
 
       // Reload if necessary
       let finalRecord = record;
-      if (config.with) {
+      const reloadWith = resolveWith("detail");
+      if (reloadWith) {
         const reloaded = await adapter.findFirst(config.table, {
           where: (cols: any, { eq }: any) => eq(cols.id, id),
-          with: config.with,
+          with: reloadWith,
           queryKey: config.queryKey ?? config.name
         });
         if (reloaded) finalRecord = reloaded;
