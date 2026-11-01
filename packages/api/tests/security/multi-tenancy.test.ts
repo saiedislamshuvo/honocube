@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { createApp } from "../../src/core/factory.js";
-import { createTestDb, posts, tags } from "../fixtures/db.js";
+import { createTestDb, posts, tags, users } from "../fixtures/db.js";
 
 describe("Multi-Tenancy Engine", () => {
   it("enforces tenant query isolation across list, detail, slug, and search", async () => {
@@ -627,5 +627,269 @@ describe("Multi-Tenancy Engine", () => {
     });
     expect(postBInDb.title).toBe("Org B Post");
     expect(postBInDb.tenantId).toBe("org_b");
+  });
+
+  it("fails closed with 500 CONFIG_ERROR when table lacks tenant column and is not skipped", async () => {
+    const { adapter } = await createTestDb();
+
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => "org_1",
+      },
+    });
+
+    // tags table does NOT have a tenantId column and developer forgot tenancy: false
+    const brokenResource = app.defineResource({
+      name: "tags",
+      table: tags,
+      validator: z.object({ name: z.string() }),
+    });
+
+    const res = await brokenResource.request("/", { method: "GET" });
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error.code).toBe("CONFIG_ERROR");
+    expect(body.error.message).toContain("table does not have tenant column 'tenantId'");
+  });
+
+  it("supports resource-level { skip: true } and custom field override", async () => {
+    const { adapter } = await createTestDb();
+
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => "org_custom",
+      },
+    });
+
+    // 1. Resource using { skip: true }
+    const skippedResource = app.defineResource({
+      name: "tags",
+      table: tags,
+      tenancy: { skip: true },
+      validator: z.object({ name: z.string() }),
+    });
+
+    const skipRes = await skippedResource.request("/", { method: "GET" });
+    expect(skipRes.status).toBe(200);
+
+    // 2. Resource with custom column name override on users table
+    const usersResource = app.defineResource({
+      name: "users",
+      table: users,
+      tenancy: { field: "tenantId" },
+      validator: z.object({ name: z.string(), email: z.string(), tenantId: z.string().optional() }),
+    });
+
+    const userCreateRes = await usersResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Alice", email: "alice@example.com" }),
+    });
+    expect(userCreateRes.status).toBe(201);
+    const createdUser = await userCreateRes.json();
+    expect(createdUser.data.tenantId).toBe("org_custom");
+  });
+
+  it("supports dynamic enforce predicate and enforce: false", async () => {
+    const { adapter } = await createTestDb();
+
+    // Enforce is false when path is /public
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: (c) => c.req.header("x-tenant-id") || null,
+        enforce: (c) => !c.req.path.includes("/public"),
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string() }),
+    });
+
+    await adapter.insert(posts, { title: "Public Article", tenantId: "org_x" });
+
+    // 1. Without tenant header on non-public path: rejected with 400 TENANT_REQUIRED
+    const rejectRes = await postsResource.request("/", { method: "GET" });
+    expect(rejectRes.status).toBe(400);
+
+    // 2. On /public route with enforce function evaluating to false: allowed through
+    const allowRes = await postsResource.request("/public", { method: "GET" });
+    expect(allowRes.status).not.toBe(400);
+
+    // 3. Static enforce: false allows unauthenticated access unscoped
+    const unscopedApp = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => null,
+        enforce: false,
+      },
+    });
+
+    const unscopedResource = unscopedApp.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string() }),
+    });
+
+    const unscopedRes = await unscopedResource.request("/", { method: "GET" });
+    expect(unscopedRes.status).toBe(200);
+    const unscopedData = await unscopedRes.json();
+    expect(unscopedData.data.length).toBe(1);
+  });
+
+  it("auto-defaults tenant ID when array has exactly 1 element and payload omits tenantId", async () => {
+    const { adapter } = await createTestDb();
+
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => ["single_assigned_org"],
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string(),
+        tenantId: z.string().optional(),
+      }),
+    });
+
+    const res = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Auto-defaulted Single Element Post" }),
+    });
+
+    expect(res.status).toBe(201);
+    const created = await res.json();
+    expect(created.data.tenantId).toBe("single_assigned_org");
+  });
+
+  it("supports numeric (integer) tenant IDs", async () => {
+    const { adapter } = await createTestDb();
+
+    let activeTenant: number | number[] = 101;
+
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => activeTenant,
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({
+        title: z.string(),
+        tenantId: z.union([z.string(), z.number()]).optional(),
+      }),
+    });
+
+    // Create record as numeric tenant 101
+    const createRes = await postsResource.request("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Numeric Tenant Post" }),
+    });
+    expect(createRes.status).toBe(201);
+    const created = await createRes.json();
+    expect(Number(created.data.tenantId)).toBe(101);
+
+    // Switch to holding array with numbers [101, 202]
+    activeTenant = [101, 202];
+    const listRes = await postsResource.request("/", { method: "GET" });
+    expect(listRes.status).toBe(200);
+    const listData = await listRes.json();
+    expect(listData.data.length).toBe(1);
+  });
+
+  it("validates and auto-stamps in import/preview mode without writing to DB", async () => {
+    const { adapter } = await createTestDb();
+
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => "org_preview",
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      methods: ["import-preview", "import-execute"],
+      import: {
+        lookupBy: "slug",
+      },
+      validator: z.object({
+        title: z.string(),
+        slug: z.string(),
+        tenantId: z.string().optional(),
+      }),
+    });
+
+    const previewRes = await postsResource.request("/import/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([
+        { title: "Preview Post", slug: "preview-post" },
+      ]),
+    });
+
+    expect(previewRes.status).toBe(200);
+    const previewData = await previewRes.json();
+    expect(previewData.results.creates.length).toBe(1);
+    expect(previewData.results.creates[0].tenantId).toBe("org_preview");
+
+    // Verify nothing was actually inserted in the database
+    const inDb = await adapter.findFirst(posts, {
+      where: (cols: any, { eq }: any) => eq(cols.slug, "preview-post"),
+    });
+    expect(inDb).toBeNull();
+  });
+
+  it("works seamlessly with @honocube/api/testing harness (testResource.run)", async () => {
+    const { adapter } = await createTestDb();
+
+    const { testResource } = await import("../../src/testing/index.js");
+
+    const app = createApp({
+      adapter,
+      tenancy: {
+        field: "tenantId",
+        resolve: () => "tenant_test_harness",
+      },
+    });
+
+    const postsResource = app.defineResource({
+      name: "posts",
+      table: posts,
+      validator: z.object({ title: z.string(), tenantId: z.string().optional() }),
+    });
+
+    const report = await testResource.run(postsResource, {
+      fixtures: {
+        valid: { title: "Harness Created" },
+        update: { title: "Harness Updated" },
+        invalid: { title: 123 as any },
+      },
+    });
+
+    expect(report.success).toBe(true);
+    expect(report.failed).toBe(0);
+    expect(report.passed).toBeGreaterThan(0);
   });
 });
