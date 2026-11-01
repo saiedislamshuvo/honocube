@@ -6,4 +6,5 @@ export * from "./core/validation.js";
 export * from "./utils/errors.js";
 export * from "./utils/webhooks.js";
 export * from "./utils/idempotency.js";
+export * from "./utils/rate-limit.js";
 export * from "./testing/index.js";

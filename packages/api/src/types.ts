@@ -114,8 +114,45 @@ export interface AppCache {
   clear: (prefix: string) => void | Promise<void>;
 }
 
+export interface RateLimitResult {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  reset: number;
+  retryAfter?: number;
+}
+
+export interface RateLimitStore {
+  increment(
+    key: string,
+    cost: number,
+    limit: number,
+    windowMs: number
+  ): Promise<RateLimitResult> | RateLimitResult;
+  reset?(key: string): Promise<void> | void;
+}
+
 export interface RateLimiter {
   check: (key: string, limit: number, window: string) => boolean | Promise<boolean>;
+  increment?: (
+    key: string,
+    cost: number,
+    limit: number,
+    windowMs: number
+  ) => Promise<RateLimitResult> | RateLimitResult;
+}
+
+export interface RateLimitConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  limit: number;
+  window?: string; // e.g., '1m', '1h'
+  windowMs?: number; // e.g., 60000
+  key?: (c: Context<{ Bindings: Env }>, appContext: AppContext) => string | Promise<string>;
+  keyGenerator?: (c: Context<{ Bindings: Env }>, appContext: AppContext) => string | Promise<string>;
+  store?: RateLimitStore;
+  cost?: (c: Context<{ Bindings: Env }>) => number;
 }
 
 export interface AppStorage {
@@ -930,7 +967,8 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   schema?: Record<string, any>; // Global schema for convenience
   logger?: AppLogger; // Global framework logger
   cache?: AppCache; // Global cache provider
-  rateLimiter?: RateLimiter; // Global rate limiter
+  rateLimiter?: RateLimiter | RateLimitStore; // Global rate limiter
+  rateLimit?: RateLimitConfig<Env, AppContext>; // Global rate limit config
   storage?: AppStorage; // Global storage provider
   mediaBaseUrl?: string; // e.g., 'https://cdn.example.com/'
   onEvent?: (event: ResourceEvent<AppContext>) => Promise<void> | void;
@@ -1042,11 +1080,7 @@ export interface ResourceConfig<
     keyBy?: (appContext: AppContext, query: Record<string, string>) => string | undefined;
   };
   
-  rateLimit?: {
-    limit: number;
-    window: string; // e.g., '1m', '1h'
-    key?: (c: Context<{ Bindings: Env }>, appContext: AppContext) => string;
-  };
+  rateLimit?: RateLimitConfig<Env, AppContext>;
 
   // Files
   uploads?: Record<string, { folder?: string }>;

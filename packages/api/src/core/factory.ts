@@ -1,8 +1,9 @@
 import { Hono, Context } from "hono";
-import { ResourceConfig, AppConfig, IdempotencyStorage, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff, OutboxEvent, OutboxRecord, OutboxStatus, WebhookEndpointConfig } from "../types.js";
+import { ResourceConfig, AppConfig, IdempotencyStorage, RateLimitStore, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff, OutboxEvent, OutboxRecord, OutboxStatus, WebhookEndpointConfig } from "../types.js";
 import { dispatchSingleWebhook, isWebhookEventMatch, calculateRetryBackoff } from "../utils/webhooks.js";
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { MemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
+import { MemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
   parseBatchDeleteBody,
@@ -65,6 +66,13 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   // Copy the config so the caller's object is never mutated. The defaults are
   // applied to the copy, not written back into the object the caller holds.
   const appConfig: AppConfig<Env, AppContext> = { ...globalConfig };
+
+  if (appConfig.rateLimit && !appConfig.rateLimit.store) {
+    appConfig.rateLimit = {
+      ...appConfig.rateLimit,
+      store: new MemoryRateLimitStore(),
+    };
+  }
 
   if (appConfig.idempotency && !appConfig.idempotency.storage) {
     appConfig.idempotency = {
@@ -1625,12 +1633,53 @@ export function defineResource<
     }
   };
 
+  const globalDefaultRateLimitStore = new MemoryRateLimitStore();
+
   const checkRateLimit = async (c: Context, appContext: any) => {
-    if (config.rateLimit && globalConfig?.rateLimiter) {
-      const { limit, window, key: keyFn } = config.rateLimit;
-      const key = keyFn ? keyFn(c as any, appContext) : `${c.req.path}:${c.req.header('cf-connecting-ip') || 'anon'}`;
-      const allowed = await globalConfig.rateLimiter.check(key, limit, window);
+    const rateLimitConfig = config.rateLimit ?? globalConfig?.rateLimit;
+    if (!rateLimitConfig) return;
+
+    const limit = rateLimitConfig.limit;
+    const windowMs = rateLimitConfig.windowMs ?? parseWindow(rateLimitConfig.window);
+    const keyFn = rateLimitConfig.keyGenerator ?? rateLimitConfig.key;
+    const key = keyFn
+      ? await keyFn(c as any, appContext)
+      : `${c.req.path}:${c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'anon'}`;
+
+    // Legacy RateLimiter support (where user passed rateLimiter with only .check and no store):
+    if (globalConfig?.rateLimiter && !rateLimitConfig.store && !("increment" in globalConfig.rateLimiter)) {
+      const allowed = await globalConfig.rateLimiter.check(key, limit, rateLimitConfig.window ?? `${windowMs}ms`);
       if (!allowed) throw ApiError.tooManyRequests();
+      return;
+    }
+
+    const store: RateLimitStore =
+      rateLimitConfig.store ??
+      (globalConfig?.rateLimiter && "increment" in globalConfig.rateLimiter ? (globalConfig.rateLimiter as any) : undefined) ??
+      globalDefaultRateLimitStore;
+
+    const cost = rateLimitConfig.cost ? rateLimitConfig.cost(c as any) : 1;
+    const result = await store.increment(key, cost, limit, windowMs);
+
+    c.header("RateLimit-Limit", String(result.limit));
+    c.header("RateLimit-Remaining", String(result.remaining));
+    c.header("RateLimit-Reset", String(result.reset));
+
+    if (!result.allowed) {
+      const retryAfter = result.retryAfter ?? result.reset;
+      c.header("Retry-After", String(retryAfter));
+      throw new ApiError(
+        429,
+        "TOO_MANY_REQUESTS",
+        "Too Many Requests",
+        undefined,
+        {
+          "Retry-After": String(retryAfter),
+          "RateLimit-Limit": String(result.limit),
+          "RateLimit-Remaining": "0",
+          "RateLimit-Reset": String(result.reset),
+        }
+      );
     }
   };
 
