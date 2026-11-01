@@ -131,6 +131,64 @@ export interface ResourceEvent<AppContext = any> {
   appContext: AppContext;
 }
 
+export type TenantId = string | number;
+export type TenancyValue = TenantId | TenantId[] | null | undefined;
+
+export interface TenancyConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  /**
+   * Column name on database tables holding the tenant/organization identifier.
+   * Default: "tenantId"
+   */
+  field?: string;
+
+  /**
+   * Resolves the active tenant ID from request context.
+   * Can return:
+   * - A single string/number (single tenant)
+   * - An array of strings/numbers (holding company / multiple orgs)
+   * - `null` / `undefined` (unauthenticated / missing tenant)
+   */
+  resolve: (
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<TenancyValue> | TenancyValue;
+
+  /**
+   * Whether to enforce tenancy. When true (default), any request where tenant
+   * resolution returns null/undefined is rejected with 400 TENANT_REQUIRED (unless bypassed).
+   * Default: true
+   */
+  enforce?: boolean | ((c: Context<{ Bindings: Env }>, appContext: AppContext) => boolean);
+
+  /**
+   * Custom predicate to determine whether the current request is allowed to bypass
+   * tenant isolation (e.g. for superadmin global views).
+   */
+  bypass?: (
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<boolean> | boolean;
+
+  /**
+   * Custom error message when tenant resolution fails.
+   */
+  errorMessage?: string;
+}
+
+export interface ResourceTenancyConfig {
+  /**
+   * Column name on this resource's table for tenant identification (overrides global default).
+   */
+  field?: string;
+  /**
+   * When true, skips tenancy enforcement and filtering for this resource (shared/global table).
+   */
+  skip?: boolean;
+}
+
 export interface AppConfig<Env extends Record<string, unknown> = Record<string, unknown>, AppContext = any> {
   adapter: DatabaseAdapter<any, any, any> | ((c: Context<{ Bindings: Env }>) => DatabaseAdapter<any, any, any>);
   strategy?: DatabaseStrategy; // "batch" | "transaction" | "none"
@@ -143,6 +201,7 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   mediaBaseUrl?: string; // e.g., 'https://cdn.example.com/'
   onEvent?: (event: ResourceEvent<AppContext>) => Promise<void> | void;
   getContext?: (c: Context<{ Bindings: Env }>) => Promise<AppContext> | AppContext;
+  tenancy?: TenancyConfig<Env, AppContext>;
   auth?: {
     can: (appContext: AppContext, permission: string, record?: any) => boolean | Promise<boolean>;
   };
@@ -169,7 +228,8 @@ export interface ResourceConfig<
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
   methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute")[];
   softDelete?: string; 
-  slugs?: string[]; 
+  slugs?: string[];
+  tenancy?: boolean | ResourceTenancyConfig; 
   
   import?: {
     lookupBy: string | string[] | string[][];

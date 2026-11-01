@@ -1,5 +1,5 @@
 import { Hono, Context } from "hono";
-import { ResourceConfig, AppConfig } from "../types.js";
+import { ResourceConfig, AppConfig, TenancyValue } from "../types.js";
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -287,6 +287,102 @@ export function defineResource<
     };
   };
 
+  interface ResolvedTenancyContext {
+    isTenancyActive: boolean;
+    isBypassed: boolean;
+    tenantVal?: TenancyValue;
+    tenantField: string;
+    tenantCondition?: any;
+  }
+
+  const resolveTenancyContext = async (
+    c: Context,
+    appContext: AppContext,
+    adapter: DatabaseAdapter<any, any, any>
+  ): Promise<ResolvedTenancyContext> => {
+    const isSkipped =
+      config.tenancy === false ||
+      (typeof config.tenancy === "object" && config.tenancy?.skip === true);
+
+    if (isSkipped || !globalConfig?.tenancy) {
+      return {
+        isTenancyActive: false,
+        isBypassed: true,
+        tenantField: "tenantId",
+      };
+    }
+
+    const tenantField =
+      (typeof config.tenancy === "object" && config.tenancy?.field) ||
+      globalConfig.tenancy.field ||
+      "tenantId";
+
+    let isBypassed = false;
+    if (globalConfig.tenancy.bypass) {
+      isBypassed = await globalConfig.tenancy.bypass(c, appContext);
+    }
+
+    if (isBypassed) {
+      return {
+        isTenancyActive: true,
+        isBypassed: true,
+        tenantField,
+      };
+    }
+
+    const tenantVal = await globalConfig.tenancy.resolve(c, appContext);
+
+    let shouldEnforce = globalConfig.tenancy.enforce ?? true;
+    if (typeof shouldEnforce === "function") {
+      shouldEnforce = shouldEnforce(c, appContext);
+    }
+
+    const isEmpty =
+      tenantVal === undefined ||
+      tenantVal === null ||
+      tenantVal === "" ||
+      (Array.isArray(tenantVal) && tenantVal.length === 0);
+
+    if (isEmpty && shouldEnforce) {
+      throw new ApiError(
+        400,
+        "TENANT_REQUIRED",
+        globalConfig.tenancy.errorMessage || "Tenant identifier is required."
+      );
+    }
+
+    let tenantCondition: any = undefined;
+    if (!isEmpty) {
+      const cols = adapter.getColumns(config.table as any) as any;
+      const ops = adapter.getOperators();
+      const col = cols[tenantField];
+      if (!col) {
+        throw new ApiError(
+          500,
+          "CONFIG_ERROR",
+          `Resource '${config.name}' table does not have tenant column '${tenantField}'. Set tenancy: false on the resource to skip tenancy.`
+        );
+      }
+      if (Array.isArray(tenantVal)) {
+        if (tenantVal.length === 1) {
+          tenantCondition = ops.eq(col, tenantVal[0]);
+        } else {
+          tenantCondition = ops.inArray(col, tenantVal);
+        }
+      } else {
+        tenantCondition = ops.eq(col, tenantVal);
+      }
+    }
+
+    return {
+      isTenancyActive: true,
+      isBypassed: false,
+      tenantVal,
+      tenantField,
+      tenantCondition,
+    };
+  };
+
   /**
    * Builds the conditions a row has to satisfy beyond its id: the soft-delete
    * filter and the row-level scope.
@@ -300,11 +396,16 @@ export function defineResource<
    */
   const buildConstraintConditions = (
     appContext: AppContext,
-    adapter: DatabaseAdapter<any, any, any>
+    adapter: DatabaseAdapter<any, any, any>,
+    tenantCondition?: any
   ) => {
     const cols = adapter.getColumns(config.table as any) as any;
     const ops = adapter.getOperators();
     const conditions: any[] = [];
+
+    if (tenantCondition) {
+      conditions.push(tenantCondition);
+    }
 
     if (config.softDelete) {
       conditions.push(ops.isNull(cols[config.softDelete]));
@@ -325,13 +426,14 @@ export function defineResource<
   const buildRecordPredicate = (
     id: string | number,
     appContext: AppContext,
-    adapter: DatabaseAdapter<any, any, any>
+    adapter: DatabaseAdapter<any, any, any>,
+    tenantCondition?: any
   ) => {
     const cols = adapter.getColumns(config.table as any) as any;
     const ops = adapter.getOperators();
     const conditions: any[] = [
       ops.eq(cols.id, id as any),
-      ...buildConstraintConditions(appContext, adapter),
+      ...buildConstraintConditions(appContext, adapter, tenantCondition),
     ];
 
     return conditions.length > 1 ? ops.and(...conditions) : conditions[0];
@@ -426,7 +528,9 @@ export function defineResource<
     c: Context,
     type: string,
     id: string | number | undefined,
-    appContext: AppContext
+    appContext: AppContext,
+    tenantVal?: TenancyValue,
+    isBypassed?: boolean
   ): string | null => {
     if (!config.cache?.enabled || !globalConfig?.cache) return null;
 
@@ -437,7 +541,17 @@ export function defineResource<
     if (caller === undefined || caller === null || caller === '') return null;
 
     const queryStr = new URL(c.req.url).search;
-    return `res:${config.name}:${type}${id ? `:${id}` : ''}:${caller}:${queryStr}`;
+    let tenantSegment = '';
+    const isSkipped = config.tenancy === false || (typeof config.tenancy === "object" && config.tenancy?.skip === true);
+    if (globalConfig?.tenancy && !isSkipped) {
+      if (isBypassed) {
+        tenantSegment = ':tenant:bypass';
+      } else if (tenantVal !== undefined && tenantVal !== null) {
+        const valStr = Array.isArray(tenantVal) ? [...tenantVal].map(String).sort().join(',') : String(tenantVal);
+        tenantSegment = `:tenant:${valStr}`;
+      }
+    }
+    return `res:${config.name}:${type}${id ? `:${id}` : ''}${tenantSegment}:${caller}:${queryStr}`;
   };
 
   const invalidateCache = async () => {
@@ -534,8 +648,10 @@ export function defineResource<
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "list");
 
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+
       // 0. Cache Check
-      const cacheKey = getCacheKey(c, "list", undefined, appContext);
+      const cacheKey = getCacheKey(c, "list", undefined, appContext, tenancy.tenantVal, tenancy.isBypassed);
       if (cacheKey) {
         const cached = await globalConfig!.cache!.get(cacheKey);
         if (cached) return c.json(cached);
@@ -573,10 +689,14 @@ export function defineResource<
 
         // Search local fields
         if (config.search.fields) {
+          const searchConds = [ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`)))];
+          if (tenancy.tenantCondition) {
+            searchConds.push(tenancy.tenantCondition);
+          }
           const localSubquery = adapter.getDb()
             .select({ id: adapter.getColumn(config.table as any, 'id') })
             .from(config.table)
-            .where(ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`))));
+            .where(ops.and(...searchConds));
           searchSubqueries.push(localSubquery);
         }
 
@@ -621,6 +741,11 @@ export function defineResource<
       const where = (cols: any, ops: any) => {
         const { and, eq, like, gt, gte, lt, lte, isNull, or } = ops;
         const conditions: any[] = [];
+
+        // Apply Tenancy Condition
+        if (tenancy.tenantCondition) {
+          conditions.push(tenancy.tenantCondition);
+        }
 
         // Apply Soft Delete (Mandatory)
         if (config.softDelete) {
@@ -734,19 +859,41 @@ export function defineResource<
     app.patch("/batch-update", async (c) => {
       // Resolve the adapter early, so a missing one is reported before any
       // work is done.
-      getAdapter(c);
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "batch-update");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
       const body = await c.req.json();
       const parsed = parseBatchUpdateBody(body);
       let targetIds = parsed.ids;
       let updateData = parsed.data;
 
+      // Prevent tenant-hopping
+      if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in updateData) {
+        const attemptedTenant = updateData[tenancy.tenantField];
+        if (attemptedTenant !== undefined) {
+          if (Array.isArray(tenancy.tenantVal)) {
+            if (!tenancy.tenantVal.includes(attemptedTenant)) {
+              throw new ApiError(403, "TENANT_IMMUTABLE", "Cannot change tenant identifier.");
+            }
+          } else if (attemptedTenant !== tenancy.tenantVal) {
+            throw new ApiError(403, "TENANT_IMMUTABLE", "Cannot change tenant identifier.");
+          }
+        }
+        delete updateData[tenancy.tenantField];
+      }
+
       // Validate data payload
       const { update: validator } = resolveValidators(config.validator);
       const validatedData = await validateWith(validator, updateData);
+
+      // Strip tenant field from validatedData if not bypassed
+      if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in validatedData) {
+        delete validatedData[tenancy.tenantField];
+      }
 
       // Auto Timestamps
       const ts = getTimestampFields();
@@ -779,6 +926,10 @@ export function defineResource<
         const idCol = cols.id;
         const conditions: any[] = [ops.inArray(idCol, targetIds)];
 
+        if (tenancy.tenantCondition) {
+          conditions.push(tenancy.tenantCondition);
+        }
+
         if (scopedWhere) {
           conditions.push(scopedWhere);
         }
@@ -810,10 +961,12 @@ export function defineResource<
     app.post("/batch-delete", async (c) => {
       // Resolve the adapter early, so a missing one is reported before any
       // work is done.
-      getAdapter(c);
+      const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "batch-delete");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
       const body = await c.req.json();
       const parsed = parseBatchDeleteBody(body);
@@ -839,6 +992,10 @@ export function defineResource<
 
         const idCol = cols.id;
         const conditions: any[] = [ops.inArray(idCol, targetIds)];
+
+        if (tenancy.tenantCondition) {
+          conditions.push(tenancy.tenantCondition);
+        }
 
         if (scopedWhere) {
           conditions.push(scopedWhere);
@@ -872,9 +1029,11 @@ export function defineResource<
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
       
       // 0. Cache Check
-      const cacheKey = getCacheKey(c, "detail", id, appContext);
+      const cacheKey = getCacheKey(c, "detail", id, appContext, tenancy.tenantVal, tenancy.isBypassed);
       if (cacheKey) {
         const cached = await globalConfig!.cache!.get(cacheKey);
         if (cached) return c.json(cached);
@@ -892,6 +1051,10 @@ export function defineResource<
           const { and, eq, isNull } = ops;
           const conditions = [eq(cols.id, id)];
           
+          if (tenancy.tenantCondition) {
+            conditions.push(tenancy.tenantCondition);
+          }
+
           if (config.softDelete) {
             conditions.push(isNull(cols[config.softDelete]));
           }
@@ -940,8 +1103,10 @@ export function defineResource<
         await checkRateLimit(c, appContext);
         const value = c.req.param("value");
         
+        const tenancy = await resolveTenancyContext(c, appContext, adapter);
+
         // Cache Check
-        const cacheKey = getCacheKey(c, `detail:${slugField}`, value, appContext);
+        const cacheKey = getCacheKey(c, `detail:${slugField}`, value, appContext, tenancy.tenantVal, tenancy.isBypassed);
         if (cacheKey) {
           const cached = await globalConfig!.cache!.get(cacheKey);
           if (cached) return c.json(cached);
@@ -959,6 +1124,10 @@ export function defineResource<
             const { and, eq, isNull } = ops;
             const conditions = [eq(cols[slugField], value)];
             
+            if (tenancy.tenantCondition) {
+              conditions.push(tenancy.tenantCondition);
+            }
+
             if (config.softDelete) {
               conditions.push(isNull(cols[config.softDelete]));
             }
@@ -1008,6 +1177,8 @@ export function defineResource<
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, "create");
 
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+
       let body = await c.req.json();
       
       // 0. Recursive File Upload Processing
@@ -1023,9 +1194,41 @@ export function defineResource<
           if (hooked) data = hooked;
         }
 
+        // Automatic tenant stamping / validation on data
+        if (!tenancy.isBypassed && tenancy.isTenancyActive) {
+          if (Array.isArray(tenancy.tenantVal)) {
+            if (data[tenancy.tenantField] !== undefined) {
+              if (!tenancy.tenantVal.includes(data[tenancy.tenantField])) {
+                throw new ApiError(403, "TENANT_ACCESS_DENIED", "You do not have access to the specified tenant.");
+              }
+            } else if (tenancy.tenantVal.length === 1) {
+              data[tenancy.tenantField] = tenancy.tenantVal[0];
+            } else {
+              throw new ApiError(400, "TENANT_REQUIRED", "Tenant identifier is ambiguous; please specify tenant in payload.");
+            }
+          } else if (tenancy.tenantVal !== undefined && tenancy.tenantVal !== null) {
+            data[tenancy.tenantField] = tenancy.tenantVal;
+          }
+        }
+
         // Resolve Create Validator
         const { create: validator } = resolveValidators(config.validator);
         const validated = await validateWith(validator, data);
+
+        // Ensure validated has tenant stamped as well
+        if (!tenancy.isBypassed && tenancy.isTenancyActive) {
+          if (Array.isArray(tenancy.tenantVal)) {
+            if (validated[tenancy.tenantField] !== undefined) {
+              if (!tenancy.tenantVal.includes(validated[tenancy.tenantField])) {
+                throw new ApiError(403, "TENANT_ACCESS_DENIED", "You do not have access to the specified tenant.");
+              }
+            } else if (tenancy.tenantVal.length === 1) {
+              validated[tenancy.tenantField] = tenancy.tenantVal[0];
+            }
+          } else if (tenancy.tenantVal !== undefined && tenancy.tenantVal !== null) {
+            validated[tenancy.tenantField] = tenancy.tenantVal;
+          }
+        }
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -1168,10 +1371,12 @@ export function defineResource<
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
 
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+
       // The scope and soft-delete filters are part of the lookup, so a row
       // outside the caller's scope is reported as not found instead of
       // confirming that it exists.
-      const recordPredicate = buildRecordPredicate(id, appContext, adapter);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.tenantCondition);
       const ops = adapter.getOperators();
 
       // We need to fetch the existing record first for Row-Level Security
@@ -1184,6 +1389,21 @@ export function defineResource<
       await checkAccess(appContext, "update", existingRecord);
 
       let body = await c.req.json();
+
+      // Prevent tenant-hopping
+      if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in body) {
+        const attemptedTenant = body[tenancy.tenantField];
+        if (attemptedTenant !== undefined) {
+          if (Array.isArray(tenancy.tenantVal)) {
+            if (!tenancy.tenantVal.includes(attemptedTenant)) {
+              throw new ApiError(403, "TENANT_IMMUTABLE", "Cannot change tenant identifier.");
+            }
+          } else if (attemptedTenant !== tenancy.tenantVal) {
+            throw new ApiError(403, "TENANT_IMMUTABLE", "Cannot change tenant identifier.");
+          }
+        }
+        delete body[tenancy.tenantField];
+      }
 
       // 0. Recursive File Upload Processing
       body = await processUploads(body);
@@ -1200,6 +1420,11 @@ export function defineResource<
         // Resolve Update Validator
         const { update: validator } = resolveValidators(config.validator);
         const validated = await validateWith(validator, data);
+
+        // Strip tenantField from validated if not bypassed
+        if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in validated) {
+          delete validated[tenancy.tenantField];
+        }
 
         // Auto Timestamps
         const ts = getTimestampFields();
@@ -1370,10 +1595,12 @@ export function defineResource<
       await checkRateLimit(c, appContext);
       const id = c.req.param("id");
 
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+
       // The scope and soft-delete filters are part of the lookup, so a row
       // outside the caller's scope is reported as not found instead of
       // confirming that it exists.
-      const recordPredicate = buildRecordPredicate(id, appContext, adapter);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.tenantCondition);
 
       const existingRecord = await adapter.findFirst(config.table, {
         where: recordPredicate,
@@ -1414,6 +1641,8 @@ export function defineResource<
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
       await checkAccess(appContext, isPreview ? "import-preview" : "import-execute");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
       let body = await c.req.json();
       if (!Array.isArray(body)) throw new ApiError(400, "INVALID_PAYLOAD", "Import payload must be an array of objects.");
@@ -1466,7 +1695,7 @@ export function defineResource<
         // The soft-delete filter and the row-level scope — the same two
         // filters the read paths apply. A row that does not match them is not
         // the caller's to write.
-        const constraintConditions = buildConstraintConditions(appContext, adapter);
+        const constraintConditions = buildConstraintConditions(appContext, adapter, tenancy.tenantCondition);
 
         // The conditions that match the lookup keys of the payload.
         const buildLookupConditions = (cCols: any, ops: any) => {
@@ -1579,6 +1808,24 @@ export function defineResource<
            
            if (!isUpdate) {
               // Create
+              if (!tenancy.isBypassed && tenancy.isTenancyActive) {
+                 if (Array.isArray(tenancy.tenantVal)) {
+                    if (validatedRow[tenancy.tenantField] !== undefined) {
+                       if (!tenancy.tenantVal.includes(validatedRow[tenancy.tenantField])) {
+                          results.errors.push({ index: i, error: `Invalid tenant identifier: ${validatedRow[tenancy.tenantField]}` });
+                          continue;
+                       }
+                    } else if (tenancy.tenantVal.length === 1) {
+                       validatedRow[tenancy.tenantField] = tenancy.tenantVal[0];
+                    } else {
+                       results.errors.push({ index: i, error: `Tenant identifier is ambiguous for row ${i}.` });
+                       continue;
+                    }
+                 } else if (tenancy.tenantVal !== undefined && tenancy.tenantVal !== null) {
+                    validatedRow[tenancy.tenantField] = tenancy.tenantVal;
+                 }
+              }
+
               if (ts?.created && !validatedRow[ts.created]) validatedRow[ts.created] = new Date().toISOString();
               if (ts?.updated) validatedRow[ts.updated] = new Date().toISOString();
               
@@ -1648,6 +1895,22 @@ export function defineResource<
               }
            } else {
               // Update
+              if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in validatedRow) {
+                 const attemptedTenant = validatedRow[tenancy.tenantField];
+                 if (attemptedTenant !== undefined) {
+                    if (Array.isArray(tenancy.tenantVal)) {
+                       if (!tenancy.tenantVal.includes(attemptedTenant)) {
+                          results.errors.push({ index: i, error: `Cannot change tenant identifier on row ${i}.` });
+                          continue;
+                       }
+                    } else if (attemptedTenant !== tenancy.tenantVal) {
+                       results.errors.push({ index: i, error: `Cannot change tenant identifier on row ${i}.` });
+                       continue;
+                    }
+                 }
+                 delete validatedRow[tenancy.tenantField];
+              }
+
               const isUnchanged = Object.keys(validatedRow).every(k => existing[k] === validatedRow[k]);
               if (isUnchanged) {
                  const hasRelations = config.relations && [
