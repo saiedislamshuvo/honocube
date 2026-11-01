@@ -326,4 +326,8 @@ export class DrizzleAdapter implements DatabaseAdapter<unknown, unknown, unknown
   getSql(): any {
     return sql;
   }
+
+  getDialect(): DrizzleDialect {
+    return this.resolveDialect();
+  }
 }

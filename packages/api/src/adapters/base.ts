@@ -132,4 +132,9 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
   // Advanced access
   getDb(): any;
   getSql(): any;
+
+  /**
+   * The SQL dialect in use by the adapter ("postgresql" | "mysql" | "sqlite").
+   */
+  getDialect?(): "postgresql" | "mysql" | "sqlite";
 }
