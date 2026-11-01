@@ -21,9 +21,9 @@ This will create a Hono instance with the following routing structure:
 - `/users/*` (mounted with `usersResource` apps)
 - `/posts/*` (mounted with `postsResource` apps)
 
-## Versioning
+## Versioning & Options
 
-You can optionally provide a version string to prefix all routes.
+You can provide either a version string or an options object to configure route prefixing and automated API documentation:
 
 ```typescript
 export const v1Api = defineApi({
@@ -31,6 +31,30 @@ export const v1Api = defineApi({
 }, "v1");
 ```
 Resulting path: `/v1/users`
+
+### Automated OpenAPI & Scalar Documentation
+
+You can also pass an options object with `docs`:
+
+```typescript
+export const api = defineApi(
+  {
+    users: usersResource,
+    posts: postsResource,
+  },
+  {
+    version: "v1", // Optional prefix
+    docs: {
+      path: "/docs",            // Interactive Scalar UI
+      specPath: "/openapi.json", // Raw OpenAPI 3.1 JSON
+      title: "My Application API",
+      version: "2.0.2",
+    },
+  }
+);
+```
+
+For more details, see the [OpenAPI & Scalar Documentation](./openapi-docs.md) guide.
 
 ## Mounting to a Main App
 

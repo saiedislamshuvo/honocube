@@ -4,6 +4,8 @@ import { dispatchSingleWebhook, isWebhookEventMatch, calculateRetryBackoff } fro
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { MemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
 import { MemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
+import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
+import { ApiOptions, OpenApiDocsConfig } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
   parseBatchDeleteBody,
@@ -4545,12 +4547,56 @@ function buildDateBucketSql(
 
 export function defineApi<Env extends Record<string, unknown> = Record<string, unknown>>(
   resources: Record<string, Hono<any>>,
-  version?: string
+  versionOrOptions?: string | ApiOptions
 ) {
+  let version: string | undefined;
+  let docsConfig: OpenApiDocsConfig | undefined;
+
+  if (typeof versionOrOptions === "string") {
+    version = versionOrOptions;
+  } else if (versionOrOptions && typeof versionOrOptions === "object") {
+    version = versionOrOptions.version;
+    if (typeof versionOrOptions.docs === "object") {
+      docsConfig = { enabled: true, ...versionOrOptions.docs };
+    } else if (versionOrOptions.docs === true) {
+      docsConfig = { enabled: true };
+    }
+  }
+
   const api = new Hono<{ Bindings: Env }>();
   
   for (const [path, resourceApp] of Object.entries(resources)) {
     api.route(`/${path}`, resourceApp);
+  }
+
+  // OpenAPI & Scalar Documentation Engine (Lazy Evaluation)
+  if (docsConfig && docsConfig.enabled !== false) {
+    const docsPath = (docsConfig.path || "/docs").replace(/\/+$/, "");
+    const specPath = (docsConfig.specPath || "/openapi.json").replace(/\/+$/, "");
+
+    let cachedSpec: Record<string, any> | null = null;
+    const getSpec = () => {
+      if (!cachedSpec) {
+        cachedSpec = generateOpenApiSpec(resources, {
+          title: docsConfig?.title || "HonoCube API",
+          version: docsConfig?.version || version || "2.0.2",
+          description: docsConfig?.description,
+          include: docsConfig?.include,
+        });
+      }
+      return cachedSpec;
+    };
+
+    // Serve raw OpenAPI 3.1 JSON spec
+    api.get(specPath, (c) => {
+      return c.json(getSpec());
+    });
+
+    // Serve interactive Scalar Documentation UI
+    api.get(docsPath, (c) => {
+      const fullSpecUrl = docsConfig?.specUrl || (version ? `/${version}${specPath}` : specPath);
+      return c.html(renderScalarDocsHtml(fullSpecUrl, docsConfig?.title || "HonoCube API Documentation"));
+    });
   }
 
   const apiConfig = { resources, version };

@@ -7,4 +7,5 @@ export * from "./utils/errors.js";
 export * from "./utils/webhooks.js";
 export * from "./utils/idempotency.js";
 export * from "./utils/rate-limit.js";
+export * from "./utils/openapi.js";
 export * from "./testing/index.js";
