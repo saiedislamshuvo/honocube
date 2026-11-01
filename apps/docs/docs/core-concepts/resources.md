@@ -34,6 +34,17 @@ export const usersResource = defineResource({
 | `permissions` | `Record<string, string>` | Declarative permission strings for each action. |
 | `softDelete` | `string` | The column name used for soft deletion. |
 | `timestamps` | `boolean \| { createdAt: string, updatedAt: string }` | Enable automatic timestamp management. |
+| `pagination` | `ResourcePaginationConfig` | Cursor / offset pagination settings (`type`, `defaultLimit`, `maxLimit`). |
+| `aggregate` | `ResourceAggregateConfig` | Analytics and grouping configuration for `GET /aggregate`. |
+| `idempotency` | `IdempotencyConfig` | Safe mutation retries with `Idempotency-Key` and payload fingerprinting. |
+| `rateLimit` | `ResourceRateLimitConfig` | Sliding window rate limiting with standard RFC headers. |
+| `workflow` | `ResourceWorkflowConfig` | State machine transitions, role gating, and locked document enforcement. |
+| `audit` | `ResourceAuditConfig` | Field-level before/after diff tracking and audit sink logging. |
+| `webhooks` | `ResourceWebhooksConfig` | Transactional outbox event dispatching with HMAC-SHA256 signatures. |
+| `tenant` | `ResourceTenantConfig` | Multi-tenant isolation and scoping. |
+| `flac` | `ResourceFlacConfig` | Field-Level Access Control for hidden or read-only fields. |
+| `computed` | `Record<string, Function>` | Virtual fields computed at query time. |
+| `namingSeries` | `ResourceNamingSeriesConfig` | Auto-generated sequential business identifiers (e.g. `INV-2026-#####`). |
 
 ## Automatic CRUD Endpoints
 

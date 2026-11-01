@@ -30,7 +30,6 @@ Turborepo + Yarn 1 workspaces.
 | `packages/api/src/types.ts` | Public type definitions, including `ResourceConfig`. |
 | `packages/api/src/utils/errors.ts` | The `ApiError` envelope — all errors route through here. |
 | `apps/docs` | Docusaurus documentation site. |
-| `apps/test-api` | Manual test playground. `scripts/*.ts` are **manual** scripts, not an automated suite. |
 | `packages/ui`, `packages/eslint-config`, `packages/typescript-config` | Shared tooling. |
 
 The published package is `packages/api`. Everything else is workspace-only.
@@ -110,11 +109,10 @@ yarn turbo run check-types
 Both must pass. If a change is not verifiable with the tooling available, say so
 explicitly in the PR body rather than claiming success.
 
-For `packages/api` specifically, also sanity-check the behaviour, not just the types.
-The manual scripts in `apps/test-api/scripts/` can be run for the features they cover:
+For `packages/api` specifically, also sanity-check the behaviour with Vitest:
 
 ```bash
-cd apps/test-api && npx tsx scripts/test-strategies.ts
+yarn workspace @honocube/api test
 ```
 
 ### 5. Commit
@@ -130,7 +128,7 @@ Format: `type(scope): summary` — matching the existing history.
 | `chore` | Tooling, config, dependencies |
 | `test` | Tests only |
 
-Scopes in use: `api`, `docs`, `test-api`, `ui`, `build`, `deps`.
+Scopes in use: `api`, `docs`, `ui`, `build`, `deps`.
 
 ```
 fix(api): apply scope and softDelete filters on update and delete

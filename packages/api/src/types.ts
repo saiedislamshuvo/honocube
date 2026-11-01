@@ -347,6 +347,23 @@ export interface IdempotencyConfig {
   storage?: IdempotencyStorage;
 }
 
+export interface OpenApiDocsConfig {
+  enabled?: boolean;
+  path?: string;
+  specPath?: string;
+  title?: string;
+  version?: string;
+  description?: string;
+  specUrl?: string;
+  include?: string[];
+}
+
+export interface ApiOptions {
+  version?: string;
+  docs?: boolean | OpenApiDocsConfig;
+}
+
+
 export interface ResourcePaginationConfig {
   type?: "offset" | "cursor" | "both";
   defaultLimit?: number;

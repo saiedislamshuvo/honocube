@@ -29,6 +29,11 @@ const sidebars: SidebarsConfig = {
       label: 'Core Concepts',
       items: [
         'core-concepts/resources',
+        'core-concepts/openapi-docs',
+        'core-concepts/pagination',
+        'core-concepts/aggregations',
+        'core-concepts/idempotency',
+        'core-concepts/rate-limiting',
         'core-concepts/relationships',
         'core-concepts/auth',
         'core-concepts/uploads',
@@ -41,6 +46,10 @@ const sidebars: SidebarsConfig = {
       label: 'Guides',
       items: [
         'guides/v2-migration',
+        'guides/workflows-and-state-machines',
+        'guides/audit-trail-and-webhooks',
+        'guides/multi-tenancy-and-rbac',
+        'guides/computed-fields-and-naming-series',
         'guides/custom-actions',
         'guides/validation-errors',
         'guides/llm-integration',
