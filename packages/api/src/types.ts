@@ -282,6 +282,17 @@ export type ComputedFieldDefinition<TRecord = any, AppContext = any, TResult = a
   | ComputedFieldResolver<TRecord, AppContext, TResult>
   | ComputedFieldConfig<TRecord, AppContext, TResult>;
 
+
+export interface ResourceAggregateConfig {
+  enabled?: boolean;
+  defaultMetrics?: string[];
+  allowedMetrics?: string[];
+  allowedFields?: string[];
+  allowedGroupBy?: string[];
+  dateColumn?: string;
+  maxLimit?: number;
+}
+
 export type MethodRoles = {
   list?: string[];
   detail?: string[];
@@ -292,6 +303,7 @@ export type MethodRoles = {
   "batch-delete"?: string[];
   "import-preview"?: string[];
   "import-execute"?: string[];
+  aggregate?: string[];
 };
 
 export interface NamingSeriesCounter {
@@ -921,7 +933,7 @@ export interface ResourceConfig<
   
   // Enterprise Features
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
-  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute")[];
+  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "aggregate")[];
   softDelete?: string; 
   slugs?: string[];
   tenancy?: boolean | ResourceTenancyConfig;
@@ -933,7 +945,8 @@ export interface ResourceConfig<
   audit?: boolean | AuditConfig<AppContext, TSelect>;
   outbox?: boolean | ResourceOutboxConfig;
   computed?: Record<string, ComputedFieldDefinition<TSelect, AppContext>>;
-  virtualFields?: Record<string, ComputedFieldDefinition<TSelect, AppContext>>; 
+  virtualFields?: Record<string, ComputedFieldDefinition<TSelect, AppContext>>;
+  aggregate?: boolean | ResourceAggregateConfig; 
   
   import?: {
     lookupBy: string | string[] | string[][];
@@ -958,8 +971,9 @@ export interface ResourceConfig<
     "batch-delete"?: string;
     "import-preview"?: string;
     "import-execute"?: string;
+    aggregate?: string;
   };
-  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute", record?: TSelect) => boolean | Promise<boolean>;
+  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "aggregate", record?: TSelect) => boolean | Promise<boolean>;
 
   // UI/API Hints
   hidden?: (keyof TSelect)[];

@@ -1062,7 +1062,7 @@ export function defineResource<
   // Helper to check both permissions and authorize
   const checkAccess = async (
     appContext: any, 
-    action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute", 
+    action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "aggregate", 
     record?: any
   ) => {
     // 0. Check declarative roles (RBAC)
@@ -1978,6 +1978,542 @@ export function defineResource<
       return c.json({ success: true, deleted: targetIds.length });
     });
   }
+
+
+function buildDateBucketSql(
+  dialect: "postgresql" | "mysql" | "sqlite",
+  sqlTag: any,
+  column: any,
+  interval: "year" | "month" | "day" | "week" | "hour"
+) {
+  if (dialect === "postgresql") {
+    switch (interval) {
+      case "year":
+        return sqlTag`to_char(${column}, 'YYYY')`;
+      case "month":
+        return sqlTag`to_char(${column}, 'YYYY-MM')`;
+      case "day":
+        return sqlTag`to_char(${column}, 'YYYY-MM-DD')`;
+      case "week":
+        return sqlTag`to_char(${column}, 'IYYY-IW')`;
+      case "hour":
+        return sqlTag`to_char(${column}, 'YYYY-MM-DD HH24:00')`;
+    }
+  } else if (dialect === "mysql") {
+    switch (interval) {
+      case "year":
+        return sqlTag`DATE_FORMAT(${column}, '%Y')`;
+      case "month":
+        return sqlTag`DATE_FORMAT(${column}, '%Y-%m')`;
+      case "day":
+        return sqlTag`DATE_FORMAT(${column}, '%Y-%m-%d')`;
+      case "week":
+        return sqlTag`DATE_FORMAT(${column}, '%Y-u%u')`;
+      case "hour":
+        return sqlTag`DATE_FORMAT(${column}, '%Y-%m-%d %H:00')`;
+    }
+  } else {
+    // sqlite
+    switch (interval) {
+      case "year":
+        return sqlTag`strftime('%Y', ${column})`;
+      case "month":
+        return sqlTag`strftime('%Y-%m', ${column})`;
+      case "day":
+        return sqlTag`strftime('%Y-%m-%d', ${column})`;
+      case "week":
+        return sqlTag`strftime('%Y-W%W', ${column})`;
+      case "hour":
+        return sqlTag`strftime('%Y-%m-%d %H:00', ${column})`;
+    }
+  }
+}
+
+  const isAggregateEnabled = methods.has("aggregate") || Boolean(config.aggregate);
+  if (isAggregateEnabled) {
+    const handleAggregate = async (c: Context) => {
+      const adapter = getAdapter(c);
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+
+      await checkRateLimit(c, appContext);
+      await checkAccess(appContext, "aggregate");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+
+      // Cache Check
+      const cacheKey = getCacheKey(c, "aggregate", undefined, appContext, tenancy.tenantVal, tenancy.isBypassed);
+      if (cacheKey) {
+        const cached = await globalConfig!.cache!.get(cacheKey);
+        if (cached) return c.json(cached);
+      }
+
+      if (config.hooks?.beforeFetch) {
+        await config.hooks.beforeFetch(c, { aggregate: true } as any, appContext);
+      }
+
+      const queryParams = c.req.query();
+      const cols = adapter.getColumns(config.table) as Record<string, any>;
+      const ops = adapter.getOperators();
+      const sqlTag = adapter.getSql();
+      const dialect: "postgresql" | "mysql" | "sqlite" = (adapter.getDialect?.() as any) ?? "sqlite";
+
+      const aggConfig = typeof config.aggregate === "object" ? config.aggregate : undefined;
+
+      // 1. Resolve date column for time-based features
+      const resolveDateCol = (): string | undefined => {
+        if (aggConfig?.dateColumn && cols[aggConfig.dateColumn]) return aggConfig.dateColumn;
+        const ts = getTimestampFields();
+        if (ts?.created && cols[ts.created]) return ts.created;
+        if (cols.createdAt) return "createdAt";
+        if (cols.created_at) return "created_at";
+        if (cols.date) return "date";
+        if (cols.timestamp) return "timestamp";
+        return undefined;
+      };
+
+      const dateCol = resolveDateCol();
+
+      // 2. Build Search Subqueries if q is provided
+      const q = queryParams.q;
+      const searchSubqueries: any[] = [];
+      if (q && config.search) {
+        // Search local fields
+        if (config.search.fields) {
+          const searchConds = [ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`)))];
+          if (tenancy.tenantCondition) {
+            searchConds.push(tenancy.tenantCondition);
+          }
+          const localSubquery = adapter.getDb()
+            .select({ id: adapter.getColumn(config.table as any, 'id') })
+            .from(config.table)
+            .where(ops.and(...searchConds));
+          searchSubqueries.push(localSubquery);
+        }
+        // Search relations
+        if (config.search.relations) {
+          for (const relName of config.search.relations) {
+            const oneRel = config.relations?.one?.find(r => r.name === relName);
+            if (oneRel && oneRel.search) {
+              const relSubquery = adapter.getDb()
+                .select({ parentId: adapter.getColumn(config.table as any, oneRel.foreignKey) })
+                .from(config.table)
+                .innerJoin(oneRel.table, ops.eq(adapter.getColumn(oneRel.table, oneRel.referenceKey), adapter.getColumn(config.table as any, oneRel.foreignKey)))
+                .where(ops.or(...oneRel.search.map(f => ops.like(adapter.getColumn(oneRel.table, f as string), `%${q}%`))));
+              searchSubqueries.push(relSubquery);
+            }
+            const manyRel = config.relations?.many?.find(r => r.name === relName);
+            if (manyRel && manyRel.search) {
+              const relSubquery = adapter.getDb()
+                .select({ parentId: adapter.getColumn(manyRel.table, manyRel.foreignKey) })
+                .from(manyRel.table)
+                .where(ops.or(...manyRel.search.map(f => ops.like(adapter.getColumn(manyRel.table, f as string), `%${q}%`))));
+              searchSubqueries.push(relSubquery);
+            }
+            const pivotRel = config.relations?.pivots?.find(r => r.name === relName);
+            if (pivotRel && pivotRel.search && pivotRel.targetTable) {
+              const relSubquery = adapter.getDb()
+                .select({ parentId: adapter.getColumn(pivotRel.table, pivotRel.foreignKey) })
+                .from(pivotRel.table)
+                .innerJoin(pivotRel.targetTable, ops.eq(adapter.getColumn(pivotRel.targetTable, pivotRel.targetReferenceKey), adapter.getColumn(pivotRel.table, pivotRel.referenceKey)))
+                .where(ops.or(...pivotRel.search.map(f => ops.like(adapter.getColumn(pivotRel.targetTable, f as string), `%${q}%`))));
+              searchSubqueries.push(relSubquery);
+            }
+          }
+        }
+      }
+
+      // 3. Build WHERE conditions
+      const conditions: any[] = [];
+
+      // Tenancy
+      if (tenancy.tenantCondition) {
+        conditions.push(tenancy.tenantCondition);
+      }
+
+      // Soft delete
+      if (config.softDelete && cols[config.softDelete]) {
+        conditions.push(ops.isNull(cols[config.softDelete]));
+      }
+
+      // Scope
+      if (config.scope) {
+        const scoped = config.scope(cols, ops, appContext);
+        if (scoped) conditions.push(scoped);
+      }
+
+      // Search subqueries
+      if (searchSubqueries.length > 0) {
+        conditions.push(ops.or(...searchSubqueries.map(sq => sqlTag`${cols.id} IN (${sq})`)));
+      } else if (q && config.search) {
+        conditions.push(ops.eq(cols.id, -1));
+      }
+
+      // Direct Query Filters
+      const reservedParams = new Set([
+        'limit', 'page', 'q', 'sort', 'order',
+        'metrics', 'aggregate', 'groupBy', 'group_by',
+        'timeframe', 'from', 'to', 'startDate', 'endDate'
+      ]);
+
+      const allowedFilters = config.filter?.allow || [];
+      for (const [key, value] of Object.entries(queryParams)) {
+        if (reservedParams.has(key)) continue;
+        if (value === "" || value == null) continue;
+
+        const rangeMatch = key.match(/^(.+)__(gte|lte|gt|lt|like)$/);
+        let field = key;
+        let op = ops.eq;
+
+        if (rangeMatch) {
+          const [, f, suffix] = rangeMatch;
+          field = f!;
+          if (suffix === 'gte') op = ops.gte;
+          else if (suffix === 'lte') op = ops.lte;
+          else if (suffix === 'gt') op = ops.gt;
+          else if (suffix === 'lt') op = ops.lt;
+          else if (suffix === 'like') op = ops.like;
+        }
+
+        if (allowedFilters.length > 0 && !allowedFilters.includes(field)) {
+          continue;
+        }
+
+        if (cols[field]) {
+          const finalValue = op === ops.like ? `%${value}%` : value;
+          conditions.push(op(cols[field], finalValue));
+        }
+      }
+
+      // Date range / timeframe filters
+      const timeframe = queryParams.timeframe;
+      const fromParam = queryParams.from || queryParams.startDate;
+      const toParam = queryParams.to || queryParams.endDate;
+
+      if ((timeframe || fromParam || toParam) && !dateCol) {
+        throw new ApiError(
+          400,
+          "INVALID_TIMEFRAME",
+          `Resource '${config.name}' does not have a date column configured for timeframe filtering.`
+        );
+      }
+
+      if (dateCol) {
+        if (fromParam) {
+          conditions.push(ops.gte(cols[dateCol], fromParam));
+        }
+        if (toParam) {
+          conditions.push(ops.lte(cols[dateCol], toParam));
+        }
+        if (timeframe) {
+          const tfLower = timeframe.toLowerCase();
+          if (tfLower === "today") {
+            const start = new Date();
+            start.setUTCHours(0, 0, 0, 0);
+            conditions.push(ops.gte(cols[dateCol], start.toISOString()));
+          } else if (tfLower === "yesterday") {
+            const start = new Date();
+            start.setUTCDate(start.getUTCDate() - 1);
+            start.setUTCHours(0, 0, 0, 0);
+            const end = new Date(start);
+            end.setUTCHours(23, 59, 59, 999);
+            conditions.push(ops.gte(cols[dateCol], start.toISOString()));
+            conditions.push(ops.lte(cols[dateCol], end.toISOString()));
+          } else {
+            const match = tfLower.match(/^(\d+)([hdmyw])$/);
+            if (!match) {
+              throw new ApiError(
+                400,
+                "INVALID_TIMEFRAME",
+                `Invalid timeframe '${timeframe}'. Expected format like '30d', '7d', '24h', 'today', 'yesterday'.`
+              );
+            }
+            const num = parseInt(match[1]!, 10);
+            const unit = match[2]!;
+            let ms = 0;
+            switch (unit) {
+              case "h": ms = num * 3600 * 1000; break;
+              case "d": ms = num * 86400 * 1000; break;
+              case "w": ms = num * 7 * 86400 * 1000; break;
+              case "m": ms = num * 30 * 86400 * 1000; break;
+              case "y": ms = num * 365 * 86400 * 1000; break;
+            }
+            const since = new Date(Date.now() - ms).toISOString();
+            conditions.push(ops.gte(cols[dateCol], since));
+          }
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? ops.and(...conditions) : undefined;
+
+      // 4. Parse Metrics
+      const rawMetrics = queryParams.metrics || queryParams.aggregate;
+      const metricsList = rawMetrics
+        ? rawMetrics.split(",").map(m => m.trim()).filter(Boolean)
+        : (aggConfig?.defaultMetrics ?? ["count"]);
+
+      if (metricsList.length === 0) {
+        metricsList.push("count");
+      }
+
+      const parsedMetrics: { fn: string; col?: string; alias: string }[] = [];
+      const allowedFns = new Set(["count", "sum", "avg", "min", "max"]);
+
+      for (const item of metricsList) {
+        let fn: string;
+        let col: string | undefined;
+        let alias: string;
+
+        if (item.includes(" as ") || item.includes(" AS ")) {
+          const [expr, asAlias] = item.split(/\s+as\s+/i);
+          alias = asAlias!.trim();
+          if (expr!.includes(":")) {
+            const [f, cName] = expr!.split(":");
+            fn = f!.trim().toLowerCase();
+            col = cName!.trim();
+          } else {
+            fn = expr!.trim().toLowerCase();
+          }
+        } else if (item.includes(":")) {
+          const parts = item.split(":");
+          fn = parts[0]!.trim().toLowerCase();
+          col = parts[1]!.trim();
+          alias = parts[2] ? parts[2].trim() : `${fn}_${col}`;
+        } else {
+          fn = item.trim().toLowerCase();
+          alias = fn;
+        }
+
+        if (!allowedFns.has(fn)) {
+          throw new ApiError(
+            400,
+            "INVALID_METRIC",
+            `Unsupported aggregation function '${fn}'. Supported functions: count, sum, avg, min, max.`
+          );
+        }
+
+        if (aggConfig?.allowedMetrics && !aggConfig.allowedMetrics.includes(fn)) {
+          throw new ApiError(
+            400,
+            "FORBIDDEN_METRIC",
+            `Aggregation function '${fn}' is not allowed for resource '${config.name}'.`
+          );
+        }
+
+        if (col) {
+          if (!cols[col]) {
+            throw new ApiError(
+              400,
+              "INVALID_COLUMN",
+              `Column '${col}' does not exist on table '${config.name}'.`
+            );
+          }
+          if (aggConfig?.allowedFields && !aggConfig.allowedFields.includes(col)) {
+            throw new ApiError(
+              400,
+              "FORBIDDEN_FIELD",
+              `Field '${col}' is not allowed in aggregations for resource '${config.name}'.`
+            );
+          }
+        }
+
+        parsedMetrics.push({ fn, col, alias });
+      }
+
+      // 5. Parse GroupBy
+      const rawGroupBy = queryParams.groupBy || queryParams.group_by;
+      const groupByList = rawGroupBy
+        ? rawGroupBy.split(",").map(g => g.trim()).filter(Boolean)
+        : [];
+
+      const selectObj: Record<string, any> = {};
+      const groupByExpressions: any[] = [];
+      const parsedGroupByMeta: string[] = [];
+
+      const intervalMap: Record<string, "year" | "month" | "day" | "week" | "hour"> = {
+        year: "year",
+        month: "month",
+        day: "day",
+        week: "week",
+        hour: "hour"
+      };
+
+      for (const item of groupByList) {
+        if (aggConfig?.allowedGroupBy && !aggConfig.allowedGroupBy.includes(item)) {
+          throw new ApiError(
+            400,
+            "FORBIDDEN_GROUP_BY",
+            `GroupBy expression '${item}' is not allowed for resource '${config.name}'.`
+          );
+        }
+
+        if (item.includes(":")) {
+          const [field, intervalRaw] = item.split(":");
+          const interval = intervalMap[intervalRaw!.trim().toLowerCase()];
+          if (!interval) {
+            throw new ApiError(
+              400,
+              "INVALID_GROUP_INTERVAL",
+              `Invalid time bucket interval '${intervalRaw}'. Allowed: year, month, day, week, hour.`
+            );
+          }
+          const colName = field!.trim();
+          if (!cols[colName]) {
+            throw new ApiError(
+              400,
+              "INVALID_COLUMN",
+              `Column '${colName}' does not exist on table '${config.name}'.`
+            );
+          }
+          const bucketSql = buildDateBucketSql(dialect, sqlTag, cols[colName], interval);
+          selectObj[colName] = bucketSql;
+          if (colName !== "period") {
+            selectObj.period = bucketSql;
+          }
+          groupByExpressions.push(bucketSql);
+          parsedGroupByMeta.push(item);
+        } else if (intervalMap[item.toLowerCase()]) {
+          // shorthand: e.g. groupBy=day
+          const interval = intervalMap[item.toLowerCase()]!;
+          if (!dateCol) {
+            throw new ApiError(
+              400,
+              "INVALID_GROUP_BY",
+              `Cannot group by '${item}' because resource '${config.name}' does not have a configured date column.`
+            );
+          }
+          const bucketSql = buildDateBucketSql(dialect, sqlTag, cols[dateCol], interval);
+          selectObj.period = bucketSql;
+          if (dateCol !== "period") {
+            selectObj[dateCol] = bucketSql;
+          }
+          groupByExpressions.push(bucketSql);
+          parsedGroupByMeta.push(item);
+        } else {
+          // categorical
+          if (!cols[item]) {
+            throw new ApiError(
+              400,
+              "INVALID_COLUMN",
+              `Column '${item}' does not exist on table '${config.name}'.`
+            );
+          }
+          selectObj[item] = cols[item];
+          groupByExpressions.push(cols[item]);
+          parsedGroupByMeta.push(item);
+        }
+      }
+
+      // Add metrics to selectObj
+      for (const metric of parsedMetrics) {
+        const { fn, col, alias } = metric;
+        if (fn === "count") {
+          selectObj[alias] = col ? sqlTag`count(${cols[col]})` : sqlTag`count(*)`;
+        } else if (fn === "sum") {
+          selectObj[alias] = sqlTag`sum(${cols[col!]})`;
+        } else if (fn === "avg") {
+          selectObj[alias] = sqlTag`avg(${cols[col!]})`;
+        } else if (fn === "min") {
+          selectObj[alias] = sqlTag`min(${cols[col!]})`;
+        } else if (fn === "max") {
+          selectObj[alias] = sqlTag`max(${cols[col!]})`;
+        }
+      }
+
+      // 6. Build and execute Query
+      const db = adapter.getDb();
+      let query = db.select(selectObj).from(config.table).$dynamic();
+
+      if (whereClause) {
+        query = query.where(whereClause);
+      }
+
+      if (groupByExpressions.length > 0) {
+        query = query.groupBy(...groupByExpressions);
+
+        // Sorting
+        const sortParam = queryParams.sort;
+        const orderParam = queryParams.order?.toLowerCase() === "desc" ? "desc" : "asc";
+
+        if (sortParam && selectObj[sortParam]) {
+          query = query.orderBy(sqlTag`${selectObj[sortParam]} ${orderParam === "desc" ? sqlTag`DESC` : sqlTag`ASC`}`);
+        } else {
+          query = query.orderBy(...groupByExpressions.map(expr => sqlTag`${expr} ASC`));
+        }
+
+        const maxLimit = aggConfig?.maxLimit ?? 500;
+        const requestedLimit = parseLimit(queryParams.limit, maxLimit);
+        const limit = Math.min(requestedLimit ?? 100, maxLimit);
+        query = query.limit(limit);
+      }
+
+      const rows: any[] = await query;
+
+      // 7. Format Result Rows
+      const formatRow = (row: any) => {
+        const out = { ...row };
+        for (const metric of parsedMetrics) {
+          const val = out[metric.alias];
+          if (metric.fn === "count") {
+            out[metric.alias] = Number(val ?? 0);
+          } else if (metric.fn === "sum") {
+            out[metric.alias] = val != null ? Number(val) : 0;
+          } else if (metric.fn === "avg") {
+            out[metric.alias] = val != null ? Number(Number(val).toFixed(4)) : null;
+          } else if (metric.fn === "min" || metric.fn === "max") {
+            out[metric.alias] = val != null ? (isNaN(Number(val)) ? val : Number(val)) : null;
+          }
+        }
+        return out;
+      };
+
+      const metricAliases = parsedMetrics.map(m => m.alias);
+
+      let responseData: any;
+      let totalRecords = 0;
+
+      if (groupByExpressions.length === 0) {
+        const rawFirst = rows[0] ?? {};
+        responseData = formatRow(rawFirst);
+        const countMetric = parsedMetrics.find(m => m.fn === "count");
+        if (countMetric) {
+          totalRecords = responseData[countMetric.alias] ?? 0;
+        } else {
+          totalRecords = await adapter.count(config.table, whereClause);
+        }
+      } else {
+        responseData = rows.map(formatRow);
+        const countMetric = parsedMetrics.find(m => m.fn === "count");
+        if (countMetric) {
+          totalRecords = responseData.reduce((acc: number, r: any) => acc + (Number(r[countMetric.alias]) || 0), 0);
+        } else {
+          totalRecords = await adapter.count(config.table, whereClause);
+        }
+      }
+
+      const response = {
+        success: true,
+        data: responseData,
+        meta: {
+          metrics: metricAliases,
+          ...(parsedGroupByMeta.length > 0 ? { groupBy: parsedGroupByMeta } : {}),
+          totalRecords,
+          ...(timeframe ? { timeframe } : {}),
+          ...(fromParam ? { from: fromParam } : {}),
+          ...(toParam ? { to: toParam } : {})
+        }
+      };
+
+      if (cacheKey) {
+        await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
+      }
+
+      return c.json(response);
+    };
+
+    app.get("/aggregate", handleAggregate);
+    app.get("/stats", handleAggregate);
+  }
+
 
   if (methods.has("detail")) {
     app.get("/:id", async (c) => {
