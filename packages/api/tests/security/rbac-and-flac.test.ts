@@ -565,5 +565,253 @@ describe("RBAC and FLAC (Role-Based & Field-Level Access Control)", () => {
       // Import 2 succeeds
       expect(json.results.creates.length).toBe(1);
     });
+    it("evaluates permission strings via auth.can for read and write", async () => {
+      const { adapter } = await createTestDb();
+
+      let permissions = ["posts.view_price"];
+      const app = createApp<{ Bindings: Record<string, unknown> }, { role: string }>({
+        adapter,
+        getContext: () => ({ role: "user" }),
+        auth: {
+          can: async (ctx, perm) => permissions.includes(perm),
+        },
+      });
+
+      const postsResource = app.defineResource({
+        name: "posts",
+        table: posts,
+        validator: z.object({
+          title: z.string(),
+          price: z.number().optional(),
+        }),
+        fields: {
+          price: {
+            read: "posts.view_price",
+            write: "posts.edit_price",
+          },
+        },
+      });
+
+      const seed: any = await adapter.insert(posts, { title: "Item", price: 100 });
+
+      // 1. Can read price because permission "posts.view_price" is present
+      const res1 = await (await postsResource.request(`/${seed.id}`, { method: "GET" })).json();
+      expect(res1.data.price).toBe(100);
+
+      // 2. Cannot write price without "posts.edit_price" (silent strip)
+      const res2 = await postsResource.request(`/${seed.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price: 200 }),
+      });
+      expect(res2.status).toBe(200);
+      const res2Json = await res2.json();
+      expect(res2Json.data.price).toBe(100); // Unchanged
+
+      // 3. Grant "posts.edit_price" and revoke "posts.view_price"
+      permissions = ["posts.edit_price"];
+      const res3 = await postsResource.request(`/${seed.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ price: 300 }),
+      });
+      expect(res3.status).toBe(200);
+      const res3Json = await res3.json();
+      // Price was updated in DB, but stripped on read because "posts.view_price" is missing
+      expect(res3Json.data.price).toBeUndefined();
+
+      // Verify in DB directly that price was indeed updated to 300
+      const inDb: any = await adapter.findFirst(posts, {
+        where: (cols: any, { eq }: any) => eq(cols.id, seed.id),
+      });
+      expect(inDb.price).toBe(300);
+    });
+
+    it("evaluates dynamic ownership predicates on write with existingRecord", async () => {
+      const { adapter } = await createTestDb();
+
+      let currentUserId = 1;
+      const app = createApp<{ Bindings: Record<string, unknown> }, { userId: number }>({
+        adapter,
+        getContext: () => ({ userId: currentUserId }),
+      });
+
+      const postsResource = app.defineResource({
+        name: "posts",
+        table: posts,
+        validator: z.object({
+          title: z.string().optional(),
+          content: z.string().optional(),
+        }),
+        fieldViolationStrategy: "reject",
+        fields: {
+          content: {
+            // Only the original author can edit content on update
+            write: (ctx, existing) => !existing || ctx.userId === existing.authorId,
+          },
+        },
+      });
+
+      const author: any = await adapter.insert(users, { name: "Author", email: "author@example.com" });
+      currentUserId = author.id;
+      const seed: any = await adapter.insert(posts, {
+        title: "Author Post",
+        content: "Original Content",
+        authorId: author.id,
+      });
+
+      // User 2 attempts to change content -> rejected
+      currentUserId = author.id + 999;
+      const res1 = await postsResource.request(`/${seed.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "Hacked Content" }),
+      });
+      expect(res1.status).toBe(403);
+      const err = await res1.json();
+      expect(err.error.code).toBe("FIELD_FORBIDDEN");
+
+      // Author updates content -> succeeds
+      currentUserId = author.id;
+      const res2 = await postsResource.request(`/${seed.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "Updated Content" }),
+      });
+      expect(res2.status).toBe(200);
+      const updated = await res2.json();
+      expect(updated.data.content).toBe("Updated Content");
+    });
+
+    it("allows schema defaults when client omits protected field under 'reject' strategy", async () => {
+      const { adapter } = await createTestDb();
+
+      const app = createApp({
+        adapter,
+        getContext: () => ({ role: "user" }),
+      });
+
+      const postsResource = app.defineResource({
+        name: "posts",
+        table: posts,
+        validator: z.object({
+          title: z.string(),
+          status: z.string().default("draft"),
+        }),
+        fieldViolationStrategy: "reject",
+        fields: {
+          status: { write: ["admin"] },
+        },
+      });
+
+      // User does NOT send status -> should succeed with default 'draft'
+      const res = await postsResource.request("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Default Status Post" }),
+      });
+      expect(res.status).toBe(201);
+      const created = await res.json();
+      expect(created.data.status).toBe("draft");
+    });
+
+    it("supports multiple roles in context and batch-delete RBAC", async () => {
+      const { adapter } = await createTestDb();
+
+      let userRoles = ["viewer", "editor"];
+      const app = createApp<{ Bindings: Record<string, unknown> }, { roles: string[] }>({
+        adapter,
+        getContext: () => ({ roles: userRoles }),
+      });
+
+      const postsResource = app.defineResource({
+        name: "posts",
+        table: posts,
+        methods: ["list", "detail", "create", "delete", "batch-delete"],
+        validator: z.object({ title: z.string() }),
+        roles: {
+          create: ["editor"],
+          "batch-delete": ["superadmin"],
+        },
+      });
+
+      // 1. User has ['viewer', 'editor'] -> can create
+      const createRes = await postsResource.request("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Multi-Role Post" }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+
+      // 2. User cannot batch-delete without 'superadmin'
+      const batchDelRes = await postsResource.request("/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [created.data.id] }),
+      });
+      expect(batchDelRes.status).toBe(403);
+
+      // 3. Add 'superadmin' -> can batch-delete
+      userRoles = ["superadmin"];
+      const okBatchDel = await postsResource.request("/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [created.data.id] }),
+      });
+      expect(okBatchDel.status).toBe(200);
+    });
+
+    it("enforces read FLAC on nested relations", async () => {
+      const { adapter } = await createTestDb();
+
+      let currentRole = "viewer";
+      const app = createApp<{ Bindings: Record<string, unknown> }, { role: string }>({
+        adapter,
+        getContext: () => ({ role: currentRole }),
+      });
+
+      const user1: any = await adapter.insert(users, {
+        name: "Alice",
+        email: "alice@example.com",
+      });
+
+      const postsResource = app.defineResource({
+        name: "posts",
+        table: posts,
+        validator: z.object({ title: z.string() }),
+        relations: {
+          one: [
+            {
+              name: "author",
+              table: users,
+              foreignKey: "authorId",
+              referenceKey: "id",
+              fields: {
+                email: { read: ["admin"], mask: "***@masked.com" },
+              },
+            },
+          ],
+        },
+        with: {
+          author: true,
+        },
+      });
+
+      const post1: any = await adapter.insert(posts, {
+        title: "Relational Post",
+        authorId: user1.id,
+      });
+
+      // 1. Viewer gets masked author email
+      const res1 = await (await postsResource.request(`/${post1.id}`, { method: "GET" })).json();
+      expect(res1.data.author.name).toBe("Alice");
+      expect(res1.data.author.email).toBe("***@masked.com");
+
+      // 2. Admin gets unmasked author email
+      currentRole = "admin";
+      const res2 = await (await postsResource.request(`/${post1.id}`, { method: "GET" })).json();
+      expect(res2.data.author.email).toBe("alice@example.com");
+    });
   });
 });

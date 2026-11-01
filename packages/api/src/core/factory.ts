@@ -1075,6 +1075,7 @@ export function defineResource<
         }
 
         if (targetIds.length === 0) return 0; // Hook rejected all IDs
+        if (Object.keys(validatedData).length === 0) return targetIds.length; // No fields to update (stripped or empty)
 
         // Apply mandatory scope
         let scopedWhere;
@@ -1603,29 +1604,32 @@ export function defineResource<
         }
 
         if (strategy === "batch") {
-          // 1. Add Parent Statement
-          let expectedVersion: any;
-          if (config.versionControl) {
-            const vField = config.versionControl.field;
-            expectedVersion = data[vField];
-            if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
-            validated[vField] = expectedVersion + 1;
+          // 1. Add Parent Statement (if there are fields to update)
+          const hasParentFields = Object.keys(validated).length > 0;
+          if (hasParentFields) {
+            let expectedVersion: any;
+            if (config.versionControl) {
+              const vField = config.versionControl.field;
+              expectedVersion = data[vField];
+              if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
+              validated[vField] = expectedVersion + 1;
+            }
+
+            let parentStmt: any = tx.updateStmt(config.table, id, validated);
+
+            // The scope and soft-delete filters are part of the write itself,
+            // so a row that stopped matching them after the lookup is not
+            // written either.
+            if (config.versionControl) {
+               const vField = config.versionControl.field;
+               const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
+               parentStmt = parentStmt.where(updateCondition);
+            } else {
+               parentStmt = parentStmt.where(recordPredicate);
+            }
+
+            stmts.push(parentStmt);
           }
-
-          let parentStmt: any = tx.updateStmt(config.table, id, validated);
-
-          // The scope and soft-delete filters are part of the write itself,
-          // so a row that stopped matching them after the lookup is not
-          // written either.
-          if (config.versionControl) {
-             const vField = config.versionControl.field;
-             const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
-             parentStmt = parentStmt.where(updateCondition);
-          } else {
-             parentStmt = parentStmt.where(recordPredicate);
-          }
-
-          stmts.push(parentStmt);
 
           // 2. Sync Relations (if provided)
           if (config.relations) {
@@ -1662,8 +1666,15 @@ export function defineResource<
             }
           }
 
-          const results = await tx.batch(stmts);
-          const updated = Array.isArray(results[0]) ? results[0][0] : results[0];
+          let updated: any;
+          if (stmts.length > 0) {
+            const results = await tx.batch(stmts);
+            updated = hasParentFields
+              ? (Array.isArray(results[0]) ? results[0][0] : results[0])
+              : existingRecord;
+          } else {
+            updated = existingRecord;
+          }
 
           if (config.versionControl && !updated) {
             throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
@@ -1677,34 +1688,39 @@ export function defineResource<
         } else {
           // Traditional imperative strategy
           // 1. Update Parent
-          let expectedVersion: any;
-          if (config.versionControl) {
-            const vField = config.versionControl.field;
-            expectedVersion = data[vField];
-            if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
-            validated[vField] = expectedVersion + 1;
-          }
+          let updated: any;
+          if (Object.keys(validated).length > 0) {
+            let expectedVersion: any;
+            if (config.versionControl) {
+              const vField = config.versionControl.field;
+              expectedVersion = data[vField];
+              if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
+              validated[vField] = expectedVersion + 1;
+            }
 
-          let updateQuery: any = tx.updateStmt(config.table, id, validated);
+            let updateQuery: any = tx.updateStmt(config.table, id, validated);
 
-          // The scope and soft-delete filters are part of the write itself,
-          // so a row that stopped matching them after the lookup is not
-          // written either.
-          if (config.versionControl) {
-             const vField = config.versionControl.field;
-             const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
-             updateQuery = updateQuery.where(updateCondition);
+            // The scope and soft-delete filters are part of the write itself,
+            // so a row that stopped matching them after the lookup is not
+            // written either.
+            if (config.versionControl) {
+               const vField = config.versionControl.field;
+               const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
+               updateQuery = updateQuery.where(updateCondition);
+            } else {
+               updateQuery = updateQuery.where(recordPredicate);
+            }
+
+            const results = await updateQuery;
+            updated = Array.isArray(results) ? results[0] : results;
+            
+            if (config.versionControl && !updated) {
+              throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
+            } else if (!updated) {
+              throw ApiError.notFound();
+            }
           } else {
-             updateQuery = updateQuery.where(recordPredicate);
-          }
-
-          const results = await updateQuery;
-          const updated = Array.isArray(results) ? results[0] : results;
-          
-          if (config.versionControl && !updated) {
-            throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
-          } else if (!updated) {
-            throw ApiError.notFound();
+            updated = existingRecord;
           }
 
           // 2. Sync Relations (if provided)
