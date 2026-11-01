@@ -24,7 +24,7 @@ To elevate Honocube into an **enterprise-grade application framework** capable o
 
 | Capability / Domain | Current Honocube | ERPNext (Frappe) | Payload CMS | Twenty CRM | Honocube Target (v2.1+) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Schema & UI Reflection** | Code-only (no metadata API) | Native DocType Engine (JSON/DB) | Collection schema JSON for Admin | Standard & Custom Object Metadata API | `GET /api/_meta` Introspection Engine |
+| **Schema & UI Reflection** | Code-only (no metadata API) | Native DocType Engine (JSON/DB) | Collection schema JSON for Admin | Standard & Custom Object Metadata API | Compile-Time Code & Type Sharing (No Runtime `_meta` Exposure) |
 | **Multi-Tenancy** | Manual `scope()` filter | Site-based & company-based | Multi-tenant plugin | Workspace / Org isolation engine | Built-in Tenancy Middleware (Row, Schema, DB) |
 | **Access Control (RBAC)** | Action string check (`auth.can`) + `authorize` | Role Permissions Manager | Collection & field-level access control | Workspace -> Team -> User hierarchy | Granular RBAC + Team Ownership |
 | **Field-Level Security** | Static `hidden: []` only | Read/Write/Hidden per field by role | Dynamic `access.read` / `access.update` | Field-level permissions per role | Dynamic Field-Level Access Control (FLAC) |
@@ -63,11 +63,8 @@ The Admin Frontend will live in a separate package (`@honocube/admin`) with its 
 
 1. **The Strangler Fig Migration Pattern:**
    Enterprises can immediately deploy the Honocube Admin UI to replace their aging legacy user interfaces. Initially, certain screens connect to legacy backend APIs via custom data providers, while modern modules connect to Honocube APIs.
-2. **Eliminating Duplicate Configuration via Auto-Scaffolding:**
-   When using both Honocube backend and frontend, developers avoid double work through the **Metadata Bridge**:
-   - The backend exposes `GET /api/_meta`.
-   - A CLI generator (`honocube admin:generate`) or dynamic loader (`createAdminResourceFromApi()`) auto-infers default table columns, form inputs, validation rules, and relations.
-   - Developers only write frontend config for customizations (e.g., custom tabs, widgets, KPI cards, custom cell badges).
+2. **Compile-Time Code & Type Sharing (No Runtime Introspection Exposure):**
+   When using both Honocube backend and frontend in a monorepo or colocated architecture, developers share models, types, and validation schemas directly at compile-time via TypeScript and Hono RPC (hc<AppType>). Runtime metadata introspection (GET /_meta) is explicitly omitted to prevent reconnaissance attack surfaces and eliminate runtime reflection overhead.
 3. **Pluggable Themes & UI Agnosticism:**
    - **Headless Core (`@honocube/admin-core`):** Framework-agnostic state machine managing table pagination, sorting, active filters, form state, dirty checking, and permissions.
    - **Pluggable Themes:** `@honocube/theme-shadcn` (default Tailwind/Radix), `@honocube/theme-dense` (ERPNext-inspired dense data tables), or custom company themes.
@@ -142,17 +139,17 @@ Before rolling out enterprise extensions in v2.1+, an automated test suite must 
 
 ```mermaid
 flowchart LR
-    V20[v2.0.0 Stable Baseline\nPeer-dep decoupling, batch fixes] --> V21[v2.1.0 Metadata & Querying\nGET /_meta, dynamic ?with, ?fields]
+    V20[v2.0.0 Stable Baseline\nPeer-dep decoupling, batch fixes] --> V21[v2.1.0 Governance & Tenancy\nMulti-Tenancy, Field RBAC, Audit]
     V21 --> V22[v2.2.0 Governance & Tenancy\nAuto-tenancy, Field RBAC, Audit]
     V22 --> V23[v2.3.0 Workflows & Numbering\nState machines, Naming series]
     V23 --> V24[v2.4.0 Async Queue & Webhooks\nAppQueue, Outbox, Bulk Jobs]
 ```
 
 - **v2.0.0 (Current Release):** Release the peer-dependency decoupling, Standard Schema v1 adoption, and core batch fixes.
-- **v2.1.0 (Metadata & Dynamic Queries):**
-  - Implement `GET /api/_meta` schema reflection endpoint.
-  - Add client-driven `?fields=...` sparse fieldsets and `?with=...` dynamic population.
-  - Bootstrap `@honocube/admin-core` prototype.
+- **v2.1.0 (Tenancy, RBAC & Security):**
+  - Built-in Multi-Tenancy engine (subdomain/header resolution, holding company support, Better Auth integration).
+  - Granular with relation loading (list vs detail vs slug).
+  - Field-Level Access Control (FLAC), field masking, and declarative method-level RBAC.
 - **v2.2.0 (Tenancy & Security):**
   - Add built-in Multi-Tenancy middleware (subdomain/header resolution).
   - Add Field-Level Access Control (FLAC) and field masking.

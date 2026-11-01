@@ -203,6 +203,95 @@ export function defineResource<
     app.use(...config.middleware);
   }
 
+  const getUserRoles = async (appContext: any): Promise<string[]> => {
+    if (globalConfig?.auth?.getRole) {
+      const customRole = await globalConfig.auth.getRole(appContext);
+      if (customRole == null) return [];
+      return Array.isArray(customRole) ? customRole.map(String) : [String(customRole)];
+    }
+
+    const roles = new Set<string>();
+    const candidates = [
+      appContext?.role,
+      appContext?.roles,
+      appContext?.user?.role,
+      appContext?.user?.roles,
+      appContext?.member?.role,
+      appContext?.member?.roles,
+      appContext?.session?.user?.role,
+      appContext?.session?.user?.roles,
+      appContext?.session?.member?.role,
+      appContext?.session?.member?.roles,
+    ];
+
+    for (const val of candidates) {
+      if (val != null) {
+        if (Array.isArray(val)) {
+          for (const item of val) {
+            if (item != null) roles.add(String(item));
+          }
+        } else {
+          roles.add(String(val));
+        }
+      }
+    }
+
+    return Array.from(roles);
+  };
+
+  const evaluateFieldRule = async (
+    rule: boolean | string | string[] | ((appContext: any, record?: any) => boolean | Promise<boolean>),
+    appContext: any,
+    record?: any
+  ): Promise<boolean> => {
+    if (typeof rule === "boolean") {
+      return rule;
+    }
+    if (typeof rule === "function") {
+      return await rule(appContext, record);
+    }
+    if (Array.isArray(rule)) {
+      const userRoles = await getUserRoles(appContext);
+      return userRoles.some((r) => rule.includes(r));
+    }
+    if (typeof rule === "string") {
+      if (globalConfig?.auth?.can) {
+        return await globalConfig.auth.can(appContext, rule, record);
+      }
+      const userRoles = await getUserRoles(appContext);
+      return userRoles.includes(rule);
+    }
+    return true;
+  };
+
+  const sanitizeWritePayload = async (
+    data: any,
+    appContext: any,
+    existingRecord?: any
+  ) => {
+    if (!config.fields || typeof data !== "object" || data === null) return data;
+
+    const strategy = config.fieldViolationStrategy ?? "strip";
+
+    for (const [fieldName, rule] of Object.entries(config.fields as Record<string, any>)) {
+      if (rule.write !== undefined && fieldName in data) {
+        const isAllowed = await evaluateFieldRule(rule.write, appContext, existingRecord);
+        if (!isAllowed) {
+          if (strategy === "reject") {
+            throw new ApiError(
+              403,
+              "FIELD_FORBIDDEN",
+              `Not authorized to modify field '${fieldName}' on '${config.name}'.`
+            );
+          } else {
+            delete data[fieldName];
+          }
+        }
+      }
+    }
+    return data;
+  };
+
   const finalize = async (row: any, appContext: any, localConfig: any = config): Promise<any> => {
     if (!row) return row;
     
@@ -218,6 +307,22 @@ export function defineResource<
     // 2. Hide local fields
     for (const key of hidden) {
       delete out[key];
+    }
+
+    // 2.5 Field-Level Access Control (FLAC) on read
+    if (currentConfig.fields) {
+      for (const [fieldName, rule] of Object.entries(currentConfig.fields as Record<string, any>)) {
+        if (rule.read !== undefined && fieldName in out) {
+          const isAllowed = await evaluateFieldRule(rule.read, appContext, out);
+          if (!isAllowed) {
+            if (rule.mask !== undefined) {
+              out[fieldName] = typeof rule.mask === "function" ? rule.mask(out[fieldName]) : rule.mask;
+            } else {
+              delete out[fieldName];
+            }
+          }
+        }
+      }
     }
 
     // 3. Resolve Media URLs
@@ -260,6 +365,27 @@ export function defineResource<
     action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute", 
     record?: any
   ) => {
+    // 0. Check declarative roles (RBAC)
+    if (config.roles) {
+      let allowedRoles: string[] | undefined = undefined;
+      if (Array.isArray(config.roles)) {
+        allowedRoles = config.roles;
+      } else if (typeof config.roles === "object") {
+        allowedRoles = (config.roles as any)[action];
+      }
+
+      if (allowedRoles) {
+        const userRoles = await getUserRoles(appContext);
+        const hasRole = userRoles.some((r) => allowedRoles!.includes(r));
+        if (!hasRole) {
+          throw new ApiError(
+            403,
+            "FORBIDDEN",
+            `User role is not authorized to perform '${action}' on '${config.name}'.`
+          );
+        }
+      }
+    }
     // 1. Check declarative permission string
     const requiredPermission = config.permissions?.[action];
     if (requiredPermission && globalConfig?.auth?.can) {
@@ -904,6 +1030,9 @@ export function defineResource<
       let targetIds = parsed.ids;
       let updateData = parsed.data;
 
+      // Sanitize write payload (FLAC)
+      updateData = await sanitizeWritePayload(updateData, appContext);
+
       // Prevent tenant-hopping
       if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in updateData) {
         const attemptedTenant = updateData[tenancy.tenantField];
@@ -1222,6 +1351,9 @@ export function defineResource<
 
         const stmts: any[] = [];
         
+        // Sanitize write payload (FLAC)
+        data = await sanitizeWritePayload(data, appContext);
+
         if (config.hooks?.beforeCreate) {
           const hooked = await config.hooks.beforeCreate(data, c, tx, appContext, stmts);
           if (hooked) data = hooked;
@@ -1247,6 +1379,7 @@ export function defineResource<
         // Resolve Create Validator
         const { create: validator } = resolveValidators(config.validator);
         const validated = await validateWith(validator, data);
+
 
         // Ensure validated has tenant stamped as well
         if (!tenancy.isBypassed && tenancy.isTenancyActive) {
@@ -1423,6 +1556,9 @@ export function defineResource<
       await checkAccess(appContext, "update", existingRecord);
 
       let body = await c.req.json();
+
+      // Sanitize write payload (FLAC)
+      body = await sanitizeWritePayload(body, appContext, existingRecord);
 
       // Prevent tenant-hopping
       if (!tenancy.isBypassed && tenancy.isTenancyActive && tenancy.tenantField in body) {
@@ -1836,6 +1972,7 @@ export function defineResource<
               validatedRow = isUpdate
                  ? await validateWith(updateValidator, rawRow)
                  : await validateWith(createValidator, rawRow);
+              await sanitizeWritePayload(validatedRow, appContext, existing);
            } catch (e: any) {
               results.errors.push({ index: i, error: e.issues || e.errors || e.message });
               continue;
