@@ -108,9 +108,6 @@ describe("Workspace Shell Layout & Navigation Components", () => {
     expect(html).toContain("Financial Reports");
     expect(html).toContain("New"); // Badge
 
-    // 3. Quick create buttons for collections in sidebar
-    expect(html).toContain("data-testid=\"sidebar-quick-create-deals\"");
-    expect(html).toContain("data-testid=\"sidebar-quick-create-invoices\"");
 
     // 4. Topbar with Spotlight trigger and Breadcrumbs
     expect(html).toContain("data-testid=\"workspace-topbar\"");

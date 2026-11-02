@@ -2,7 +2,6 @@ import React from "react";
 import {
   Box,
   Layers,
-  Plus,
 } from "lucide-react";
 import {
   Sidebar,
@@ -12,7 +11,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -31,8 +29,8 @@ function isCollection(item: NavigationItem): item is Collection<any> {
 }
 
 /**
- * Collapsible left navigation sidebar organized by navigation groups with active state,
- * badge counts, and quick add shortcuts (canonical shadcn sidebar-07 layout).
+ * Collapsible left navigation sidebar organized by navigation groups with active state
+ * and badge counts (canonical shadcn sidebar-07 layout).
  * Note: Sidebar toggle trigger lives in WorkspaceTopbar beside the breadcrumbs.
  */
 export function WorkspaceSidebar({
@@ -179,24 +177,6 @@ export function WorkspaceSidebar({
                         {!isCollapsed && <span className="truncate">{label}</span>}
                       </a>
                     </SidebarMenuButton>
-
-                    {/* Quick Create shortcut for collections */}
-                    {!isCollapsed && isCol && (
-                      <SidebarMenuAction
-                        asChild
-                        showOnHover
-                        title={`New ${item.singular || label}`}
-                      >
-                        <a
-                          data-testid={`sidebar-quick-create-${item.name}`}
-                          href={`/${item.name}/new`}
-                          onClick={(e) => handleLinkClick(`/${item.name}/new`, e)}
-                        >
-                          <Plus className="size-4" />
-                          <span className="sr-only">New {item.singular || label}</span>
-                        </a>
-                      </SidebarMenuAction>
-                    )}
 
                     {!isCollapsed && badge !== undefined && (
                       <SidebarMenuBadge>{badge}</SidebarMenuBadge>
