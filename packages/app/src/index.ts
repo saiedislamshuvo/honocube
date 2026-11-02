@@ -89,6 +89,12 @@ export type {
   UseWorkflowReturn,
 } from "./workflow/types.js";
 
+// Enterprise Views
+export { TableView } from "./views/table-view.js";
+export { TableToolbar, type TableToolbarProps } from "./views/table-toolbar.js";
+export { TablePagination, type TablePaginationProps } from "./views/table-pagination.js";
+export type { TableViewProps } from "./views/types.js";
+
 // Format & String Utilities
 export { toHumanLabel, formatCellValue } from "./utils/format.js";
 

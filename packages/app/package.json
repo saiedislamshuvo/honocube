@@ -54,6 +54,10 @@
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@honocube/ui": "*",
+    "lucide-react": "^1.66.0"
+  },
   "peerDependencies": {
     "@tanstack/react-form": "^0.40.0 || ^1.0.0",
     "@tanstack/react-query": "^5.0.0",
