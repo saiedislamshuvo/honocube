@@ -153,6 +153,19 @@ export type {
   WorkspaceShellProps,
 } from "./shell/types.js";
 
+// Workspace Catch-all Page & Routing
+export { WorkspacePage } from "./page/workspace-page.js";
+export { WorkspaceDashboard } from "./page/workspace-dashboard.js";
+export { CollectionDetailPage } from "./page/collection-detail-page.js";
+export { resolveWorkspaceRoute } from "./page/resolve-route.js";
+export type {
+  WorkspaceRouteType,
+  WorkspaceResolvedRoute,
+  WorkspacePageProps,
+  WorkspaceDashboardProps,
+  CollectionDetailPageProps,
+} from "./page/types.js";
+
 // Format & String Utilities
 export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js";
 
