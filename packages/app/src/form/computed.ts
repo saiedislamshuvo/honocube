@@ -22,7 +22,7 @@ function areEqual(a: unknown, b: unknown): boolean {
 
 /**
  * Evaluates all computed fields defined on a collection reactively against the active record.
- * Supports multi-pass chained dependencies (e.g. subtotal -> tax -> grandTotal).
+ * Supports recursive child collection evaluation and multi-pass chained dependencies (e.g. qty*rate -> subtotal -> tax -> grandTotal).
  */
 export function evaluateComputedFields<TRecord extends Record<string, any>>(
   fields: Record<string, FieldConfig<any>>,
@@ -31,13 +31,18 @@ export function evaluateComputedFields<TRecord extends Record<string, any>>(
 ): TRecord {
   // Collect all computed fields
   const computedEntries: Array<[string, (rec: any, parent?: any) => any]> = [];
+  // Collect all child collection fields
+  const childCollectionEntries: Array<[string, Record<string, FieldConfig<any>>]> = [];
+
   for (const [key, field] of Object.entries(fields)) {
     if (field.type === "computed" && typeof (field as any).compute === "function") {
       computedEntries.push([key, (field as any).compute]);
+    } else if (field.type === "collection" && (field as any).collection?.fields) {
+      childCollectionEntries.push([key, (field as any).collection.fields]);
     }
   }
 
-  if (computedEntries.length === 0) {
+  if (computedEntries.length === 0 && childCollectionEntries.length === 0) {
     return record;
   }
 
@@ -50,6 +55,30 @@ export function evaluateComputedFields<TRecord extends Record<string, any>>(
     hasChanged = false;
     pass++;
 
+    // 1. Evaluate child collection rows
+    for (const [childKey, childFields] of childCollectionEntries) {
+      const rows = result[childKey];
+      if (Array.isArray(rows) && rows.length > 0) {
+        let childRowsChanged = false;
+        const nextRows = rows.map((row) => {
+          if (row && typeof row === "object") {
+            const nextRow = evaluateComputedFields(childFields, row, result);
+            if (!areEqual(row, nextRow)) {
+              childRowsChanged = true;
+              return nextRow;
+            }
+          }
+          return row;
+        });
+
+        if (childRowsChanged) {
+          result[childKey as keyof TRecord] = nextRows as any;
+          hasChanged = true;
+        }
+      }
+    }
+
+    // 2. Evaluate parent computed fields
     for (const [key, computeFn] of computedEntries) {
       try {
         const nextVal = computeFn(result, parentRecord);

@@ -8,11 +8,13 @@ import { getDefaultFormValues } from "./defaults.js";
 import { evaluateComputedFields } from "./computed.js";
 import { evaluateFieldCapability } from "./capabilities.js";
 import { validateField, validateRecord } from "./validation.js";
+import { createChildCollectionHelper } from "./child.js";
 import type {
   CollectionFormOptions,
   CollectionFormReturn,
   FormFieldState,
   FormMode,
+  ChildCollectionHelper,
 } from "./types.js";
 
 export function useCollectionForm<TCollection extends Collection<any>>(
@@ -106,14 +108,18 @@ export function useCollectionForm<TCollection extends Collection<any>>(
       field: K,
       value: InferRecord<TCollection>[K]
     ) => {
-      form.setFieldValue(field as any, value as any);
-
-      // Re-evaluate dependent formula fields
+      // Re-evaluate dependent formula fields and child rows
       const currentValues = { ...form.state.values, [field]: value };
       const recomputed = evaluateComputedFields(
         collection.fields,
         currentValues,
         parentRecord
+      );
+
+      // Set the field value (using recomputed value if enriched, e.g. child collection formulas)
+      form.setFieldValue(
+        field as any,
+        (recomputed[field] !== undefined ? recomputed[field] : value) as any
       );
 
       for (const [k, v] of Object.entries(recomputed)) {
@@ -179,7 +185,29 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     [collection, form, user]
   );
 
-  // 6. Reset Handler
+  // 6. Child Collection Accessor
+  const child = useCallback(
+    <K extends Extract<keyof InferRecord<TCollection>, string>>(
+      fieldName: K
+    ): ChildCollectionHelper<any> => {
+      return createChildCollectionHelper(
+        {
+          get values() {
+            return form.state.values;
+          },
+          get errors() {
+            return errorsRef.current;
+          },
+          setFieldValue,
+        },
+        collection,
+        fieldName
+      );
+    },
+    [collection, form, setFieldValue]
+  );
+
+  // 7. Reset Handler
   const reset = useCallback(() => {
     const defaults = serverRecord
       ? evaluateComputedFields(
@@ -193,7 +221,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     setErrors({});
   }, [serverRecord, collection, initialValues, parentRecord, form, setErrors]);
 
-  // 7. Submit Handler
+  // 8. Submit Handler
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
       if (e && typeof e.preventDefault === "function") {
@@ -279,6 +307,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     setFieldValue,
     setValues,
     getFieldState,
+    child,
     handleSubmit,
     reset,
   };

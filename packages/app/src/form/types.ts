@@ -18,6 +18,58 @@ export interface FormFieldState<TValue = unknown> extends FieldCapabilityState {
 
 export type FormMode = "create" | "edit" | "view";
 
+export interface ChildCollectionHelper<TChild = Record<string, unknown>> {
+  /**
+   * The list of child records in this collection.
+   */
+  rows: TChild[];
+
+  /**
+   * Total number of child rows.
+   */
+  count: number;
+
+  /**
+   * Whether the child collection has no rows.
+   */
+  isEmpty: boolean;
+
+  /**
+   * Appends a new child row with default values merged with optional initial data.
+   */
+  addRow: (initialData?: Partial<TChild>) => void;
+
+  /**
+   * Removes a child row at the specified index.
+   */
+  removeRow: (index: number) => void;
+
+  /**
+   * Updates fields for a specific child row and recalculates formulas.
+   */
+  updateRow: (index: number, patch: Partial<TChild>) => void;
+
+  /**
+   * Reorders rows from one index to another.
+   */
+  reorderRows: (fromIndex: number, toIndex: number) => void;
+
+  /**
+   * Clears all rows from the child collection.
+   */
+  clearRows: () => void;
+
+  /**
+   * Retrieves validation errors for a specific row index.
+   */
+  getRowErrors: (index: number) => Record<string, string[]>;
+
+  /**
+   * The resolved child collection definition if available.
+   */
+  childCollection?: Collection<any>;
+}
+
 export interface CollectionFormOptions<TCollection extends Collection<any>> {
   /**
    * Record ID if editing or viewing an existing record.
@@ -142,6 +194,13 @@ export interface CollectionFormReturn<TCollection extends Collection<any>> {
    * Returns current capability and validation state for a specific field.
    */
   getFieldState: (field: Extract<keyof InferRecord<TCollection>, string> | string) => FormFieldState;
+
+  /**
+   * Accesses a child collection helper for embedded line items.
+   */
+  child: <K extends Extract<keyof InferRecord<TCollection>, string>>(
+    fieldName: K
+  ) => ChildCollectionHelper<any>;
 
   /**
    * Validates and submits the form.
