@@ -201,7 +201,50 @@ export const contactsCollection = defineCollection({
   },
 });
 
-// 3. Invoices Collection (ERPNext style Naming Series + Workflow State Machine with Roles)
+// 3. Invoice Items Child Collection (ERPNext style Line Items Table)
+export const invoiceItemsCollection = defineCollection({
+  name: "invoice-items",
+  label: "Invoice Line Items",
+  singular: "Line Item",
+  endpoint: "/api/invoice-items",
+  fields: {
+    id: {
+      type: "number",
+      label: "ID",
+      readOnly: true,
+      visible: false,
+    },
+    description: {
+      type: "text",
+      label: "Description",
+      required: true,
+      placeholder: "e.g. Cloud Architecture Consulting",
+    },
+    quantity: {
+      type: "number",
+      label: "Qty",
+      required: true,
+      default: 1,
+      min: 1,
+    },
+    unitPrice: {
+      type: "number",
+      label: "Unit Price ($)",
+      required: true,
+      default: 0,
+      min: 0,
+      format: "currency",
+    },
+    amount: {
+      type: "computed",
+      label: "Amount ($)",
+      format: "currency",
+      compute: (row) => (row.quantity || 0) * (row.unitPrice || 0),
+    },
+  },
+});
+
+// 4. Invoices Collection (ERPNext style Naming Series + Workflow State Machine with Roles + Child Table)
 export const invoicesCollection = defineCollection({
   name: "invoices",
   label: "Invoices & Billing",
@@ -268,23 +311,37 @@ export const invoicesCollection = defineCollection({
         { value: "cancelled", label: "Cancelled" },
       ],
     },
+    items: {
+      type: "collection",
+      label: "Invoice Line Items",
+      description: "Billable items, quantities, and rates for this invoice.",
+      collection: invoiceItemsCollection,
+      relation: "hasMany",
+    },
     subtotal: {
-      type: "number",
+      type: "computed",
       label: "Subtotal ($)",
       default: 0,
       format: "currency",
+      compute: (r) =>
+        (r.items || []).reduce(
+          (sum: number, it: any) => sum + (it.amount || (it.quantity || 0) * (it.unitPrice || 0)),
+          0
+        ),
     },
     tax: {
-      type: "number",
-      label: "Tax ($)",
+      type: "computed",
+      label: "Tax (10%) ($)",
       default: 0,
       format: "currency",
+      compute: (r) => Math.round((r.subtotal || 0) * 0.1),
     },
     grandTotal: {
-      type: "number",
+      type: "computed",
       label: "Grand Total ($)",
       default: 0,
       format: "currency",
+      compute: (r) => (r.subtotal || 0) + (r.tax || 0),
     },
     notes: {
       type: "textarea",
@@ -354,6 +411,12 @@ export const invoicesCollection = defineCollection({
             fields: ["invoiceNumber", "customerName", "issueDate", "dueDate", "currency", "status"],
           },
           {
+            title: "Line Items",
+            description: "Billable products and services for this invoice.",
+            columns: 1,
+            fields: ["items"],
+          },
+          {
             title: "Summary & Totals",
             columns: 3,
             fields: ["subtotal", "tax", "grandTotal"],
@@ -398,5 +461,5 @@ export const app = defineApp({
       items: [invoicesCollection],
     },
   ],
-  collections: [dealsCollection, contactsCollection, invoicesCollection],
+  collections: [dealsCollection, contactsCollection, invoicesCollection, invoiceItemsCollection],
 });

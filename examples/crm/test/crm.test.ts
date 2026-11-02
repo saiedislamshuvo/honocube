@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import { resolveWorkspaceRoute, getAvailableTransitions, getStateMetadata } from "@honocube/app";
+import { resolveWorkspaceRoute, getAvailableTransitions, getStateMetadata, evaluateComputedFields } from "@honocube/app";
 import { api, ensureDbInitialized } from "../lib/cube.api";
 import { app, invoicesCollection } from "../lib/cube.app";
 
@@ -141,6 +141,34 @@ describe("Showcase CRM App Verification", () => {
       const stateMeta = getStateMetadata(invoicesCollection.workflow, "paid");
       expect(stateMeta.label).toBe("Paid");
       expect(stateMeta.isLocked).toBe(true);
+    });
+  });
+  describe("Invoice Child Line Items & Formulas", () => {
+    it("defines items collection field in invoicesCollection and includes it in form section", () => {
+      const itemsField = invoicesCollection.getField("items");
+      expect(itemsField).toBeDefined();
+      expect(itemsField?.type).toBe("collection");
+
+      const formSections = invoicesCollection.form?.tabs?.[0]?.sections || [];
+      const lineItemSection = formSections.find((s) => s.title === "Line Items");
+      expect(lineItemSection).toBeDefined();
+      expect(lineItemSection?.fields).toContain("items");
+    });
+
+    it("evaluates live subtotal, tax, and grand total rollups from child line items", () => {
+      const record = {
+        items: [
+          { description: "Item 1", quantity: 2, unitPrice: 100 },
+          { description: "Item 2", quantity: 1, unitPrice: 50 },
+        ],
+      };
+
+      const evaluated = evaluateComputedFields(invoicesCollection.fields, record) as any;
+      expect(evaluated.items[0].amount).toBe(200);
+      expect(evaluated.items[1].amount).toBe(50);
+      expect(evaluated.subtotal).toBe(250);
+      expect(evaluated.tax).toBe(25);
+      expect(evaluated.grandTotal).toBe(275);
     });
   });
 });
