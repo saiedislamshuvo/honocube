@@ -9,6 +9,7 @@ import { evaluateComputedFields } from "./computed.js";
 import { evaluateFieldCapability } from "./capabilities.js";
 import { validateField, validateRecord } from "./validation.js";
 import { createChildCollectionHelper } from "./child.js";
+import { useCollectionWorkflow } from "../workflow/use-workflow.js";
 import type {
   CollectionFormOptions,
   CollectionFormReturn,
@@ -168,7 +169,12 @@ export function useCollectionForm<TCollection extends Collection<any>>(
   const getFieldState = useCallback(
     (fieldName: Extract<keyof InferRecord<TCollection>, string> | string): FormFieldState => {
       const field = collection.getField(fieldName);
-      const capability = evaluateFieldCapability(field, form.state.values, user);
+      const capability = evaluateFieldCapability(
+        field,
+        form.state.values,
+        user,
+        collection.workflow
+      );
       const fieldErrors = errorsRef.current[fieldName] || [];
       const meta = form.getFieldMeta(fieldName as any);
       const val = (form.state.values as any)?.[fieldName];
@@ -207,7 +213,14 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     [collection, form, setFieldValue]
   );
 
-  // 7. Reset Handler
+  // 7. Workflow State Machine Helper
+  const workflowHelper = useCollectionWorkflow(
+    collection,
+    form.state.values as InferRecord<TCollection>,
+    { id, user }
+  );
+
+  // 8. Reset Handler
   const reset = useCallback(() => {
     const defaults = serverRecord
       ? evaluateComputedFields(
@@ -221,7 +234,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     setErrors({});
   }, [serverRecord, collection, initialValues, parentRecord, form, setErrors]);
 
-  // 8. Submit Handler
+  // 9. Submit Handler
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
       if (e && typeof e.preventDefault === "function") {
@@ -308,6 +321,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     setValues,
     getFieldState,
     child,
+    workflow: collection.workflow ? workflowHelper : undefined,
     handleSubmit,
     reset,
   };

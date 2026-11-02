@@ -74,6 +74,21 @@ export type {
   ChildCollectionHelper,
 } from "./form/types.js";
 
+// Workflow State Machine Engine
+export { useCollectionWorkflow } from "./workflow/use-workflow.js";
+export {
+  getCurrentWorkflowState,
+  getStateMetadata,
+  isRecordLocked,
+  getAvailableTransitions,
+} from "./workflow/engine.js";
+export type {
+  AvailableTransition,
+  WorkflowStateMeta,
+  UseWorkflowOptions,
+  UseWorkflowReturn,
+} from "./workflow/types.js";
+
 // Format & String Utilities
 export { toHumanLabel, formatCellValue } from "./utils/format.js";
 

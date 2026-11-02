@@ -1,5 +1,6 @@
 import type { FormApi } from "@tanstack/react-form";
 import type { Collection, InferRecord } from "../types/collection.js";
+import type { UseWorkflowReturn } from "../workflow/types.js";
 
 export interface FieldCapabilityState {
   visible: boolean;
@@ -201,6 +202,11 @@ export interface CollectionFormReturn<TCollection extends Collection<any>> {
   child: <K extends Extract<keyof InferRecord<TCollection>, string>>(
     fieldName: K
   ) => ChildCollectionHelper<any>;
+
+  /**
+   * Workflow state machine helper for documents with lifecycle transitions and locks.
+   */
+  workflow?: UseWorkflowReturn<InferRecord<TCollection>>;
 
   /**
    * Validates and submits the form.

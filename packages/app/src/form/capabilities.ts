@@ -1,14 +1,17 @@
 import type { FieldConfig } from "../types/fields.js";
+import type { WorkflowConfig } from "../types/workflow.js";
 import type { FieldCapabilityState } from "./types.js";
+import { isRecordLocked } from "../workflow/engine.js";
 
 /**
  * Evaluates dynamic visibility, disabled, read-only, and required rules
- * for a field against the current record and user context.
+ * for a field against current record, user context, and workflow lock status.
  */
 export function evaluateFieldCapability<TRecord extends Record<string, any>>(
   field: FieldConfig<any> | undefined,
   record: TRecord,
-  user?: Record<string, unknown>
+  user?: Record<string, unknown>,
+  workflow?: WorkflowConfig<any>
 ): FieldCapabilityState {
   if (!field) {
     return {
@@ -33,9 +36,10 @@ export function evaluateFieldCapability<TRecord extends Record<string, any>>(
     visible = field.visible;
   }
 
-  // 2. Computed fields are inherently read-only
+  // 2. Computed fields or documents in locked workflow state are inherently read-only
   const isComputed = field.type === "computed";
-  const readOnly = isComputed || Boolean(field.readOnly);
+  const isLocked = isRecordLocked(workflow, record);
+  const readOnly = isComputed || isLocked || Boolean(field.readOnly);
 
   // 3. Evaluate disabled rule (readOnly automatically disables direct input)
   let disabled = readOnly;
