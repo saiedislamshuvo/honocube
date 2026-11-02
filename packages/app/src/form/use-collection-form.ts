@@ -1,0 +1,285 @@
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useForm, useStore } from "@tanstack/react-form";
+import type { Collection, InferRecord } from "../types/collection.js";
+import { useCollectionQuery } from "../query/use-query.js";
+import { useCollectionMutation } from "../query/use-mutation.js";
+import { useApiClient } from "../query/provider.js";
+import { getDefaultFormValues } from "./defaults.js";
+import { evaluateComputedFields } from "./computed.js";
+import { evaluateFieldCapability } from "./capabilities.js";
+import { validateField, validateRecord } from "./validation.js";
+import type {
+  CollectionFormOptions,
+  CollectionFormReturn,
+  FormFieldState,
+  FormMode,
+} from "./types.js";
+
+export function useCollectionForm<TCollection extends Collection<any>>(
+  collection: TCollection,
+  options: CollectionFormOptions<TCollection> = {}
+): CollectionFormReturn<TCollection> {
+  const {
+    id,
+    initialValues,
+    user,
+    parentRecord,
+    mode: explicitMode,
+    autoFetch = true,
+    onSubmit,
+    onSuccess,
+    onError,
+    validator,
+  } = options;
+
+  const client = useApiClient();
+  const mutation = useCollectionMutation(collection);
+
+  const mode: FormMode = useMemo(() => {
+    if (explicitMode) return explicitMode;
+    return id !== undefined && id !== null && id !== "" && id !== "new"
+      ? "edit"
+      : "create";
+  }, [explicitMode, id]);
+
+  const isEdit = mode === "edit" || (mode === "view" && id !== undefined);
+
+  // 1. Initial Values Resolution
+  const defaultValues = useMemo(() => {
+    return getDefaultFormValues(collection, initialValues, parentRecord);
+  }, [collection, initialValues, parentRecord]);
+
+  // 2. Fetch Existing Record if in Edit Mode
+  const query = useCollectionQuery({
+    collection,
+    id: isEdit ? (id as string | number) : "__honocube_disabled_query__",
+    queryOptions: {
+      enabled: Boolean(isEdit && autoFetch),
+    },
+  });
+
+  const serverRecord = isEdit ? (query.data?.data as InferRecord<TCollection> | undefined) : undefined;
+
+  // 3. TanStack Form Instance
+  const form = useForm<InferRecord<TCollection>>({
+    defaultValues,
+  });
+
+  // Ensure form derived store is mounted (vital for SSR & unit tests where layout effects don't fire)
+  const isMountedRef = useRef(false);
+  if (!isMountedRef.current) {
+    form.mount();
+    isMountedRef.current = true;
+  }
+
+  // Track submission & validation errors with synchronous ref + reactive state
+  const [internalSubmitting, setInternalSubmitting] = useState(false);
+  const errorsRef = useRef<Record<string, string[]>>({});
+  const [, setErrorsState] = useState<Record<string, string[]>>({});
+
+  const setErrors = useCallback((nextErrors: Record<string, string[]>) => {
+    errorsRef.current = nextErrors;
+    setErrorsState(nextErrors);
+  }, []);
+
+  // Reset form when server record arrives for the specific ID
+  const lastLoadedIdRef = useRef<string | number | undefined>(undefined);
+  useEffect(() => {
+    if (serverRecord && lastLoadedIdRef.current !== id) {
+      lastLoadedIdRef.current = id;
+      const combined = evaluateComputedFields(
+        collection.fields,
+        { ...serverRecord, ...initialValues },
+        parentRecord
+      );
+      form.reset(combined);
+      setErrors({});
+    }
+  }, [serverRecord, id, collection.fields, initialValues, parentRecord, form, setErrors]);
+
+  // Reactive subscription for hook consumers
+  useStore(form.store, (state) => state.values);
+
+  // 4. Reactive Field Updates with Computed Formula Recalculation
+  const setFieldValue = useCallback(
+    <K extends Extract<keyof InferRecord<TCollection>, string>>(
+      field: K,
+      value: InferRecord<TCollection>[K]
+    ) => {
+      form.setFieldValue(field as any, value as any);
+
+      // Re-evaluate dependent formula fields
+      const currentValues = { ...form.state.values, [field]: value };
+      const recomputed = evaluateComputedFields(
+        collection.fields,
+        currentValues,
+        parentRecord
+      );
+
+      for (const [k, v] of Object.entries(recomputed)) {
+        if (k !== field && !Object.is(currentValues[k], v)) {
+          form.setFieldValue(k as any, v as any);
+        }
+      }
+
+      // Re-validate field if it previously had validation errors
+      if (errorsRef.current[field]) {
+        const nextFieldErrors = validateField(
+          collection.getField(field),
+          value,
+          recomputed,
+          user
+        );
+        const updated = { ...errorsRef.current };
+        if (nextFieldErrors.length === 0) {
+          delete updated[field];
+        } else {
+          updated[field] = nextFieldErrors;
+        }
+        setErrors(updated);
+      }
+    },
+    [collection, form, parentRecord, user, setErrors]
+  );
+
+  const setValues = useCallback(
+    (patch: Partial<InferRecord<TCollection>>) => {
+      const merged = { ...form.state.values, ...patch };
+      const recomputed = evaluateComputedFields(
+        collection.fields,
+        merged,
+        parentRecord
+      );
+
+      for (const [k, v] of Object.entries(recomputed)) {
+        form.setFieldValue(k as any, v as any);
+      }
+    },
+    [collection.fields, parentRecord, form]
+  );
+
+  // 5. Capability & Field State Provider
+  const getFieldState = useCallback(
+    (fieldName: Extract<keyof InferRecord<TCollection>, string> | string): FormFieldState => {
+      const field = collection.getField(fieldName);
+      const capability = evaluateFieldCapability(field, form.state.values, user);
+      const fieldErrors = errorsRef.current[fieldName] || [];
+      const meta = form.getFieldMeta(fieldName as any);
+      const val = (form.state.values as any)?.[fieldName];
+
+      return {
+        ...capability,
+        value: val,
+        error: fieldErrors[0],
+        errors: fieldErrors,
+        isTouched: Boolean(meta?.isTouched),
+        isDirty: meta?.isDirty ?? false,
+      };
+    },
+    [collection, form, user]
+  );
+
+  // 6. Reset Handler
+  const reset = useCallback(() => {
+    const defaults = serverRecord
+      ? evaluateComputedFields(
+          collection.fields,
+          { ...serverRecord, ...initialValues },
+          parentRecord
+        )
+      : getDefaultFormValues(collection, initialValues, parentRecord);
+
+    form.reset(defaults);
+    setErrors({});
+  }, [serverRecord, collection, initialValues, parentRecord, form, setErrors]);
+
+  // 7. Submit Handler
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      if (e && typeof e.preventDefault === "function") {
+        e.preventDefault();
+      }
+
+      // Validate all fields and Standard Schema
+      const validationErrors = await validateRecord(
+        collection.fields,
+        form.state.values,
+        user,
+        validator
+      );
+
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(validationErrors);
+        return;
+      }
+      setErrors({});
+
+      setInternalSubmitting(true);
+      try {
+        const currentValues = form.state.values;
+        if (onSubmit) {
+          await onSubmit(currentValues, { id, api: client });
+        } else {
+          if (isEdit && id !== undefined) {
+            const res = await mutation.update.mutateAsync({
+              id,
+              data: currentValues,
+            });
+            onSuccess?.(res.data);
+          } else {
+            const res = await mutation.create.mutateAsync(currentValues);
+            onSuccess?.(res.data);
+          }
+        }
+      } catch (err: any) {
+        const errorObj = err instanceof Error ? err : new Error(String(err));
+        onError?.(errorObj);
+        throw errorObj;
+      } finally {
+        setInternalSubmitting(false);
+      }
+    },
+    [
+      collection.fields,
+      form,
+      user,
+      validator,
+      setErrors,
+      onSubmit,
+      isEdit,
+      id,
+      client,
+      mutation.update,
+      mutation.create,
+      onSuccess,
+      onError,
+    ]
+  );
+
+  return {
+    form,
+    get values() {
+      return form.state.values;
+    },
+    get errors() {
+      return errorsRef.current;
+    },
+    get isDirty() {
+      return form.state.isDirty;
+    },
+    get isSubmitting() {
+      return form.state.isSubmitting || internalSubmitting;
+    },
+    isLoading: Boolean(isEdit && autoFetch && query.isLoading),
+    get isValid() {
+      return Object.keys(errorsRef.current).length === 0;
+    },
+    mode,
+    record: serverRecord,
+    setFieldValue,
+    setValues,
+    getFieldState,
+    handleSubmit,
+    reset,
+  };
+}
