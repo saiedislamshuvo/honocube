@@ -47,12 +47,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
 
   const isEdit = mode === "edit" || (mode === "view" && id !== undefined);
 
-  // 1. Initial Values Resolution
-  const defaultValues = useMemo(() => {
-    return getDefaultFormValues(collection, initialValues, parentRecord);
-  }, [collection, initialValues, parentRecord]);
-
-  // 2. Fetch Existing Record if in Edit Mode
+  // 1. Fetch Existing Record if in Edit Mode
   const query = useCollectionQuery({
     collection,
     id: isEdit ? (id as string | number) : "__honocube_disabled_query__",
@@ -62,6 +57,12 @@ export function useCollectionForm<TCollection extends Collection<any>>(
   });
 
   const serverRecord = isEdit ? (query.data?.data as InferRecord<TCollection> | undefined) : undefined;
+
+  // 2. Initial Values Resolution (incorporates pre-fetched server record for SSR hydration)
+  const defaultValues = useMemo(() => {
+    const base = serverRecord ? { ...serverRecord, ...initialValues } : initialValues;
+    return getDefaultFormValues(collection, base, parentRecord);
+  }, [collection, serverRecord, initialValues, parentRecord]);
 
   // 3. TanStack Form Instance
   const form = useForm<InferRecord<TCollection>>({
