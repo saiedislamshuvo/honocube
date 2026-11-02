@@ -1,14 +1,6 @@
 import type { Collection, CollectionConfig } from "../types/collection.js";
 import type { FieldConfig } from "../types/fields.js";
-
-function toHumanLabel(str: string): string {
-  return str
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
+import { toHumanLabel } from "../utils/format.js";
 
 export function defineCollection<
   TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
