@@ -99,6 +99,12 @@ export { FormSheet } from "./views/form-sheet.js";
 export { FormPage } from "./views/form-page.js";
 export { FormField } from "./views/form-field.js";
 export { ChildTable } from "./views/child-table.js";
+export { KanbanView } from "./views/kanban-view.js";
+export { CalendarView } from "./views/calendar-view.js";
+export { ListView } from "./views/list-view.js";
+export { GridView } from "./views/grid-view.js";
+export { ViewSwitcher } from "./views/view-switcher.js";
+export { CollectionMultiView } from "./views/multi-view.js";
 export type {
   TableViewProps,
   FormViewProps,
@@ -107,6 +113,13 @@ export type {
   FormPageProps,
   FormFieldProps,
   ChildTableProps,
+  KanbanColumn,
+  KanbanViewProps,
+  CalendarViewProps,
+  ListViewProps,
+  GridViewProps,
+  ViewSwitcherProps,
+  CollectionMultiViewProps,
 } from "./views/types.js";
 
 // Format & String Utilities

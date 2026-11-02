@@ -3,6 +3,7 @@ import type { Collection, InferRecord, BulkAction } from "../types/collection.js
 import type { CollectionListOptions } from "../table/types.js";
 import type { FormMode, FormFieldState, ChildCollectionHelper } from "../form/types.js";
 import type { FieldConfig, SubCollectionFieldConfig } from "../types/fields.js";
+import type { ViewType } from "../types/views.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -276,5 +277,74 @@ export interface ChildTableProps {
   /**
    * Custom CSS class name for the child table container.
    */
+  className?: string;
+}
+
+export interface KanbanColumn {
+  value: string;
+  label: string;
+  color?: string;
+}
+
+export interface KanbanViewProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  groupBy?: string;
+  columns?: KanbanColumn[];
+  onCardClick?: (record: InferRecord<TCollection>) => void;
+  onCardMove?: (record: InferRecord<TCollection>, newColumnValue: string) => Promise<void> | void;
+  onAddCard?: (columnValue: string) => void;
+  className?: string;
+  emptyText?: string;
+}
+
+export interface CalendarViewProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  startField?: string;
+  endField?: string;
+  titleField?: string;
+  colorField?: string;
+  initialDate?: Date;
+  onEventClick?: (record: InferRecord<TCollection>) => void;
+  onDateClick?: (date: Date) => void;
+  className?: string;
+}
+
+export interface ListViewProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  titleField?: string;
+  subtitleField?: string;
+  metaField?: string;
+  badgeField?: string;
+  onItemClick?: (record: InferRecord<TCollection>) => void;
+  className?: string;
+  emptyText?: string;
+}
+
+export interface GridViewProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  titleField?: string;
+  subtitleField?: string;
+  bodyField?: string;
+  badgeField?: string;
+  imageField?: string;
+  columns?: number;
+  onCardClick?: (record: InferRecord<TCollection>) => void;
+  className?: string;
+  emptyText?: string;
+}
+
+export interface ViewSwitcherProps {
+  activeView: ViewType;
+  onViewChange: (view: ViewType) => void;
+  availableViews?: ViewType[];
+  className?: string;
+}
+
+export interface CollectionMultiViewProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  defaultView?: ViewType;
+  availableViews?: ViewType[];
+  onRecordClick?: (record: InferRecord<TCollection>) => void;
+  actions?: React.ReactNode;
   className?: string;
 }
