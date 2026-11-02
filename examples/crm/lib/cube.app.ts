@@ -371,7 +371,7 @@ export const invoicesCollection = defineCollection({
 // Root App Configuration
 export const app = defineApp({
   title: "HonoCube Enterprise CRM",
-  apiBaseUrl: typeof window !== "undefined" ? `${window.location.origin}/api` : "http://localhost:3000/api",
+  apiBaseUrl: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
   navigation: [
     {
       group: "Sales & Pipelines",
