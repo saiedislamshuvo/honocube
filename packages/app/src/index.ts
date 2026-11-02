@@ -9,6 +9,31 @@ export const VERSION = "2.0.2";
 export { defineCollection } from "./core/collection.js";
 export { defineApp } from "./core/app.js";
 
+// HTTP & Client
+export { ApiClient, createApiClient } from "./client/api-client.js";
+export { ApiClientError } from "./client/errors.js";
+export type {
+  ApiClientOptions,
+  ApiResponse,
+  PaginationMeta,
+  PaginationParams,
+  QueryParams,
+} from "./client/api-client.js";
+export type { ErrorEnvelope } from "./client/errors.js";
+
+// Query & Hooks
+export { queryKeys } from "./query/keys.js";
+export { AppContext, AppProvider, useApp, useApiClient } from "./query/provider.js";
+export type { AppContextValue, AppProviderProps } from "./query/provider.js";
+export { useCollectionQuery } from "./query/use-query.js";
+export type {
+  UseCollectionDetailOptions,
+  UseCollectionListOptions,
+  UseCollectionQueryOptions,
+} from "./query/use-query.js";
+export { useCollectionMutation } from "./query/use-mutation.js";
+export type { UseCollectionMutationResult } from "./query/use-mutation.js";
+
 // Collection & Record Types
 export type {
   Collection,
