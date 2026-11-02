@@ -222,7 +222,7 @@ describe("Workspace Shell Layout & Navigation Components", () => {
 
     // Sidebar has collapsed class
     expect(html).toContain("w-16");
-    expect(html).toContain("data-testid=\"sidebar-expand-button\"");
+    expect(html).toContain("data-testid=\"sidebar-link-deals\"");
     // App title is hidden in collapsed mode
     expect(html).not.toContain("data-testid=\"sidebar-app-title\"");
   });

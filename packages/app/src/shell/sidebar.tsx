@@ -2,12 +2,9 @@ import React from "react";
 import {
   Box,
   Layers,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
 } from "lucide-react";
 import {
-  Button,
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -36,6 +33,7 @@ function isCollection(item: NavigationItem): item is Collection<any> {
 /**
  * Collapsible left navigation sidebar organized by navigation groups with active state,
  * badge counts, and quick add shortcuts (canonical shadcn sidebar-07 layout).
+ * Note: Sidebar toggle trigger lives in WorkspaceTopbar beside the breadcrumbs.
  */
 export function WorkspaceSidebar({
   app,
@@ -106,21 +104,19 @@ export function WorkspaceSidebar({
       {/* 1. Sidebar Header (canonical shadcn sidebar-07 team-switcher or Single Tenant App Title) */}
       <SidebarHeader>
         {headerSlot || (
-          <div className="flex items-center justify-between w-full">
+          <>
             {hasTenantsInSidebar ? (
-              <div className="flex-1 min-w-0">
-                <TenantSwitcher
-                  app={app}
-                  variant="sidebar"
-                  collapsed={isCollapsed}
-                  tenants={tenants}
-                  activeTenantId={activeTenantId}
-                  onTenantChange={onTenantChange}
-                  onAddTenant={onAddTenant}
-                />
-              </div>
+              <TenantSwitcher
+                app={app}
+                variant="sidebar"
+                collapsed={isCollapsed}
+                tenants={tenants}
+                activeTenantId={activeTenantId}
+                onTenantChange={onTenantChange}
+                onAddTenant={onAddTenant}
+              />
             ) : (
-              <SidebarMenu className="flex-1 min-w-0">
+              <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     size="lg"
@@ -143,20 +139,7 @@ export function WorkspaceSidebar({
                 </SidebarMenuItem>
               </SidebarMenu>
             )}
-
-            {onCollapseChange && !isCollapsed && (
-              <Button
-                data-testid="sidebar-collapse-button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground shrink-0 ml-1"
-                onClick={() => onCollapseChange(true)}
-                aria-label="Collapse sidebar"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          </>
         )}
       </SidebarHeader>
 
@@ -240,20 +223,6 @@ export function WorkspaceSidebar({
               />
             )}
           </>
-        )}
-
-        {/* Collapsed expand toggle helper for manual control & tests */}
-        {onCollapseChange && isCollapsed && (
-          <Button
-            data-testid="sidebar-expand-button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-full text-sidebar-foreground/70 hover:text-sidebar-foreground justify-center mt-1"
-            onClick={() => onCollapseChange(false)}
-            aria-label="Expand sidebar"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
-          </Button>
         )}
       </SidebarFooter>
 
