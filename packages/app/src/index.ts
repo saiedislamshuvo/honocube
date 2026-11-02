@@ -105,6 +105,9 @@ export { ListView } from "./views/list-view.js";
 export { GridView } from "./views/grid-view.js";
 export { ViewSwitcher } from "./views/view-switcher.js";
 export { CollectionMultiView } from "./views/multi-view.js";
+export { WorkflowActionBar } from "./views/workflow-action-bar.js";
+export { DocumentHeader } from "./views/document-header.js";
+export { SidePanel } from "./views/side-panel.js";
 export type {
   TableViewProps,
   FormViewProps,
@@ -120,10 +123,17 @@ export type {
   GridViewProps,
   ViewSwitcherProps,
   CollectionMultiViewProps,
+  WorkflowActionBarProps,
+  DocumentHeaderProps,
+  SidePanelProps,
+  AuditFieldDiff,
+  AuditActivity,
+  DocumentComment,
+  DocumentAttachment,
 } from "./views/types.js";
 
 // Format & String Utilities
-export { toHumanLabel, formatCellValue } from "./utils/format.js";
+export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js";
 
 // Collection & Record Types
 export type {
