@@ -16,8 +16,12 @@ export function WorkspaceTopbar({
   tenants,
   activeTenantId,
   onTenantChange,
+  onAddTenant,
+  tenantSwitcherPosition: propTenantPos,
   currentUser,
   onLogout,
+  onSettingsClick,
+  userProfilePosition: propUserPos,
   theme,
   onThemeChange,
   onSpotlightOpen,
@@ -27,6 +31,11 @@ export function WorkspaceTopbar({
   extraSlot,
   className = "",
 }: WorkspaceTopbarProps): React.JSX.Element {
+  const tenantSwitcherPosition =
+    propTenantPos || app.layout?.tenantSwitcher || "sidebar";
+  const userProfilePosition =
+    propUserPos || app.layout?.userProfile || "sidebar";
+
   return (
     <header
       data-testid="workspace-topbar"
@@ -58,7 +67,7 @@ export function WorkspaceTopbar({
         />
       </div>
 
-      {/* Right: Spotlight + Tenant Switcher + Theme Toggle + User Menu */}
+      {/* Right: Spotlight + Header Placed Elements + Theme Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Spotlight Trigger Button */}
         {onSpotlightOpen && (
@@ -77,12 +86,15 @@ export function WorkspaceTopbar({
           </Button>
         )}
 
-        {/* Tenant Switcher */}
-        {tenants && tenants.length > 0 && (
+        {/* Tenant Switcher (when placed in Header) */}
+        {tenantSwitcherPosition === "header" && tenants && tenants.length > 0 && (
           <TenantSwitcher
+            app={app}
+            variant="default"
             tenants={tenants}
             activeTenantId={activeTenantId}
             onTenantChange={onTenantChange}
+            onAddTenant={onAddTenant}
           />
         )}
 
@@ -101,13 +113,17 @@ export function WorkspaceTopbar({
           </Button>
         )}
 
-        {/* Extra Actions Slot */}
-        {extraSlot}
-
-        {/* User Profile Dropdown */}
-        {currentUser && (
-          <UserProfileDropdown user={currentUser} onLogout={onLogout} />
+        {/* User Profile Menu (when placed in Header) */}
+        {userProfilePosition === "header" && currentUser && (
+          <UserProfileDropdown
+            variant="default"
+            user={currentUser}
+            onLogout={onLogout}
+            onSettingsClick={onSettingsClick}
+          />
         )}
+
+        {extraSlot}
       </div>
     </header>
   );

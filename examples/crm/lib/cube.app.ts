@@ -201,7 +201,7 @@ export const contactsCollection = defineCollection({
   },
 });
 
-// 3. Invoices Collection (ERPNext style Naming Series + Workflow State Machine)
+// 3. Invoices Collection (ERPNext style Naming Series + Workflow State Machine with Roles)
 export const invoicesCollection = defineCollection({
   name: "invoices",
   label: "Invoices & Billing",
@@ -308,28 +308,33 @@ export const invoicesCollection = defineCollection({
         from: "draft",
         to: "submitted",
         label: "Submit for Approval",
+        role: ["admin", "sales"],
       },
       approve: {
         from: "submitted",
         to: "approved",
         label: "Approve Invoice",
+        role: "admin",
       },
       returnDraft: {
         from: "submitted",
         to: "draft",
         label: "Return to Draft",
+        role: "admin",
       },
       markPaid: {
         from: "approved",
         to: "paid",
         label: "Mark as Paid",
         variant: "success",
+        role: "admin",
       },
       cancel: {
         from: ["draft", "submitted"],
         to: "cancelled",
         label: "Cancel Invoice",
         variant: "destructive",
+        role: "admin",
       },
     },
   },
@@ -368,10 +373,21 @@ export const invoicesCollection = defineCollection({
   },
 });
 
-// Root App Configuration
+// Root App Configuration (shadcn sidebar-07 defaults with Auth)
 export const app = defineApp({
   title: "HonoCube Enterprise CRM",
   apiBaseUrl: typeof window !== "undefined" ? window.location.origin : "http://localhost:3000",
+  layout: {
+    tenantSwitcher: "sidebar", // shadcn sidebar-07 team-switcher in sidebar header
+    userProfile: "sidebar",    // shadcn sidebar-07 nav-user in sidebar footer
+  },
+  auth: {
+    type: "bearer",
+    getToken: () =>
+      typeof window !== "undefined"
+        ? localStorage.getItem("crm_auth_token") || "demo-admin-token"
+        : "demo-admin-token",
+  },
   navigation: [
     {
       group: "Sales & Pipelines",

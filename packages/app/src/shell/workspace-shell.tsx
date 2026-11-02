@@ -8,7 +8,7 @@ import type { WorkspaceShellProps } from "./types.js";
 /**
  * Root Next.js application workspace shell layout (`app/(workspace)/layout.tsx`)
  * composing the sidebar navigation, top header bar, breadcrumbs, tenant switcher,
- * user profile, and Spotlight command palette.
+ * user profile, and Spotlight command palette (with default shadcn sidebar-07 layout).
  */
 export function WorkspaceShell({
   app,
@@ -17,8 +17,12 @@ export function WorkspaceShell({
   tenants,
   activeTenantId,
   onTenantChange,
+  onAddTenant,
+  tenantSwitcherPosition: propTenantPos,
   currentUser,
   onLogout,
+  onSettingsClick,
+  userProfilePosition: propUserPos,
   theme,
   onThemeChange,
   collapsed: controlledCollapsed,
@@ -27,6 +31,11 @@ export function WorkspaceShell({
   breadcrumbs,
   className = "",
 }: WorkspaceShellProps): React.JSX.Element {
+  const tenantSwitcherPosition =
+    propTenantPos || app.layout?.tenantSwitcher || "sidebar";
+  const userProfilePosition =
+    propUserPos || app.layout?.userProfile || "sidebar";
+
   // Sidebar collapsed state (controlled or uncontrolled)
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const isControlled = controlledCollapsed !== undefined;
@@ -50,13 +59,22 @@ export function WorkspaceShell({
         className
       )}
     >
-      {/* 1. Left Sidebar Navigation */}
+      {/* 1. Left Sidebar Navigation (shadcn sidebar-07) */}
       <WorkspaceSidebar
         app={app}
         pathname={pathname}
         collapsed={isCollapsed}
         onCollapseChange={setCollapsed}
         onNavigate={onNavigate}
+        tenants={tenants}
+        activeTenantId={activeTenantId}
+        onTenantChange={onTenantChange}
+        onAddTenant={onAddTenant}
+        tenantSwitcherPosition={tenantSwitcherPosition}
+        currentUser={currentUser}
+        onLogout={onLogout}
+        onSettingsClick={onSettingsClick}
+        userProfilePosition={userProfilePosition}
       />
 
       {/* 2. Main Viewport (Topbar + Page View) */}
@@ -67,8 +85,12 @@ export function WorkspaceShell({
           tenants={tenants}
           activeTenantId={activeTenantId}
           onTenantChange={onTenantChange}
+          onAddTenant={onAddTenant}
+          tenantSwitcherPosition={tenantSwitcherPosition}
           currentUser={currentUser}
           onLogout={onLogout}
+          onSettingsClick={onSettingsClick}
+          userProfilePosition={userProfilePosition}
           theme={theme}
           onThemeChange={onThemeChange}
           onSpotlightOpen={() => setSpotlightOpen(true)}

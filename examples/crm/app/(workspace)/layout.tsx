@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { WorkspaceShell, type ShellTenant, type ShellUser } from "@honocube/app";
 import { app } from "@/lib/cube.app";
@@ -10,11 +10,11 @@ const DEMO_TENANTS: ShellTenant[] = [
   { id: "wayne-intl", name: "Wayne Enterprises", plan: "Scale" },
 ];
 
-const DEMO_USER: ShellUser = {
-  name: "Alex Rivera",
-  email: "alex@acme.com",
-  role: "Sales Director",
-};
+const DEMO_USERS: ShellUser[] = [
+  { name: "Alex Rivera", email: "alex@acme.com", role: "admin" },
+  { name: "Sarah Connor", email: "sarah@acme.com", role: "sales" },
+  { name: "Guest User", email: "guest@acme.com", role: "viewer" },
+];
 
 export default function WorkspaceLayout({
   children,
@@ -24,6 +24,21 @@ export default function WorkspaceLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [activeTenantId, setActiveTenantId] = useState("acme-corp");
+  const [userIndex, setUserIndex] = useState(0);
+
+  const currentUser = DEMO_USERS[userIndex] || DEMO_USERS[0];
+
+  // Sync token to localStorage on role switch for ApiClient bearer auth
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("crm_auth_token", `demo-${currentUser?.role}-token`);
+    }
+  }, [currentUser]);
+
+  const handleCycleUserRole = () => {
+    // Cycle demo roles: Admin -> Sales -> Viewer
+    setUserIndex((prev) => (prev + 1) % DEMO_USERS.length);
+  };
 
   return (
     <WorkspaceShell
@@ -32,7 +47,12 @@ export default function WorkspaceLayout({
       tenants={DEMO_TENANTS}
       activeTenantId={activeTenantId}
       onTenantChange={setActiveTenantId}
-      currentUser={DEMO_USER}
+      currentUser={currentUser}
+      onSettingsClick={handleCycleUserRole}
+      onLogout={() => {
+        // Switch to guest/viewer role on logout
+        setUserIndex(2);
+      }}
       onNavigate={(href) => router.push(href)}
     >
       {children}

@@ -260,4 +260,37 @@ describe("Workspace Shell Layout & Navigation Components", () => {
     expect(html).toContain("data-testid=\"sidebar-toggle-button\"");
     expect(html).toContain("data-testid=\"spotlight-trigger\"");
   });
+
+
+  it("renders shadcn sidebar-07 default layout with workspace switcher in sidebar header and user profile in footer", () => {
+    const html = renderToString(
+      <WorkspaceShell app={app} tenants={mockTenants} activeTenantId="tenant-acme" currentUser={mockUser}>
+        <div>Content</div>
+      </WorkspaceShell>
+    );
+    expect(html).toContain("data-testid=\"workspace-sidebar\"");
+    expect(html).toContain("Acme Global");
+    expect(html).toContain("Sarah Connor");
+  });
+
+  it("supports header positioning for tenant switcher and user profile", () => {
+    const html = renderToString(
+      <WorkspaceShell app={app} tenants={mockTenants} activeTenantId="tenant-acme" currentUser={mockUser} tenantSwitcherPosition="header" userProfilePosition="header">
+        <div>Content</div>
+      </WorkspaceShell>
+    );
+    expect(html).toContain("data-testid=\"workspace-topbar\"");
+    expect(html).toContain("data-testid=\"tenant-switcher-trigger\"");
+    expect(html).toContain("data-testid=\"user-profile-trigger\"");
+  });
+
+  it("gracefully displays app branding in sidebar header when no tenants are provided", () => {
+    const html = renderToString(
+      <WorkspaceShell app={app}>
+        <div>Content</div>
+      </WorkspaceShell>
+    );
+    expect(html).toContain("data-testid=\"sidebar-app-title\"");
+    expect(html).toContain("Cube Enterprise Suite");
+  });
 });
