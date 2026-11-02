@@ -1,6 +1,6 @@
 # Honocube Monorepo
 
-Honocube is a lightweight, type-safe resource framework built on top of [Hono](https://hono.dev/) and [Drizzle ORM](https://orm.drizzle.team/).
+Honocube is an enterprise-grade, lightweight, type-safe resource framework built on top of [Hono](https://hono.dev/) and [Drizzle ORM](https://orm.drizzle.team/).
 
 ## Project Structure
 
@@ -8,12 +8,11 @@ This monorepo is managed by [Turborepo](https://turbo.build/) and [Yarn Workspac
 
 ### Apps
 
-- **`apps/docs`**: The documentation site built with [Docusaurus](https://docusaurus.io/).
-- **`apps/test-api`**: A playground for testing Honocube features and performance.
+- **`apps/docs`**: The comprehensive documentation site built with [Docusaurus](https://docusaurus.io/).
 
 ### Packages
 
-- **`packages/api`**: The core Honocube framework.
+- **`packages/api`**: The core published framework (`@honocube/api`).
 - **`packages/eslint-config`**: Shared ESLint configurations.
 - **`packages/typescript-config`**: Shared TypeScript configurations.
 - **`packages/ui`**: Shared React component library.
@@ -31,28 +30,35 @@ This monorepo is managed by [Turborepo](https://turbo.build/) and [Yarn Workspac
 yarn install
 ```
 
-### Development
+### Development & Documentation
 
-Start all applications in development mode:
+Start the documentation site locally:
 
 ```bash
 yarn dev
 ```
 
-- **Docs**: [http://localhost:4000](http://localhost:4000)
-- **Test API**: [http://localhost:3000](http://localhost:3000)
+- **Docs**: [http://localhost:3000](http://localhost:3000)
+
+### Testing
+
+Run the automated integration test suite across all features:
+
+```bash
+yarn test
+```
 
 ### Build
 
 Build all packages and applications:
 
 ```bash
-yarn build
+node node_modules/turbo/bin/turbo run build
 ```
 
 ## Documentation
 
-For full documentation, please refer to the [Docs App](./apps/docs) or visit the live site at [honocube.com](https://honocube.com)
+For full documentation and enterprise guides, visit [honocube.com](https://honocube.com) or explore [`apps/docs`](./apps/docs).
 
 ---
 
