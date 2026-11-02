@@ -132,6 +132,27 @@ export type {
   DocumentAttachment,
 } from "./views/types.js";
 
+// Workspace Shell Layout & Navigation
+export { WorkspaceShell } from "./shell/workspace-shell.js";
+export { WorkspaceSidebar } from "./shell/sidebar.js";
+export { WorkspaceTopbar } from "./shell/topbar.js";
+export { WorkspaceBreadcrumbs, parsePathnameToBreadcrumbs } from "./shell/breadcrumbs.js";
+export { Spotlight } from "./shell/spotlight.js";
+export { TenantSwitcher } from "./shell/tenant-switcher.js";
+export { UserProfileDropdown } from "./shell/user-profile.js";
+export type {
+  ShellTenant,
+  ShellUser,
+  BreadcrumbItemData,
+  WorkspaceBreadcrumbsProps,
+  TenantSwitcherProps,
+  UserProfileDropdownProps,
+  SpotlightProps,
+  WorkspaceSidebarProps,
+  WorkspaceTopbarProps,
+  WorkspaceShellProps,
+} from "./shell/types.js";
+
 // Format & String Utilities
 export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js";
 
