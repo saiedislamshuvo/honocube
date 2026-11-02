@@ -1,80 +1,113 @@
-# Honocube
+# @honocube/api
 
-Honocube is a lightweight, type-safe resource framework built on top of [Hono](https://hono.dev/) and [Drizzle ORM](https://orm.drizzle.team/). It allows you to rapidly build robust RESTful APIs with minimal boilerplate while maintaining full control over your business logic.
+Honocube is an enterprise-grade, lightweight, type-safe resource framework built on top of [Hono](https://hono.dev/) and [Drizzle ORM](https://orm.drizzle.team/). It allows you to rapidly build production-ready RESTful APIs with zero boilerplate while maintaining full control over your business logic.
 
-## Motivation
-
-Building APIs often involves repetitive tasks: setting up CRUD endpoints, handling pagination, filtering, searching, file uploads, and permissions. Honocube abstracts these patterns into a declarative "Resource" model, allowing you to focus on what makes your application unique.
+---
 
 ## Key Features
 
-- **🔋 Battery-included CRUD:** Automatic list, detail, create, update, and delete endpoints.
-- **🛡️ Type Safety:** End-to-end TypeScript support with Standard Schema validation.
-- **🔌 Adapter Architecture:** Currently optimized for Drizzle ORM, with a flexible base for other adapters.
-- **📁 Integrated Uploads:** Seamlessly handle file uploads and associate them with your records.
-- **🔐 Granular Auth:** Declarative permission strings and functional Row-Level Security (RLS).
-- **🚀 Performance:** Built on Hono, the fastest web framework for the edge.
-- **📦 Relations & Pivots:** First-class support for `one-to-one`, `one-to-many`, and `many-to-many` (pivot) relationships.
-- **🔍 Advanced Querying:** Built-in support for search, filtering, and pagination.
+- **🔋 Battery-Included CRUD:** Automatic `list`, `detail`, `create`, `update`, `delete`, and atomic batch endpoints.
+- **🛡️ End-to-End Type Safety:** Deep TypeScript inference with Standard Schema (Zod, Valibot, ArkType) and Hono `hc` RPC client support.
+- **📖 Built-in OpenAPI 3.1 & Scalar Docs:** Zero-dependency, zero-memory lazy schema generator (`/openapi.json`) and interactive documentation UI (`/docs`).
+- **⚡ Keyset & Cursor Pagination:** O(1) seeking with composite tie-breakers, bidirectional navigation, and drift protection.
+- **🔁 Mutation Idempotency:** Payload fingerprinting, atomic concurrency lock resolution, and replay with `Idempotency-Key`.
+- **🛡️ Distributed Edge Rate Limiting:** Sliding window counter algorithm with standard RFC 6585 headers (`RateLimit-*`, `Retry-After`).
+- **📊 Analytics & Aggregations:** Dynamic metrics (`count`, `sum`, `avg`, `min`, `max`), grouping, and date-histogram bucketing.
+- **🔀 Workflows & State Machines:** Declarative state transitions, role gating, and locked document protection.
+- **📝 Audit Trail & Webhook Outbox:** Automated field-level diff tracking and HMAC-signed transactional outbox webhooks.
+- **🏢 Multi-Tenancy & FLAC/RBAC:** Tenant scoping, Field-Level Access Control, and Row-Level Security.
 
-## Architecture at a Glance
+---
 
-Honocube operates on three main levels:
+## Quick Start
 
-1.  **App Config (`createApp`):** Define global behaviors like database adapters, storage providers, authentication logic, and global middleware.
-2.  **Resources (`defineResource`):** Define a single entity (e.g., "Users", "Posts") with its schema, validators, hooks, and relationships.
-3.  **API Gateway (`defineApi`):** Group multiple resources into a versioned API.
-
-## Migrating from 1.x
-
-The API surface did not change in 2.0.0 — only the dependency model did. The
-[migration guide](https://honocube.com/docs/guides/v2-migration) covers what to install, what to check,
-and what to do when a peer dependency is missing.
-
-## Peer Dependencies
-
-As of v2.0.0, Honocube no longer bundles its own copy of Hono, Zod, or Drizzle ORM. They are declared as
-**peer dependencies**, which means **your** installed versions are the ones that run — no duplicate copies,
-no version conflicts, and no risk of two different Hono or Zod instances in the same process.
+### 1. Installation
 
 ```bash
 npm install @honocube/api hono drizzle-orm
 ```
 
-| Package     | Peer range         | Notes                                                     |
-| ----------- | ------------------ | --------------------------------------------------------- |
-| `hono`      | `>=4.0.0`          | The version you mount your API with.                      |
-| `drizzle-orm` | `>=0.45.0`      | The version your tables and adapter are built with.       |
-| `zod`       | `^4.0.0`           | **Optional.** The version your resource validators are built with. |
+### 2. Define Resources & API Gateway
 
-If you are on npm 7+ or Yarn 2+, these are installed automatically if missing. With Yarn 1 they are not —
-install them yourself.
+```typescript
+import { createApp, DrizzleAdapter, defineApi } from "@honocube/api";
+import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import { z } from "zod";
 
-`zod` is optional: the framework validates with the [Standard Schema](https://standardschema.dev)
-protocol, so a validator written with Zod, with Valibot, with ArkType, or by hand is accepted. Install
-`zod` only if your own resources use it.
+// Drizzle schema
+export const posts = sqliteTable("posts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  content: text("content"),
+});
 
-## Development
+// App initialization
+export const app = createApp({
+  adapter: new DrizzleAdapter(db),
+});
 
-This directory contains the source code for the Honocube framework itself.
+// Resource definition
+export const postsResource = app.defineResource({
+  name: "posts",
+  table: posts,
+  validator: z.object({
+    title: z.string().min(3),
+    content: z.string().optional(),
+  }),
+  pagination: { type: "both" },
+  idempotency: { enabled: true },
+  rateLimit: { limit: 100, window: "1m" },
+  aggregate: { enabled: true },
+});
 
-### Running Locally
-
-```bash
-# From the root of the monorepo
-yarn install
-yarn build
+// API Gateway with Interactive Documentation
+export const api = app.defineApi(
+  { posts: postsResource },
+  {
+    docs: {
+      path: "/docs",            // Interactive Scalar UI
+      specPath: "/openapi.json", // Raw OpenAPI 3.1 JSON
+      title: "My Application API",
+      version: "2.0.2",
+    },
+  }
+);
 ```
 
-The compiled output is written to `dist/`.
+### 3. Type-Safe Client via Hono RPC (`hc`)
 
-### Checking Types
+```typescript
+import { hc } from "hono/client";
+import type { api } from "./server";
 
-```bash
-yarn workspace @honocube/api check-types
+const client = hc<typeof api>("http://localhost:3000");
+
+// Fully typed queries, inputs, and response models:
+const res = await client.posts.$get({ query: { limit: "10" } });
+const json = await res.json();
+console.log(json.data); // Post[]
 ```
 
 ---
 
-For full documentation, visit [honocube.com](https://honocube.com) or run the docs site locally with
-`yarn dev` from the repository root.
+## Peer Dependencies
+
+As of v2.0.0, `@honocube/api` declares Hono, Zod, and Drizzle ORM as **peer dependencies**, ensuring that your application's single copy runs with zero duplicate class collisions:
+
+| Package | Peer range | Notes |
+| :--- | :--- | :--- |
+| `hono` | `>=4.0.0` | Web framework and routing engine. |
+| `drizzle-orm` | `>=0.45.0` | ORM tables and database dialect adapter. |
+| `zod` | `^4.0.0` | **Optional.** Used only if your resource validators use Zod. |
+
+---
+
+## Documentation
+
+For guides, concepts, and recipes, visit [honocube.com](https://honocube.com) or explore [`apps/docs`](https://github.com/saiedislamshuvo/honocube/tree/main/apps/docs).
+
+---
+
+## License
+
+MIT © [Saied Islam Shuvo](https://github.com/saiedislamshuvo)
