@@ -26,7 +26,11 @@ export function validateField(
     (Array.isArray(value) && value.length === 0);
 
   if (capability.required && isEmpty) {
-    errors.push(`${field.label || "This field"} is required`);
+    if (field.type === "collection") {
+      errors.push(`${field.label || "This field"} must contain at least one item`);
+    } else {
+      errors.push(`${field.label || "This field"} is required`);
+    }
     return errors;
   }
 
@@ -81,6 +85,21 @@ export async function validateRecord(
     const fieldErrors = validateField(field, record[key], record, user);
     if (fieldErrors.length > 0) {
       errors[key] = fieldErrors;
+    }
+
+    // Child collection row-level validations
+    if (field.type === "collection" && Array.isArray(record[key])) {
+      const childFields = (field as any).collection?.fields || {};
+      const rows = record[key] as any[];
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (row && typeof row === "object") {
+          const rowErrors = await validateRecord(childFields, row, user);
+          for (const [childKey, errs] of Object.entries(rowErrors)) {
+            errors[`${key}[${i}].${childKey}`] = errs;
+          }
+        }
+      }
     }
   }
 

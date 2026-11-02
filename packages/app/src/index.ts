@@ -59,6 +59,8 @@ export type {
 
 // Form & Record Engine
 export { useCollectionForm } from "./form/use-collection-form.js";
+export { createChildCollectionHelper } from "./form/child.js";
+export { useChildCollection } from "./form/use-child-collection.js";
 export { evaluateComputedFields } from "./form/computed.js";
 export { evaluateFieldCapability } from "./form/capabilities.js";
 export { validateField, validateRecord } from "./form/validation.js";
@@ -69,6 +71,7 @@ export type {
   FieldCapabilityState,
   FormFieldState,
   FormMode,
+  ChildCollectionHelper,
 } from "./form/types.js";
 
 // Format & String Utilities
