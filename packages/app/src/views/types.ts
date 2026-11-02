@@ -4,6 +4,7 @@ import type { CollectionListOptions } from "../table/types.js";
 import type { FormMode, FormFieldState, ChildCollectionHelper } from "../form/types.js";
 import type { FieldConfig, SubCollectionFieldConfig } from "../types/fields.js";
 import type { ViewType } from "../types/views.js";
+import type { AvailableTransition } from "../workflow/types.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -346,5 +347,99 @@ export interface CollectionMultiViewProps<TCollection extends Collection<any>> {
   availableViews?: ViewType[];
   onRecordClick?: (record: InferRecord<TCollection>) => void;
   actions?: React.ReactNode;
+  className?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Document Header & Collaboration Types
+// ---------------------------------------------------------------------------
+
+export interface AuditFieldDiff {
+  field: string;
+  from?: unknown;
+  to?: unknown;
+}
+
+export interface AuditActivity {
+  id: string;
+  actor: {
+    name: string;
+    avatar?: string;
+  };
+  action: string;
+  timestamp: string | Date;
+  diffs?: AuditFieldDiff[];
+}
+
+export interface DocumentComment {
+  id: string;
+  author: {
+    name: string;
+    avatar?: string;
+  };
+  content: string;
+  createdAt: string | Date;
+}
+
+export interface DocumentAttachment {
+  id: string;
+  name: string;
+  size?: number;
+  mimeType?: string;
+  uploadedAt: string | Date;
+  url?: string;
+}
+
+export interface WorkflowActionBarProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  record: InferRecord<TCollection>;
+  user?: Record<string, unknown>;
+  onTransitionSuccess?: (
+    updatedRecord: InferRecord<TCollection>,
+    transition: AvailableTransition<InferRecord<TCollection>>
+  ) => void;
+  onTransitionError?: (error: Error) => void;
+  className?: string;
+}
+
+export interface DocumentHeaderProps<TCollection extends Collection<any>> {
+  collection: TCollection;
+  record: InferRecord<TCollection>;
+  title?: React.ReactNode;
+  identifier?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  user?: Record<string, unknown>;
+  onBack?: () => void;
+  backHref?: string;
+  onTransitionSuccess?: (
+    updatedRecord: InferRecord<TCollection>,
+    transition: AvailableTransition<InferRecord<TCollection>>
+  ) => void;
+  onTransitionError?: (error: Error) => void;
+  onAction?: (actionKey: "print" | "duplicate" | "delete" | string) => void;
+  actions?: React.ReactNode;
+  extraActions?: React.ReactNode;
+  showWorkflow?: boolean;
+  actionsMenuOpen?: boolean;
+  className?: string;
+}
+
+export interface SidePanelProps<TCollection extends Collection<any> = Collection<any>> {
+  collection?: TCollection;
+  recordId?: string | number;
+  activities?: AuditActivity[];
+  comments?: DocumentComment[];
+  attachments?: DocumentAttachment[];
+  onAddComment?: (content: string) => Promise<void> | void;
+  onUploadAttachment?: (file: File) => Promise<void> | void;
+  onDeleteAttachment?: (attachmentId: string) => Promise<void> | void;
+  currentUser?: {
+    name: string;
+    avatar?: string;
+  };
+  defaultTab?: "activity" | "comments" | "attachments";
+  tabs?: Array<"activity" | "comments" | "attachments">;
+  isOpen?: boolean;
+  onClose?: () => void;
   className?: string;
 }

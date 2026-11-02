@@ -14,6 +14,16 @@ export function toHumanLabel(str: string): string {
 }
 
 /**
+ * Formats byte size into human-readable representation (e.g. 1.2 MB).
+ */
+export function formatFileSize(bytes?: number): string {
+  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
  * Formats a raw value into a human-readable display string based on field metadata.
  */
 export function formatCellValue(value: unknown, field?: FieldConfig<any>): string {
