@@ -57,6 +57,9 @@ export type {
   TableUrlState,
 } from "./table/types.js";
 
+// Format & String Utilities
+export { toHumanLabel, formatCellValue } from "./utils/format.js";
+
 // Collection & Record Types
 export type {
   Collection,
