@@ -1,0 +1,136 @@
+import { describe, expect, it, beforeAll } from "vitest";
+import { resolveWorkspaceRoute, getAvailableTransitions, getStateMetadata } from "@honocube/app";
+import { api, ensureDbInitialized } from "../lib/cube.api";
+import { app, invoicesCollection } from "../lib/cube.app";
+
+describe("Showcase CRM App Verification", () => {
+  beforeAll(async () => {
+    await ensureDbInitialized();
+  });
+
+  describe("HonoCube Backend API Route Handlers", () => {
+    it("returns seeded deals with Kanban pipeline stages", async () => {
+      const res = await api.request("/deals");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(Array.isArray(json.data)).toBe(true);
+      expect(json.data.length).toBeGreaterThanOrEqual(6);
+
+      const stages = json.data.map((d: any) => d.stage);
+      expect(stages).toContain("proposal");
+      expect(stages).toContain("negotiation");
+      expect(stages).toContain("lead");
+      expect(stages).toContain("won");
+    });
+
+    it("returns seeded contacts directory", async () => {
+      const res = await api.request("/contacts");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(Array.isArray(json.data)).toBe(true);
+      expect(json.data.length).toBeGreaterThanOrEqual(5);
+      expect(json.data[0].email).toBeDefined();
+    });
+
+    it("returns seeded invoices with ERP workflow status", async () => {
+      const res = await api.request("/invoices");
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(Array.isArray(json.data)).toBe(true);
+      expect(json.data.length).toBeGreaterThanOrEqual(3);
+
+      const invoice = json.data[0];
+      expect(invoice.invoiceNumber).toMatch(/^INV-/);
+      expect(invoice.grandTotal).toBeGreaterThan(0);
+    });
+
+    it("supports creating new deal via POST /deals", async () => {
+      const res = await api.request("/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "New Venture Deal",
+          company: "Umbrella Corp",
+          amount: 85000,
+          stage: "qualified",
+          priority: "high",
+          contactName: "Albert Wesker",
+          contactEmail: "albert@umbrella.com",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.data.title).toBe("New Venture Deal");
+      expect(json.data.amount).toBe(85000);
+    });
+  });
+
+  describe("Workspace Routing & App Architecture", () => {
+    it("resolves home dashboard route when slug is empty", () => {
+      const route = resolveWorkspaceRoute(app, []);
+      expect(route.type).toBe("home");
+    });
+
+    it("resolves collection list / kanban view for /deals", () => {
+      const route = resolveWorkspaceRoute(app, ["deals"]);
+      expect(route.type).toBe("list");
+      expect(route.collectionName).toBe("deals");
+      expect(route.collection?.defaultView).toBe("kanban");
+    });
+
+    it("resolves create record route for /deals/new", () => {
+      const route = resolveWorkspaceRoute(app, ["deals", "new"]);
+      expect(route.type).toBe("create");
+      expect(route.collectionName).toBe("deals");
+    });
+
+    it("resolves detail record route for /invoices/1", () => {
+      const route = resolveWorkspaceRoute(app, ["invoices", "1"]);
+      expect(route.type).toBe("detail");
+      expect(route.collectionName).toBe("invoices");
+      expect(route.recordId).toBe("1");
+    });
+
+    it("resolves 404 not-found route for non-existent collections", () => {
+      const route = resolveWorkspaceRoute(app, ["non-existent-xyz"]);
+      expect(route.type).toBe("not-found");
+      expect(route.collectionName).toBe("non-existent-xyz");
+    });
+  });
+
+  describe("Workflow State Machine Engine on Invoices", () => {
+    it("provides correct draft state transitions", () => {
+      const draftRecord = { status: "draft", invoiceNumber: "INV-2026-0001" };
+      const transitions = getAvailableTransitions(invoicesCollection.workflow, draftRecord);
+      expect(transitions.length).toBeGreaterThan(0);
+
+      const targetStates = transitions.map((t) => t.to);
+      expect(targetStates).toContain("submitted");
+      expect(targetStates).toContain("cancelled");
+    });
+
+    it("provides approve and reject transitions when submitted", () => {
+      const submittedRecord = { status: "submitted", invoiceNumber: "INV-2026-0001" };
+      const transitions = getAvailableTransitions(invoicesCollection.workflow, submittedRecord);
+      const targetStates = transitions.map((t) => t.to);
+      expect(targetStates).toContain("approved");
+      expect(targetStates).toContain("draft");
+      expect(targetStates).toContain("cancelled");
+    });
+
+    it("locks records in paid state with no further transitions", () => {
+      const paidRecord = { status: "paid", invoiceNumber: "INV-2026-0002" };
+      const transitions = getAvailableTransitions(invoicesCollection.workflow, paidRecord);
+      expect(transitions.length).toBe(0);
+
+      const stateMeta = getStateMetadata(invoicesCollection.workflow, "paid");
+      expect(stateMeta.label).toBe("Paid");
+      expect(stateMeta.isLocked).toBe(true);
+    });
+  });
+});
