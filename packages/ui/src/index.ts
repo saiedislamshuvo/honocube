@@ -122,3 +122,52 @@ export {
   CommandShortcut,
   CommandSeparator,
 } from "./components/command.js";
+
+// Layout & Disclosure Primitives
+export { Separator } from "./components/separator.js";
+export {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "./components/avatar.js";
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "./components/tooltip.js";
+export {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "./components/collapsible.js";
+
+// Sidebar Primitives & Hooks
+export {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+  sidebarMenuButtonVariants,
+  useSidebar,
+} from "./components/sidebar.js";
+export { useIsMobile } from "./hooks/use-mobile.js";

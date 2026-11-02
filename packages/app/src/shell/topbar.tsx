@@ -1,14 +1,14 @@
 import React from "react";
-import { Menu, Moon, Search, Sun } from "lucide-react";
-import { Button, cn } from "@honocube/ui";
+import { Moon, Search, Sun } from "lucide-react";
+import { Button, Separator, SidebarTrigger, cn } from "@honocube/ui";
 import { WorkspaceBreadcrumbs } from "./breadcrumbs.js";
 import { TenantSwitcher } from "./tenant-switcher.js";
 import { UserProfileDropdown } from "./user-profile.js";
 import type { WorkspaceTopbarProps } from "./types.js";
 
 /**
- * Top sticky navigation bar housing breadcrumbs, spotlight trigger, tenant switcher,
- * theme toggle, and user profile menu.
+ * Top sticky navigation bar housing official SidebarTrigger, breadcrumbs,
+ * spotlight trigger, tenant switcher, theme toggle, and user profile menu.
  */
 export function WorkspaceTopbar({
   app,
@@ -40,24 +40,18 @@ export function WorkspaceTopbar({
     <header
       data-testid="workspace-topbar"
       className={cn(
-        "sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6",
+        "sticky top-0 z-30 flex h-14 shrink-0 w-full items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6",
         className
       )}
     >
-      {/* Left: Sidebar Toggle + Breadcrumbs */}
-      <div className="flex items-center gap-3 truncate">
-        {onSidebarToggle && (
-          <Button
-            data-testid="sidebar-toggle-button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-            onClick={onSidebarToggle}
-            aria-label="Toggle sidebar"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        )}
+      {/* Left: Official SidebarTrigger + Separator + Breadcrumbs */}
+      <div className="flex items-center gap-2 truncate">
+        <SidebarTrigger
+          data-testid="sidebar-toggle-button"
+          onClick={onSidebarToggle}
+          className="-ml-1"
+        />
+        <Separator orientation="vertical" className="mr-2 h-4" />
 
         <WorkspaceBreadcrumbs
           app={app}

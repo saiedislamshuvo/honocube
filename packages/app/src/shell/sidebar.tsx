@@ -6,7 +6,23 @@ import {
   PanelLeftOpen,
   Plus,
 } from "lucide-react";
-import { Badge, Button, cn } from "@honocube/ui";
+import {
+  Button,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+  cn,
+} from "@honocube/ui";
 import type { NavigationGroup, NavigationItem } from "../types/app.js";
 import type { Collection } from "../types/collection.js";
 import { TenantSwitcher } from "./tenant-switcher.js";
@@ -19,12 +35,12 @@ function isCollection(item: NavigationItem): item is Collection<any> {
 
 /**
  * Collapsible left navigation sidebar organized by navigation groups with active state,
- * badge counts, and quick add shortcuts (official shadcn sidebar-07 layout).
+ * badge counts, and quick add shortcuts (canonical shadcn sidebar-07 layout).
  */
 export function WorkspaceSidebar({
   app,
   pathname = "/",
-  collapsed = false,
+  collapsed: propCollapsed,
   onCollapseChange,
   onNavigate,
   tenants,
@@ -40,6 +56,9 @@ export function WorkspaceSidebar({
   footerSlot,
   className = "",
 }: WorkspaceSidebarProps): React.JSX.Element {
+  const { state } = useSidebar();
+  const isCollapsed = propCollapsed !== undefined ? propCollapsed : state === "collapsed";
+
   const tenantSwitcherPosition =
     propTenantPos || app.layout?.tenantSwitcher || "sidebar";
   const userProfilePosition =
@@ -51,7 +70,6 @@ export function WorkspaceSidebar({
   if (app.navigation && app.navigation.length > 0) {
     groups = app.navigation;
   } else {
-    // Auto-group collections by group field or fallback
     const collections = app.getCollections ? app.getCollections() : app.collections || [];
     const groupMap = new Map<string, Collection<any>[]>();
 
@@ -80,29 +98,21 @@ export function WorkspaceSidebar({
     tenantSwitcherPosition === "sidebar" && Boolean(tenants && tenants.length > 0);
 
   return (
-    <aside
+    <Sidebar
+      collapsible="icon"
       data-testid="workspace-sidebar"
-      className={cn(
-        "flex flex-col border-r border-border bg-card transition-all duration-300 h-full select-none",
-        collapsed ? "w-16" : "w-64",
-        className
-      )}
+      className={cn(isCollapsed ? "w-16" : "w-64", className)}
     >
-      {/* 1. Sidebar Header (shadcn sidebar-07 team-switcher or Brand Title) */}
-      <div
-        className={cn(
-          "flex h-14 items-center justify-between border-b border-border",
-          collapsed ? "px-2 justify-center" : "px-3"
-        )}
-      >
+      {/* 1. Sidebar Header (canonical shadcn sidebar-07 team-switcher or Single Tenant App Title) */}
+      <SidebarHeader>
         {headerSlot || (
-          <>
+          <div className="flex items-center justify-between w-full">
             {hasTenantsInSidebar ? (
               <div className="flex-1 min-w-0">
                 <TenantSwitcher
                   app={app}
                   variant="sidebar"
-                  collapsed={collapsed}
+                  collapsed={isCollapsed}
                   tenants={tenants}
                   activeTenantId={activeTenantId}
                   onTenantChange={onTenantChange}
@@ -110,48 +120,54 @@ export function WorkspaceSidebar({
                 />
               </div>
             ) : (
-              <div className="flex items-center gap-2.5 truncate">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold shadow-sm">
-                  <Box className="h-4 w-4" />
-                </div>
-                {!collapsed && (
-                  <span
-                    data-testid="sidebar-app-title"
-                    className="font-semibold text-sm tracking-tight text-foreground truncate"
+              <SidebarMenu className="flex-1 min-w-0">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="cursor-default hover:bg-transparent"
                   >
-                    {app.title}
-                  </span>
-                )}
-              </div>
+                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold shadow-sm">
+                      <Box className="size-4" />
+                    </div>
+                    {!isCollapsed && (
+                      <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+                        <span
+                          data-testid="sidebar-app-title"
+                          className="truncate font-semibold text-sidebar-foreground"
+                        >
+                          {app.title}
+                        </span>
+                      </div>
+                    )}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
             )}
-          </>
-        )}
 
-        {onCollapseChange && !collapsed && (
-          <Button
-            data-testid="sidebar-collapse-button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0 ml-1"
-            onClick={() => onCollapseChange(!collapsed)}
-            aria-label="Collapse sidebar"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </Button>
+            {onCollapseChange && !isCollapsed && (
+              <Button
+                data-testid="sidebar-collapse-button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground shrink-0 ml-1"
+                onClick={() => onCollapseChange(true)}
+                aria-label="Collapse sidebar"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         )}
-      </div>
+      </SidebarHeader>
 
-      {/* 2. Navigation Groups & Links (shadcn sidebar-07 nav-main) */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-5">
+      {/* 2. Sidebar Navigation Groups (canonical shadcn sidebar-07 nav-main) */}
+      <SidebarContent>
         {groups.map((group, groupIdx) => (
-          <div key={groupIdx} className="space-y-1">
-            {!collapsed && (
-              <h3 className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
-                {group.group}
-              </h3>
+          <SidebarGroup key={groupIdx}>
+            {!isCollapsed && (
+              <SidebarGroupLabel>{group.group}</SidebarGroupLabel>
             )}
-
-            <div className="space-y-0.5">
+            <SidebarMenu>
               {group.items.map((item, itemIdx) => {
                 const isCol = isCollection(item);
                 const name = isCol ? item.name : item.label;
@@ -159,72 +175,65 @@ export function WorkspaceSidebar({
                 const href = isCol ? `/${item.name}` : item.href;
                 const badge = !isCol ? item.badge : undefined;
 
-                // Active check: exact match or child route
                 const isActive =
                   pathname === href ||
                   (href !== "/" && pathname.startsWith(`${href}/`));
 
                 return (
-                  <div
-                    key={itemIdx}
-                    className="group relative flex items-center justify-between rounded-md"
-                  >
-                    <a
-                      data-testid={`sidebar-link-${name}`}
-                      href={href}
-                      onClick={(e) => handleLinkClick(href, e)}
-                      className={cn(
-                        "flex flex-1 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-                        isActive
-                          ? "bg-primary/10 text-primary font-semibold"
-                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                        collapsed && "justify-center px-0"
-                      )}
-                      title={label}
+                  <SidebarMenuItem key={itemIdx}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={label}
                     >
-                      <Layers className="h-4 w-4 shrink-0" />
-                      {!collapsed && (
-                        <span className="truncate flex-1">{label}</span>
-                      )}
-                    </a>
-
-                    {/* Quick Add Button on Hover (for Collections) */}
-                    {!collapsed && isCol && (
                       <a
-                        data-testid={`sidebar-quick-create-${item.name}`}
-                        href={`/${item.name}/new`}
-                        onClick={(e) => handleLinkClick(`/${item.name}/new`, e)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 mr-1 text-muted-foreground hover:text-foreground rounded hover:bg-muted"
+                        data-testid={`sidebar-link-${name}`}
+                        href={href}
+                        onClick={(e) => handleLinkClick(href, e)}
+                        title={label}
+                      >
+                        <Layers className="size-4" />
+                        {!isCollapsed && <span className="truncate">{label}</span>}
+                      </a>
+                    </SidebarMenuButton>
+
+                    {/* Quick Create shortcut for collections */}
+                    {!isCollapsed && isCol && (
+                      <SidebarMenuAction
+                        asChild
+                        showOnHover
                         title={`New ${item.singular || label}`}
                       >
-                        <Plus className="h-3.5 w-3.5" />
-                      </a>
+                        <a
+                          data-testid={`sidebar-quick-create-${item.name}`}
+                          href={`/${item.name}/new`}
+                          onClick={(e) => handleLinkClick(`/${item.name}/new`, e)}
+                        >
+                          <Plus className="size-4" />
+                          <span className="sr-only">New {item.singular || label}</span>
+                        </a>
+                      </SidebarMenuAction>
                     )}
 
-                    {!collapsed && badge !== undefined && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-auto mr-1.5 h-4 px-1 text-[10px] font-semibold"
-                      >
-                        {badge}
-                      </Badge>
+                    {!isCollapsed && badge !== undefined && (
+                      <SidebarMenuBadge>{badge}</SidebarMenuBadge>
                     )}
-                  </div>
+                  </SidebarMenuItem>
                 );
               })}
-            </div>
-          </div>
+            </SidebarMenu>
+          </SidebarGroup>
         ))}
-      </div>
+      </SidebarContent>
 
-      {/* 3. Sidebar Footer (shadcn sidebar-07 nav-user & expand button) */}
-      <div className="border-t border-border p-2 space-y-1">
+      {/* 3. Sidebar Footer (canonical shadcn sidebar-07 nav-user) */}
+      <SidebarFooter>
         {footerSlot || (
           <>
             {userProfilePosition === "sidebar" && currentUser && (
               <UserProfileDropdown
                 variant="sidebar"
-                collapsed={collapsed}
+                collapsed={isCollapsed}
                 user={currentUser}
                 onLogout={onLogout}
                 onSettingsClick={onSettingsClick}
@@ -233,19 +242,23 @@ export function WorkspaceSidebar({
           </>
         )}
 
-        {onCollapseChange && collapsed && (
+        {/* Collapsed expand toggle helper for manual control & tests */}
+        {onCollapseChange && isCollapsed && (
           <Button
             data-testid="sidebar-expand-button"
             variant="ghost"
             size="icon"
-            className="h-8 w-full text-muted-foreground hover:text-foreground justify-center"
+            className="h-8 w-full text-sidebar-foreground/70 hover:text-sidebar-foreground justify-center mt-1"
             onClick={() => onCollapseChange(false)}
             aria-label="Expand sidebar"
           >
             <PanelLeftOpen className="h-4 w-4" />
           </Button>
         )}
-      </div>
-    </aside>
+      </SidebarFooter>
+
+      {/* 4. Rail for hover/click collapsing */}
+      <SidebarRail />
+    </Sidebar>
   );
 }

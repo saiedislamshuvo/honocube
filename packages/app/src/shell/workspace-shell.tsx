@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { cn } from "@honocube/ui";
+import { SidebarInset, SidebarProvider, cn } from "@honocube/ui";
 import { WorkspaceSidebar } from "./sidebar.js";
 import { WorkspaceTopbar } from "./topbar.js";
 import { Spotlight } from "./spotlight.js";
@@ -7,8 +7,11 @@ import type { WorkspaceShellProps } from "./types.js";
 
 /**
  * Root Next.js application workspace shell layout (`app/(workspace)/layout.tsx`)
- * composing the sidebar navigation, top header bar, breadcrumbs, tenant switcher,
- * user profile, and Spotlight command palette (with default shadcn sidebar-07 layout).
+ * composing the canonical shadcn sidebar-07 layout:
+ * - SidebarProvider (root context + ⌘B keyboard shortcut + cookie persistence)
+ * - WorkspaceSidebar (official collapsible="icon" Sidebar)
+ * - SidebarInset (main content viewport)
+ * - WorkspaceTopbar (with canonical SidebarTrigger, Breadcrumbs, Spotlight, Tenant Switcher, Profile)
  */
 export function WorkspaceShell({
   app,
@@ -52,36 +55,24 @@ export function WorkspaceShell({
   const [spotlightOpen, setSpotlightOpen] = useState(false);
 
   return (
-    <div
-      data-testid="workspace-shell"
-      className={cn(
-        "flex h-screen w-full overflow-hidden bg-background text-foreground antialiased",
-        className
-      )}
+    <SidebarProvider
+      open={!isCollapsed}
+      onOpenChange={(open) => setCollapsed(!open)}
     >
-      {/* 1. Left Sidebar Navigation (shadcn sidebar-07) */}
-      <WorkspaceSidebar
-        app={app}
-        pathname={pathname}
-        collapsed={isCollapsed}
-        onCollapseChange={setCollapsed}
-        onNavigate={onNavigate}
-        tenants={tenants}
-        activeTenantId={activeTenantId}
-        onTenantChange={onTenantChange}
-        onAddTenant={onAddTenant}
-        tenantSwitcherPosition={tenantSwitcherPosition}
-        currentUser={currentUser}
-        onLogout={onLogout}
-        onSettingsClick={onSettingsClick}
-        userProfilePosition={userProfilePosition}
-      />
-
-      {/* 2. Main Viewport (Topbar + Page View) */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <WorkspaceTopbar
+      <div
+        data-testid="workspace-shell"
+        className={cn(
+          "flex h-screen w-full overflow-hidden bg-background text-foreground antialiased",
+          className
+        )}
+      >
+        {/* 1. Left Sidebar Navigation (canonical shadcn sidebar-07) */}
+        <WorkspaceSidebar
           app={app}
           pathname={pathname}
+          collapsed={isCollapsed}
+          onCollapseChange={setCollapsed}
+          onNavigate={onNavigate}
           tenants={tenants}
           activeTenantId={activeTenantId}
           onTenantChange={onTenantChange}
@@ -91,30 +82,47 @@ export function WorkspaceShell({
           onLogout={onLogout}
           onSettingsClick={onSettingsClick}
           userProfilePosition={userProfilePosition}
-          theme={theme}
-          onThemeChange={onThemeChange}
-          onSpotlightOpen={() => setSpotlightOpen(true)}
-          onSidebarToggle={() => setCollapsed(!isCollapsed)}
-          onNavigate={onNavigate}
-          breadcrumbs={breadcrumbs}
         />
 
-        {/* Content Outlet */}
-        <main
-          data-testid="workspace-main"
-          className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
-        >
-          {children}
-        </main>
-      </div>
+        {/* 2. Main Viewport (SidebarInset + Topbar + Page View) */}
+        <SidebarInset className="flex flex-1 flex-col overflow-hidden">
+          <WorkspaceTopbar
+            app={app}
+            pathname={pathname}
+            tenants={tenants}
+            activeTenantId={activeTenantId}
+            onTenantChange={onTenantChange}
+            onAddTenant={onAddTenant}
+            tenantSwitcherPosition={tenantSwitcherPosition}
+            currentUser={currentUser}
+            onLogout={onLogout}
+            onSettingsClick={onSettingsClick}
+            userProfilePosition={userProfilePosition}
+            theme={theme}
+            onThemeChange={onThemeChange}
+            onSpotlightOpen={() => setSpotlightOpen(true)}
+            onSidebarToggle={() => setCollapsed(!isCollapsed)}
+            onNavigate={onNavigate}
+            breadcrumbs={breadcrumbs}
+          />
 
-      {/* 3. Global Spotlight ⌘K Command Palette */}
-      <Spotlight
-        app={app}
-        open={spotlightOpen}
-        onOpenChange={setSpotlightOpen}
-        onNavigate={onNavigate}
-      />
-    </div>
+          {/* Content Outlet */}
+          <main
+            data-testid="workspace-main"
+            className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
+          >
+            {children}
+          </main>
+        </SidebarInset>
+
+        {/* 3. Global Spotlight ⌘K Command Palette */}
+        <Spotlight
+          app={app}
+          open={spotlightOpen}
+          onOpenChange={setSpotlightOpen}
+          onNavigate={onNavigate}
+        />
+      </div>
+    </SidebarProvider>
   );
 }
