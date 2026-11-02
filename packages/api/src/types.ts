@@ -1,4 +1,5 @@
-import type { Context, MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler, Hono } from "hono";
+import type { MergeSchemaPath, Schema } from "hono/types";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 
 export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
@@ -362,6 +363,189 @@ export interface ApiOptions {
   version?: string;
   docs?: boolean | OpenApiDocsConfig;
 }
+
+export interface PaginationMeta {
+  total: number;
+  limit: number;
+  page?: number;
+  totalPages?: number;
+  nextCursor?: string | null;
+  prevCursor?: string | null;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+}
+
+export type ResourceSchema<TSelect = any, TInsert = any> = {
+  "/": {
+    $get: {
+      input: {
+        query?: {
+          limit?: string;
+          page?: string;
+          cursor?: string;
+          after?: string;
+          before?: string;
+          sort?: string;
+          order?: "asc" | "desc";
+          q?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+        data: TSelect[];
+        meta: PaginationMeta;
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+    $post: {
+      input: {
+        json: TInsert;
+        header?: {
+          "Idempotency-Key"?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+        data: TSelect;
+      };
+      outputFormat: "json";
+      status: 201;
+    };
+  };
+  "/:id": {
+    $get: {
+      input: {
+        param: { id: string };
+      };
+      output: {
+        success: true;
+        data: TSelect;
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+    $patch: {
+      input: {
+        param: { id: string };
+        json: Partial<TInsert>;
+        header?: {
+          "Idempotency-Key"?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+        data: TSelect;
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+    $delete: {
+      input: {
+        param: { id: string };
+        header?: {
+          "Idempotency-Key"?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+  };
+  "/aggregate": {
+    $get: {
+      input: {
+        query?: {
+          metrics?: string;
+          groupBy?: string;
+          dateInterval?: "day" | "week" | "month" | "year" | string;
+          dateColumn?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+        data: Record<string, any>[];
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+  };
+  "/batch-update": {
+    $patch: {
+      input: {
+        json: Array<Partial<TInsert> & { id: string | number }>;
+        header?: {
+          "Idempotency-Key"?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+        data: TSelect[];
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+  };
+  "/batch-delete": {
+    $post: {
+      input: {
+        json: { ids: Array<string | number> };
+        header?: {
+          "Idempotency-Key"?: string;
+          [key: string]: string | undefined;
+        };
+      };
+      output: {
+        success: true;
+      };
+      outputFormat: "json";
+      status: 200;
+    };
+  };
+};
+
+export type ResourceApp<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  TSelect = any,
+  TInsert = any
+> = Hono<{ Bindings: Env }, ResourceSchema<TSelect, TInsert>, "/">;
+
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+
+export type ApiSchemaFromResources<TResources extends Record<string, Hono<any, any, any>>> =
+  [
+    UnionToIntersection<
+      {
+        [K in keyof TResources & string]: TResources[K] extends Hono<any, infer S, any>
+          ? MergeSchemaPath<S, `/${K}`>
+          : never;
+      }[keyof TResources & string]
+    >
+  ] extends [infer Merged extends Schema]
+    ? Merged
+    : Schema;
+
+export type ExtractVersion<V> = V extends string
+  ? V
+  : V extends { version: infer Version extends string }
+  ? Version
+  : undefined;
+
+export type ApiApp<
+  Env extends Record<string, unknown>,
+  TResources extends Record<string, Hono<any, any, any>>,
+  TVersion extends string | undefined = undefined
+> = TVersion extends string
+  ? Hono<{ Bindings: Env }, MergeSchemaPath<ApiSchemaFromResources<TResources>, `/${TVersion}`>, "/">
+  : Hono<{ Bindings: Env }, ApiSchemaFromResources<TResources>, "/">;
 
 
 export interface ResourcePaginationConfig {

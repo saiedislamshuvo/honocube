@@ -5,7 +5,7 @@ import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { MemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
 import { MemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
 import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
-import { ApiOptions, OpenApiDocsConfig } from "../types.js";
+import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
   parseBatchDeleteBody,
@@ -99,12 +99,21 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   }
 
   return {
-    defineResource: <TTable, TSelect, TInsert>(
+    defineResource: <
+      TTable,
+      TSelect = InferSelect<TTable>,
+      TInsert = InferInsert<TTable>
+    >(
       config: ResourceConfig<TTable, TSelect, TInsert, Env, AppContext>
     ) => defineResource<TTable, TSelect, TInsert, Env, AppContext>(config, appConfig),
 
-    defineApi: (resources: Record<string, Hono<any>>, version?: string) => 
-      defineApi<Env>(resources, version)
+    defineApi: <
+      TResources extends Record<string, Hono<any, any, any>>,
+      V extends string | ApiOptions | undefined = undefined
+    >(
+      resources: TResources,
+      versionOrOptions?: V
+    ) => defineApi<Env, TResources, V>(resources, versionOrOptions)
   };
 }
 
@@ -262,14 +271,14 @@ const sanitizeAuditSnapshot = (
 
 export function defineResource<
   TTable, 
-  TSelect, 
-  TInsert, 
+  TSelect = InferSelect<TTable>, 
+  TInsert = InferInsert<TTable>, 
   Env extends Record<string, unknown> = Record<string, unknown>,
   AppContext = any
 >(
   config: ResourceConfig<TTable, TSelect, TInsert, Env, AppContext>,
   globalConfig?: AppConfig<Env, AppContext>
-) {
+): ResourceApp<Env, TSelect, TInsert> {
   const app = new Hono<{ Bindings: Env }>();
   
   const getAdapter = (c: Context<{ Bindings: Env }>) => {
@@ -4542,13 +4551,17 @@ function buildDateBucketSql(
   });
 
   (app as any)[RESOURCE_CONFIG] = config;
-  return app;
+  return app as any as ResourceApp<Env, TSelect, TInsert>;
 }
 
-export function defineApi<Env extends Record<string, unknown> = Record<string, unknown>>(
-  resources: Record<string, Hono<any>>,
-  versionOrOptions?: string | ApiOptions
-) {
+export function defineApi<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  TResources extends Record<string, Hono<any, any, any>> = Record<string, Hono<any, any, any>>,
+  V extends string | ApiOptions | undefined = undefined
+>(
+  resources: TResources,
+  versionOrOptions?: V
+): ApiApp<Env, TResources, ExtractVersion<V>> {
   let version: string | undefined;
   let docsConfig: OpenApiDocsConfig | undefined;
 
@@ -4605,9 +4618,9 @@ export function defineApi<Env extends Record<string, unknown> = Record<string, u
     const versionedApi = new Hono<{ Bindings: Env }>();
     versionedApi.route(`/${version}`, api);
     (versionedApi as any)[API_CONFIG] = apiConfig;
-    return versionedApi;
+    return versionedApi as any;
   }
   
   (api as any)[API_CONFIG] = apiConfig;
-  return api;
+  return api as any;
 }

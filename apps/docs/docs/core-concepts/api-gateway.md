@@ -56,6 +56,30 @@ export const api = defineApi(
 
 For more details, see the [OpenAPI & Scalar Documentation](./openapi-docs.md) guide.
 
+## End-to-End Type Safety with Hono Client (`hc`)
+
+HonoCube's `defineApi` automatically maps and merges standard Hono schema types across all mounted resources, enabling 100% compile-time type-safe RPC using Hono's official client (`hc`):
+
+```typescript
+import { hc } from "hono/client";
+import type { api } from "./server";
+
+const client = hc<typeof api>("https://api.example.com");
+
+// Query parameters, paths, and response envelopes are fully inferred!
+const res = await client.posts.$get({ query: { limit: "20" } });
+const json = await res.json();
+console.log(json.data); // Strongly typed as Post[]!
+
+// Type-checked request bodies on mutations:
+await client.posts.$post({
+  json: { title: "New Blog Post" },
+});
+
+// Versioned APIs (e.g. defineApi(resources, "v1")):
+const v1Res = await client.v1.posts.$get();
+```
+
 ## Mounting to a Main App
 
 The result of `defineApi` is a standard Hono instance, so you can mount it to your main server application easily.
