@@ -57,6 +57,20 @@ export type {
   TableUrlState,
 } from "./table/types.js";
 
+// Form & Record Engine
+export { useCollectionForm } from "./form/use-collection-form.js";
+export { evaluateComputedFields } from "./form/computed.js";
+export { evaluateFieldCapability } from "./form/capabilities.js";
+export { validateField, validateRecord } from "./form/validation.js";
+export { getDefaultFormValues } from "./form/defaults.js";
+export type {
+  CollectionFormOptions,
+  CollectionFormReturn,
+  FieldCapabilityState,
+  FormFieldState,
+  FormMode,
+} from "./form/types.js";
+
 // Format & String Utilities
 export { toHumanLabel, formatCellValue } from "./utils/format.js";
 
