@@ -18,6 +18,7 @@ export type {
   PaginationMeta,
   PaginationParams,
   QueryParams,
+  RequestOptions,
 } from "./client/api-client.js";
 export type { ErrorEnvelope } from "./client/errors.js";
 
@@ -33,6 +34,28 @@ export type {
 } from "./query/use-query.js";
 export { useCollectionMutation } from "./query/use-mutation.js";
 export type { UseCollectionMutationResult } from "./query/use-mutation.js";
+
+// Table & Collection List Engine
+export { useCollectionList } from "./table/use-collection-list.js";
+export { generateColumnsFromCollection } from "./table/columns.js";
+export {
+  parseTableStateFromUrl,
+  serializeTableStateToUrl,
+  syncUrlState,
+} from "./table/url-sync.js";
+export type {
+  CollectionListFilters,
+  CollectionListOptions,
+  CollectionListPagination,
+  CollectionListResult,
+  CollectionListSearch,
+  CollectionListSelection,
+  CollectionListSorting,
+  CollectionListVisibility,
+  SortOrder,
+  SortState,
+  TableUrlState,
+} from "./table/types.js";
 
 // Collection & Record Types
 export type {
