@@ -237,4 +237,6 @@ export type {
   NavigationGroup,
   AppConfig,
   AppInstance,
+  ShellElementPosition,
+  AppLayoutConfig,
 } from "./types/app.js";

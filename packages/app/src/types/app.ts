@@ -37,6 +37,14 @@ export interface NavigationGroup {
   items: NavigationItem[];
 }
 
+export type ShellElementPosition = "sidebar" | "header" | "none";
+
+export interface AppLayoutConfig {
+  tenantSwitcher?: ShellElementPosition;
+  userProfile?: ShellElementPosition;
+  sidebarCollapseMode?: "icon" | "offcanvas";
+}
+
 export interface AppConfig {
   title: string;
   apiBaseUrl: string;
@@ -45,6 +53,7 @@ export interface AppConfig {
   idempotency?: IdempotencyConfig;
   navigation?: NavigationGroup[];
   collections?: Collection<any>[];
+  layout?: AppLayoutConfig;
   components?: {
     fields?: Record<string, any>;
     views?: Record<string, any>;
