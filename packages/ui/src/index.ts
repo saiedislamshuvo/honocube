@@ -11,6 +11,8 @@ export { Button, buttonVariants, type ButtonProps } from "./components/button.js
 export { Badge, badgeVariants, type BadgeProps } from "./components/badge.js";
 
 // Form Controls
+export { Calendar, type CalendarProps } from "./components/calendar.js";
+export { Checkbox } from "./components/checkbox.js";
 export { Input, type InputProps } from "./components/input.js";
 export { Textarea, type TextareaProps } from "./components/textarea.js";
 export {
