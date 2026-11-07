@@ -4,6 +4,7 @@ import { Button, Separator, SidebarTrigger, cn } from "@honocube/ui";
 import { WorkspaceBreadcrumbs } from "./breadcrumbs.js";
 import { TenantSwitcher } from "./tenant-switcher.js";
 import { UserProfileDropdown } from "./user-profile.js";
+import { ThemeSwitcher } from "../theme/theme-switcher.js";
 import type { WorkspaceTopbarProps } from "./types.js";
 
 /**
@@ -92,8 +93,8 @@ export function WorkspaceTopbar({
           />
         )}
 
-        {/* Dark/Light Theme Toggle */}
-        {onThemeChange && (
+        {/* Dark/Light Theme Toggle & Palette Switcher */}
+        {onThemeChange ? (
           <Button
             data-testid="theme-toggle-button"
             variant="ghost"
@@ -105,7 +106,9 @@ export function WorkspaceTopbar({
             <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
-        )}
+        ) : app.layout?.themeToggle !== false ? (
+          <ThemeSwitcher showPresets={app.layout?.themePresets !== false} />
+        ) : null}
 
         {/* User Profile Menu (when placed in Header) */}
         {userProfilePosition === "header" && currentUser && (

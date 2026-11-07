@@ -39,10 +39,28 @@ export interface NavigationGroup {
 
 export type ShellElementPosition = "sidebar" | "header" | "none";
 
+export type ThemeMode = "light" | "dark" | "system";
+export type ColorPreset =
+  | "zinc"
+  | "slate"
+  | "blue"
+  | "emerald"
+  | "violet"
+  | "rose"
+  | "orange";
+
+export interface ThemeConfig {
+  defaultTheme?: ThemeMode;
+  defaultPreset?: ColorPreset | string;
+  enablePresets?: boolean;
+}
+
 export interface AppLayoutConfig {
   tenantSwitcher?: ShellElementPosition;
   userProfile?: ShellElementPosition;
   sidebarCollapseMode?: "icon" | "offcanvas";
+  themeToggle?: boolean;
+  themePresets?: boolean;
 }
 
 export interface AppConfig {
@@ -50,6 +68,7 @@ export interface AppConfig {
   apiBaseUrl: string;
   auth?: AuthConfig;
   tenant?: TenantConfig;
+  theme?: ThemeConfig;
   idempotency?: IdempotencyConfig;
   navigation?: NavigationGroup[];
   collections?: Collection<any>[];

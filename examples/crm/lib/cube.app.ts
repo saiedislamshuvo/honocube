@@ -443,6 +443,13 @@ export const app = defineApp({
   layout: {
     tenantSwitcher: "sidebar", // shadcn sidebar-07 team-switcher in sidebar header
     userProfile: "sidebar",    // shadcn sidebar-07 nav-user in sidebar footer
+    themeToggle: true,
+    themePresets: true,
+  },
+  theme: {
+    defaultTheme: "system",
+    defaultPreset: "zinc",
+    enablePresets: true,
   },
   auth: {
     type: "bearer",

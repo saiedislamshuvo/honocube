@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { SidebarInset, SidebarProvider, cn } from "@honocube/ui";
+import { SidebarInset, SidebarProvider, Toaster, cn } from "@honocube/ui";
 import { WorkspaceSidebar } from "./sidebar.js";
 import { WorkspaceTopbar } from "./topbar.js";
 import { Spotlight } from "./spotlight.js";
@@ -122,6 +122,9 @@ export function WorkspaceShell({
           onOpenChange={setSpotlightOpen}
           onNavigate={onNavigate}
         />
+
+        {/* 4. Global Toast Notifications */}
+        <Toaster position="top-right" richColors />
       </div>
     </SidebarProvider>
   );
