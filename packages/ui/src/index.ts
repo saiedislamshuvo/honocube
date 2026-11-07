@@ -9,8 +9,12 @@ export { cn } from "./lib/utils.js";
 // Action & Feedback Components
 export { Button, buttonVariants, type ButtonProps } from "./components/button.js";
 export { Badge, badgeVariants, type BadgeProps } from "./components/badge.js";
+export { EmptyState, type EmptyStateProps } from "./components/empty-state.js";
+export { Toaster, toast, type ToasterProps } from "./components/sonner.js";
 
 // Form Controls
+export { Calendar, type CalendarProps } from "./components/calendar.js";
+export { Checkbox } from "./components/checkbox.js";
 export { Input, type InputProps } from "./components/input.js";
 export { Textarea, type TextareaProps } from "./components/textarea.js";
 export {
@@ -122,3 +126,52 @@ export {
   CommandShortcut,
   CommandSeparator,
 } from "./components/command.js";
+
+// Layout & Disclosure Primitives
+export { Separator } from "./components/separator.js";
+export {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+} from "./components/avatar.js";
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "./components/tooltip.js";
+export {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "./components/collapsible.js";
+
+// Sidebar Primitives & Hooks
+export {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupAction,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarSeparator,
+  SidebarTrigger,
+  sidebarMenuButtonVariants,
+  useSidebar,
+} from "./components/sidebar.js";
+export { useIsMobile } from "./hooks/use-mobile.js";

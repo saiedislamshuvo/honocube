@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, SearchX } from "lucide-react";
 import { flexRender } from "@tanstack/react-table";
 import {
   Table,
@@ -8,6 +8,8 @@ import {
   TableHead,
   TableRow,
   TableCell,
+  Checkbox,
+  EmptyState,
 } from "@honocube/ui";
 import type { Collection, BulkAction } from "../types/collection.js";
 import { useCollectionList } from "../table/use-collection-list.js";
@@ -88,14 +90,12 @@ export function TableView<TCollection extends Collection<any>>({
               <TableRow key={headerGroup.id}>
                 {enableRowSelection && (
                   <TableHead className="w-[48px] px-3">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selection.isAllSelected}
-                      onChange={(e) =>
-                        selection.toggleAllRowsSelected(e.target.checked)
+                      onCheckedChange={(checked) =>
+                        selection.toggleAllRowsSelected(checked === true)
                       }
                       aria-label="Select all rows"
-                      className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
                     />
                   </TableHead>
                 )}
@@ -151,17 +151,18 @@ export function TableView<TCollection extends Collection<any>>({
               <TableRow>
                 <TableCell
                   colSpan={totalColSpan}
-                  className="h-32 text-center text-sm text-muted-foreground"
+                  className="p-8 text-center"
                 >
-                  <div className="flex flex-col items-center justify-center gap-1">
-                    <p className="font-medium text-foreground">{emptyText}</p>
-                    {(search.query ||
-                      Object.keys(filters.activeFilters).length > 0) && (
-                      <p className="text-xs">
-                        Try adjusting your search or filters.
-                      </p>
-                    )}
-                  </div>
+                  <EmptyState
+                    icon={<SearchX className="h-6 w-6 text-muted-foreground" />}
+                    title={emptyText}
+                    description={
+                      search.query ||
+                      Object.keys(filters.activeFilters).length > 0
+                        ? "Try adjusting your search or filters."
+                        : `No records found in this view.`
+                    }
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -187,17 +188,15 @@ export function TableView<TCollection extends Collection<any>>({
                         className="w-[48px] px-3"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={isSelected}
-                          onChange={(e) =>
+                          onCheckedChange={(checked) =>
                             selection.toggleRowSelected(
                               row.id,
-                              e.target.checked
+                              checked === true
                             )
                           }
                           aria-label={`Select row ${row.id}`}
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
                         />
                       </TableCell>
                     )}

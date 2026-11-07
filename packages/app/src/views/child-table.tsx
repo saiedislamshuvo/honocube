@@ -3,6 +3,11 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   Button,
   Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableHeader,
   TableBody,
@@ -116,31 +121,46 @@ export function ChildTable({
                               className={`h-8 text-xs ${colError ? "border-destructive focus-visible:ring-destructive" : ""}`}
                             />
                           ) : colField?.type === "select" ? (
-                            <select
-                              value={String(val ?? "")}
-                              onChange={(e) =>
+                            <Select
+                              value={val !== undefined && val !== null && val !== "" ? String(val) : undefined}
+                              onValueChange={(newVal) =>
                                 childHelper.updateRow(index, {
-                                  [key]: e.target.value,
+                                  [key]: newVal,
                                 })
                               }
                               disabled={isColDisabled}
-                              className={`flex h-8 w-full rounded-md border bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50 ${
-                                colError
-                                  ? "border-destructive focus-visible:ring-destructive"
-                                  : "border-input focus-visible:ring-ring"
-                              }`}
                             >
-                              <option value="">Select...</option>
-                              {colField.options?.map((opt: any) => {
-                                const optVal = typeof opt === "object" && opt !== null ? opt.value : opt;
-                                const optLbl = typeof opt === "object" && opt !== null ? opt.label : opt;
-                                return (
-                                  <option key={String(optVal)} value={String(optVal)}>
-                                    {String(optLbl)}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                              <SelectTrigger
+                                className={`h-8 text-xs ${
+                                  colError
+                                    ? "border-destructive focus:ring-destructive"
+                                    : ""
+                                }`}
+                              >
+                                <SelectValue placeholder="Select..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {colField.options?.map((opt: any) => {
+                                  const optVal =
+                                    typeof opt === "object" && opt !== null
+                                      ? opt.value
+                                      : opt;
+                                  const optLbl =
+                                    typeof opt === "object" && opt !== null
+                                      ? opt.label
+                                      : opt;
+                                  return (
+                                    <SelectItem
+                                      key={String(optVal)}
+                                      value={String(optVal)}
+                                      className="text-xs"
+                                    >
+                                      {String(optLbl)}
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <Input
                               value={val ?? ""}

@@ -153,6 +153,15 @@ export type {
   WorkspaceShellProps,
 } from "./shell/types.js";
 
+// Theming & Appearance
+export { ThemeProvider, useTheme } from "./theme/theme-provider.js";
+export { ThemeSwitcher } from "./theme/theme-switcher.js";
+export type {
+  ThemeProviderProps,
+  ThemeContextValue,
+} from "./theme/theme-provider.js";
+export { toast, Toaster, type ToasterProps } from "@honocube/ui";
+
 // Workspace Catch-all Page & Routing
 export { WorkspacePage } from "./page/workspace-page.js";
 export { WorkspaceDashboard } from "./page/workspace-dashboard.js";
@@ -237,4 +246,9 @@ export type {
   NavigationGroup,
   AppConfig,
   AppInstance,
+  ShellElementPosition,
+  AppLayoutConfig,
+  ThemeMode,
+  ColorPreset,
+  ThemeConfig,
 } from "./types/app.js";
