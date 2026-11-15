@@ -1,5 +1,6 @@
 import type React from "react";
 import type { AppInstance, ShellElementPosition } from "../types/app.js";
+import type { HonoCubeTheme } from "../theme/theme-contract.js";
 
 export interface ShellTenant {
   id: string;
@@ -96,7 +97,8 @@ export interface WorkspaceTopbarProps {
   onLogout?: () => void;
   onSettingsClick?: () => void;
   userProfilePosition?: ShellElementPosition;
-  theme?: "light" | "dark" | "system";
+  theme?: "light" | "dark" | "system" | HonoCubeTheme;
+  themeContract?: HonoCubeTheme;
   onThemeChange?: (theme: "light" | "dark") => void;
   onSpotlightOpen?: () => void;
   onSidebarToggle?: () => void;
@@ -119,7 +121,8 @@ export interface WorkspaceShellProps {
   onLogout?: () => void;
   onSettingsClick?: () => void;
   userProfilePosition?: ShellElementPosition;
-  theme?: "light" | "dark" | "system";
+  theme?: "light" | "dark" | "system" | HonoCubeTheme;
+  themeContract?: HonoCubeTheme;
   onThemeChange?: (theme: "light" | "dark") => void;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;

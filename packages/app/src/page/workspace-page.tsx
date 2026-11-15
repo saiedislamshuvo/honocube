@@ -7,6 +7,7 @@ import { WorkspaceDashboard } from "./workspace-dashboard.js";
 import { CollectionDetailPage } from "./collection-detail-page.js";
 import { CollectionMultiView } from "../views/multi-view.js";
 import { FormPage } from "../views/form-page.js";
+import { isHonoCubeTheme } from "../theme/theme-contract.js";
 import type { WorkspacePageProps } from "./types.js";
 
 function unwrapValue<T>(val: T | Promise<T> | undefined): T | undefined {
@@ -32,6 +33,7 @@ export function WorkspacePage({
   searchParams: rawSearchParams,
   dashboard,
   notFoundSlot,
+  theme: propTheme,
   onNavigate,
   className = "",
 }: WorkspacePageProps & { config?: AppInstance }): React.JSX.Element {
@@ -39,6 +41,11 @@ export function WorkspacePage({
   if (!app) {
     throw new Error("WorkspacePage requires an 'app' instance or 'config' prop.");
   }
+
+  const activeTheme =
+    propTheme ||
+    app.getTheme?.() ||
+    (isHonoCubeTheme(app.theme) ? app.theme : undefined);
 
   // 1. Resolve Params and SearchParams (supports sync & Next.js 15 async)
   const resolvedParams = unwrapValue(rawParams);
@@ -67,7 +74,11 @@ export function WorkspacePage({
       {route.type === "home" && (
         <div data-testid="route-home">
           {dashboard || (
-            <WorkspaceDashboard app={app} onNavigate={onNavigate} />
+            activeTheme?.components?.Dashboard ? (
+              <activeTheme.components.Dashboard app={app} onNavigate={onNavigate} />
+            ) : (
+              <WorkspaceDashboard app={app} onNavigate={onNavigate} />
+            )
           )}
         </div>
       )}
@@ -75,67 +86,85 @@ export function WorkspacePage({
       {/* Route 2: Collection List / Multi-View */}
       {route.type === "list" && route.collection && (
         <div data-testid="route-list" className="space-y-4 max-w-7xl mx-auto">
-          <CollectionMultiView
-            collection={route.collection}
-            onRecordClick={(rec: any) =>
-              handleNavigate(`/${route.collection?.name}/${rec.id}`)
-            }
-            actions={
-              <Button
-                asChild
-                size="sm"
-                className="h-8 gap-1.5 text-xs font-medium"
-              >
-                <a
-                  data-testid="collection-create-button"
-                  href={`/${route.collection.name}/new`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleNavigate(`/${route.collection?.name}/new`);
-                  }}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>
-                    {`New ${route.collection.singular || route.collection.name}`}
-                  </span>
-                </a>
-              </Button>
-            }
-          />
+          {(() => {
+            const MultiViewComp =
+              activeTheme?.components?.views?.multiView || CollectionMultiView;
+            return (
+              <MultiViewComp
+                collection={route.collection}
+                onRecordClick={(rec: any) =>
+                  handleNavigate(`/${route.collection?.name}/${rec.id}`)
+                }
+                actions={
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs font-medium"
+                  >
+                    <a
+                      data-testid="collection-create-button"
+                      href={`/${route.collection.name}/new`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleNavigate(`/${route.collection?.name}/new`);
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>
+                        {`New ${route.collection.singular || route.collection.name}`}
+                      </span>
+                    </a>
+                  </Button>
+                }
+              />
+            );
+          })()}
         </div>
       )}
 
       {/* Route 3: Create Record Form */}
       {route.type === "create" && route.collection && (
         <div data-testid="route-create">
-          <FormPage
-            collection={route.collection}
-            mode="create"
-            backUrl={`/${route.collection.name}`}
-            onBack={() => handleNavigate(`/${route.collection?.name}`)}
-            onSuccess={(savedRecord: any) => {
-              const id = savedRecord?.id;
-              if (id) {
-                handleNavigate(`/${route.collection?.name}/${id}`);
-              } else {
-                handleNavigate(`/${route.collection?.name}`);
-              }
-            }}
-          />
+          {(() => {
+            const FormPageComp =
+              activeTheme?.components?.views?.formPage || FormPage;
+            return (
+              <FormPageComp
+                collection={route.collection}
+                mode="create"
+                backUrl={`/${route.collection.name}`}
+                onBack={() => handleNavigate(`/${route.collection?.name}`)}
+                onSuccess={(savedRecord: any) => {
+                  const id = savedRecord?.id;
+                  if (id) {
+                    handleNavigate(`/${route.collection?.name}/${id}`);
+                  } else {
+                    handleNavigate(`/${route.collection?.name}`);
+                  }
+                }}
+              />
+            );
+          })()}
         </div>
       )}
 
       {/* Route 4: Record Detail & Editing View */}
       {route.type === "detail" && route.collection && route.recordId !== undefined && (
         <div data-testid="route-detail">
-          <CollectionDetailPage
-            collection={route.collection}
-            recordId={route.recordId}
-            onNavigate={onNavigate}
-            onRecordSaved={() => {
-              // Stay on record or notify
-            }}
-          />
+          {(() => {
+            const DetailPageComp =
+              activeTheme?.components?.views?.detail || CollectionDetailPage;
+            return (
+              <DetailPageComp
+                collection={route.collection}
+                recordId={route.recordId}
+                onNavigate={onNavigate}
+                onRecordSaved={() => {
+                  // Stay on record or notify
+                }}
+              />
+            );
+          })()}
         </div>
       )}
 
@@ -143,6 +172,12 @@ export function WorkspacePage({
       {route.type === "not-found" && (
         <div data-testid="route-not-found">
           {notFoundSlot || (
+            activeTheme?.components?.notFound ? (
+              <activeTheme.components.notFound
+                collectionName={route.collectionName}
+                onNavigate={handleNavigate}
+              />
+            ) : (
             <div
               data-testid="workspace-not-found-card"
               className="flex flex-col items-center justify-center p-12 text-center max-w-md mx-auto space-y-4 my-12 rounded-lg border border-border bg-card shadow-sm"
@@ -180,6 +215,7 @@ export function WorkspacePage({
                 </a>
               </Button>
             </div>
+            )
           )}
         </div>
       )}

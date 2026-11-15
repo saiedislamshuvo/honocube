@@ -1,4 +1,5 @@
 import type { Collection } from "./collection.js";
+import type { HonoCubeTheme } from "../theme/theme-contract.js";
 
 export type AuthType = "bearer" | "cookie" | "custom";
 
@@ -53,6 +54,7 @@ export interface ThemeConfig {
   defaultTheme?: ThemeMode;
   defaultPreset?: ColorPreset | string;
   enablePresets?: boolean;
+  theme?: HonoCubeTheme;
 }
 
 export interface AppLayoutConfig {
@@ -68,7 +70,7 @@ export interface AppConfig {
   apiBaseUrl: string;
   auth?: AuthConfig;
   tenant?: TenantConfig;
-  theme?: ThemeConfig;
+  theme?: ThemeConfig | HonoCubeTheme;
   idempotency?: IdempotencyConfig;
   navigation?: NavigationGroup[];
   collections?: Collection<any>[];
@@ -84,4 +86,5 @@ export interface AppInstance extends AppConfig {
   getCollection: (name: string) => Collection<any> | undefined;
   getCollections: () => Collection<any>[];
   getNavigation: () => NavigationGroup[];
+  getTheme?: () => HonoCubeTheme | undefined;
 }

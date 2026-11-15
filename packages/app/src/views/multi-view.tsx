@@ -7,6 +7,7 @@ import { KanbanView } from "./kanban-view.js";
 import { CalendarView } from "./calendar-view.js";
 import { ListView } from "./list-view.js";
 import { GridView } from "./grid-view.js";
+import { useAppTheme } from "../theme/theme-provider.js";
 import type { CollectionMultiViewProps } from "./types.js";
 
 export function CollectionMultiView<TCollection extends Collection<any>>({
@@ -40,6 +41,13 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
 
   const [activeView, setActiveView] = useState<ViewType>(initialView);
 
+  const appTheme = useAppTheme();
+  const TableComponent = appTheme?.components?.views?.table || TableView;
+  const KanbanComponent = appTheme?.components?.views?.kanban || KanbanView;
+  const CalendarComponent = appTheme?.components?.views?.calendar || CalendarView;
+  const ListComponent = appTheme?.components?.views?.list || ListView;
+  const GridComponent = appTheme?.components?.views?.grid || GridView;
+
   return (
     <div className={`space-y-4 ${className}`}>
       {/* 1. Header Toolbar with Title, ViewSwitcher & Actions */}
@@ -65,45 +73,46 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
 
       {/* 2. Active View Content */}
       {(() => {
+        const handleRecordClick = onRecordClick ? (rec: any) => onRecordClick(rec) : undefined;
         switch (activeView) {
           case "kanban":
             return (
-              <KanbanView
+              <KanbanComponent
                 collection={collection}
-                onCardClick={onRecordClick}
+                onCardClick={handleRecordClick}
               />
             );
 
           case "calendar":
             return (
-              <CalendarView
+              <CalendarComponent
                 collection={collection}
-                onEventClick={onRecordClick}
+                onEventClick={handleRecordClick}
               />
             );
 
           case "list":
             return (
-              <ListView
+              <ListComponent
                 collection={collection}
-                onItemClick={onRecordClick}
+                onItemClick={handleRecordClick}
               />
             );
 
           case "grid":
             return (
-              <GridView
+              <GridComponent
                 collection={collection}
-                onCardClick={onRecordClick}
+                onCardClick={handleRecordClick}
               />
             );
 
           case "table":
           default:
             return (
-              <TableView
+              <TableComponent
                 collection={collection}
-                onRowClick={onRecordClick}
+                onRowClick={handleRecordClick}
               />
             );
         }

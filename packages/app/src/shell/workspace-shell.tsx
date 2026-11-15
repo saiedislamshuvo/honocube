@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider, Toaster, cn } from "@honocube/ui";
 import { WorkspaceSidebar } from "./sidebar.js";
 import { WorkspaceTopbar } from "./topbar.js";
 import { Spotlight } from "./spotlight.js";
+import { isHonoCubeTheme } from "../theme/theme-contract.js";
 import type { WorkspaceShellProps } from "./types.js";
 
 /**
@@ -27,6 +28,7 @@ export function WorkspaceShell({
   onSettingsClick,
   userProfilePosition: propUserPos,
   theme,
+  themeContract,
   onThemeChange,
   collapsed: controlledCollapsed,
   onCollapseChange: controlledOnCollapseChange,
@@ -38,6 +40,17 @@ export function WorkspaceShell({
     propTenantPos || app.layout?.tenantSwitcher || "sidebar";
   const userProfilePosition =
     propUserPos || app.layout?.userProfile || "sidebar";
+
+  const resolvedThemeContract =
+    themeContract ||
+    (isHonoCubeTheme(theme) ? theme : undefined) ||
+    app.getTheme?.() ||
+    (isHonoCubeTheme(app.theme) ? app.theme : undefined);
+
+  const SidebarComponent =
+    resolvedThemeContract?.components?.Sidebar || WorkspaceSidebar;
+  const TopbarComponent =
+    resolvedThemeContract?.components?.Topbar || WorkspaceTopbar;
 
   // Sidebar collapsed state (controlled or uncontrolled)
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -54,6 +67,8 @@ export function WorkspaceShell({
   // Spotlight command palette open state
   const [spotlightOpen, setSpotlightOpen] = useState(false);
 
+  const themeMode = typeof theme === "string" ? theme : undefined;
+
   return (
     <SidebarProvider
       open={!isCollapsed}
@@ -67,7 +82,7 @@ export function WorkspaceShell({
         )}
       >
         {/* 1. Left Sidebar Navigation (canonical shadcn sidebar-07) */}
-        <WorkspaceSidebar
+        <SidebarComponent
           app={app}
           pathname={pathname}
           collapsed={isCollapsed}
@@ -86,7 +101,7 @@ export function WorkspaceShell({
 
         {/* 2. Main Viewport (SidebarInset + Topbar + Page View) */}
         <SidebarInset className="flex flex-1 flex-col overflow-hidden">
-          <WorkspaceTopbar
+          <TopbarComponent
             app={app}
             pathname={pathname}
             tenants={tenants}
@@ -98,7 +113,7 @@ export function WorkspaceShell({
             onLogout={onLogout}
             onSettingsClick={onSettingsClick}
             userProfilePosition={userProfilePosition}
-            theme={theme}
+            theme={themeMode}
             onThemeChange={onThemeChange}
             onSpotlightOpen={() => setSpotlightOpen(true)}
             onSidebarToggle={() => setCollapsed(!isCollapsed)}

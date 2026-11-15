@@ -1,6 +1,7 @@
 import type React from "react";
 import type { AppInstance } from "../types/app.js";
 import type { Collection, InferRecord } from "../types/collection.js";
+import type { HonoCubeTheme } from "../theme/theme-contract.js";
 
 export type WorkspaceRouteType =
   | "home"
@@ -30,6 +31,7 @@ export interface WorkspacePageProps {
     | Promise<Record<string, string | string[] | undefined>>;
   dashboard?: React.ReactNode;
   notFoundSlot?: React.ReactNode;
+  theme?: HonoCubeTheme;
   onNavigate?: (href: string) => void;
   className?: string;
 }

@@ -37,7 +37,7 @@ export function WorkspaceSidebar({
   app,
   pathname = "/",
   collapsed: propCollapsed,
-  onCollapseChange,
+  onCollapseChange: _onCollapseChange,
   onNavigate,
   tenants,
   activeTenantId,

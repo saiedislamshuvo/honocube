@@ -10,7 +10,7 @@ describe("Showcase CRM App Verification", () => {
 
   describe("HonoCube Backend API Route Handlers", () => {
     it("returns seeded deals with Kanban pipeline stages", async () => {
-      const res = await api.request("/deals");
+      const res = await api.request("/deals?limit=100");
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.success).toBe(true);
