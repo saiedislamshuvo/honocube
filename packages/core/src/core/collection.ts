@@ -1,4 +1,4 @@
-import type { Collection, DefineCollectionInput } from "../types/collection.js";
+import type { AnyFieldDef, Collection, DefineCollectionInput } from "../types/collection.js";
 import type { FieldConfig } from "../types/fields.js";
 import { toHumanLabel } from "../utils/format.js";
 import {
@@ -10,7 +10,7 @@ import {
 } from "./derivation.js";
 
 export function defineCollection<
-  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+  TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
 >(config: DefineCollectionInput<TFields>): Collection<TFields> {
   if (!config || typeof config !== "object") {
     throw new Error("defineCollection: Configuration object is required.");
@@ -50,6 +50,44 @@ export function defineCollection<
     );
   }
 
+  // Normalize fields: unwrap builders and auto-infer labels from field keys when omitted on builders
+  const normalizedFields: Record<string, any> = {};
+  for (const [key, rawField] of Object.entries(derivedFields)) {
+    if (!rawField || typeof rawField !== "object") continue;
+
+    const isBuilder =
+      Boolean((rawField as any)._isFieldBuilder) ||
+      typeof (rawField as any).build === "function" ||
+      typeof (rawField as any).toConfig === "function";
+
+    const fieldConfig: any = isBuilder
+      ? typeof (rawField as any).build === "function"
+        ? (rawField as any).build()
+        : (rawField as any).toConfig()
+      : { ...(rawField as any) };
+
+    // Auto-generate human-friendly label for builders if omitted
+    if (
+      isBuilder &&
+      (!fieldConfig.label || (typeof fieldConfig.label === "string" && fieldConfig.label.trim() === ""))
+    ) {
+      if (fieldConfig.type === "relation") {
+        if (key.endsWith("Id") && key.length > 2) {
+          fieldConfig.label = toHumanLabel(key.slice(0, -2));
+        } else if (key.endsWith("_id") && key.length > 3) {
+          fieldConfig.label = toHumanLabel(key.slice(0, -3));
+        } else {
+          fieldConfig.label = toHumanLabel(key);
+        }
+      } else {
+        fieldConfig.label = toHumanLabel(key);
+      }
+    }
+
+    normalizedFields[key] = fieldConfig;
+  }
+  derivedFields = normalizedFields;
+
   const endpoint = anyConfig.endpoint || `/api/${name}`;
   const label = anyConfig.label || toHumanLabel(name);
 
@@ -83,7 +121,7 @@ export function defineCollection<
     defaultView,
     identifier,
     _isCollection: true,
-    getField: (key: keyof TFields) => (derivedFields as TFields)[key],
+    getField: (key: keyof TFields) => (derivedFields as any)[key],
     getFieldKeys: () => fieldKeys,
   };
 

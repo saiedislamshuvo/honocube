@@ -205,10 +205,16 @@ export function deriveFieldsFromDrizzleTable(
   if (overrides && typeof overrides === "object") {
     for (const [key, userOverride] of Object.entries(overrides)) {
       if (userOverride && typeof userOverride === "object") {
+        const unwrapped =
+          typeof (userOverride as any).build === "function"
+            ? (userOverride as any).build()
+            : typeof (userOverride as any).toConfig === "function"
+            ? (userOverride as any).toConfig()
+            : userOverride;
         if (fields[key]) {
-          fields[key] = { ...fields[key], ...userOverride } as FieldConfig<any>;
+          fields[key] = { ...fields[key], ...unwrapped } as FieldConfig<any>;
         } else {
-          fields[key] = { ...userOverride } as FieldConfig<any>;
+          fields[key] = { ...unwrapped } as FieldConfig<any>;
         }
       }
     }
@@ -418,10 +424,16 @@ export function deriveFieldsFromZod(
   if (overrides && typeof overrides === "object") {
     for (const [key, userOverride] of Object.entries(overrides)) {
       if (userOverride && typeof userOverride === "object") {
+        const unwrapped =
+          typeof (userOverride as any).build === "function"
+            ? (userOverride as any).build()
+            : typeof (userOverride as any).toConfig === "function"
+            ? (userOverride as any).toConfig()
+            : userOverride;
         if (fields[key]) {
-          fields[key] = { ...fields[key], ...userOverride } as FieldConfig<any>;
+          fields[key] = { ...fields[key], ...unwrapped } as FieldConfig<any>;
         } else {
-          fields[key] = { ...userOverride } as FieldConfig<any>;
+          fields[key] = { ...unwrapped } as FieldConfig<any>;
         }
       }
     }

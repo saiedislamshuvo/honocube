@@ -10,6 +10,23 @@ export const VERSION = "2.0.2";
 export { defineCollection } from "./core/collection.js";
 export { defineApp } from "./core/app.js";
 export {
+  f,
+  field,
+  isFieldBuilder,
+  unwrapFieldConfig,
+  BaseFieldBuilder,
+  TextFieldBuilder,
+  NumberFieldBuilder,
+  SelectFieldBuilder,
+  DateFieldBuilder,
+  BooleanFieldBuilder,
+  RelationFieldBuilder,
+  ComputedFieldBuilder,
+  JsonFieldBuilder,
+  SeriesFieldBuilder,
+  SubCollectionFieldBuilder,
+} from "./core/builder.js";
+export {
   fromResource,
   fromDrizzleTable,
   deriveFieldsFromResource,
@@ -174,6 +191,7 @@ export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js
 
 // Schema, Field, Collection & App Types
 export type {
+  AnyFieldDef,
   Collection,
   CollectionConfig,
   ResourceCollectionConfig,
@@ -191,6 +209,20 @@ export type {
   BulkAction,
   CollectionIdentifier,
 } from "./types/collection.js";
+
+export type {
+  IFieldBuilder,
+  ITextFieldBuilder,
+  INumberFieldBuilder,
+  ISelectFieldBuilder,
+  IDateFieldBuilder,
+  IBooleanFieldBuilder,
+  IRelationFieldBuilder,
+  IComputedFieldBuilder,
+  IJsonFieldBuilder,
+  ISeriesFieldBuilder,
+  ISubCollectionFieldBuilder,
+} from "./types/builder.js";
 
 export type {
   BaseFieldType,

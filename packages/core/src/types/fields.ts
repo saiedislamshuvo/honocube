@@ -121,7 +121,9 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>;
 
-export type InferFieldValue<TField> = TField extends { type: "text" | "textarea" | "series" }
+export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
+  ? InferFieldValue<TBuilt>
+  : TField extends { type: "text" | "textarea" | "series" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number

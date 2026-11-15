@@ -25,7 +25,7 @@ function areEqual(a: unknown, b: unknown): boolean {
  * Supports recursive child collection evaluation and multi-pass chained dependencies (e.g. qty*rate -> subtotal -> tax -> grandTotal).
  */
 export function evaluateComputedFields<TRecord extends Record<string, any>>(
-  fields: Record<string, FieldConfig<any>>,
+  fields: Record<string, FieldConfig<any> | any>,
   record: TRecord,
   parentRecord?: Record<string, unknown>
 ): TRecord {
@@ -34,7 +34,15 @@ export function evaluateComputedFields<TRecord extends Record<string, any>>(
   // Collect all child collection fields
   const childCollectionEntries: Array<[string, Record<string, FieldConfig<any>>]> = [];
 
-  for (const [key, field] of Object.entries(fields)) {
+  for (const [key, rawField] of Object.entries(fields)) {
+    if (!rawField) continue;
+    const field: any =
+      typeof (rawField as any).build === "function"
+        ? (rawField as any).build()
+        : typeof (rawField as any).toConfig === "function"
+        ? (rawField as any).toConfig()
+        : rawField;
+
     if (field.type === "computed" && typeof (field as any).compute === "function") {
       computedEntries.push([key, (field as any).compute]);
     } else if (field.type === "collection" && (field as any).collection?.fields) {

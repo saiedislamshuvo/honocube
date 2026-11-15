@@ -1,4 +1,9 @@
 import type { FieldConfig, InferFieldValue } from "./fields.js";
+import type { IFieldBuilder } from "./builder.js";
+
+export type AnyFieldDef<TRecord = Record<string, unknown>> =
+  | FieldConfig<TRecord>
+  | IFieldBuilder<any, any, TRecord>;
 import type {
   TableViewConfig,
   ListViewConfig,
@@ -68,7 +73,7 @@ export interface CollectionIdentifier {
 }
 
 export interface CollectionConfig<
-  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+  TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
 > {
   name: string;
   endpoint?: string;
@@ -98,7 +103,7 @@ export interface CollectionConfig<
 export type FieldOverrideMap = Record<string, Partial<FieldConfig<any>> | any>;
 
 export interface ResourceCollectionConfig<
-  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+  TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
 > extends Omit<CollectionConfig<TFields>, "name" | "fields" | "table"> {
   resource: any;
   name?: string;
@@ -107,7 +112,7 @@ export interface ResourceCollectionConfig<
 }
 
 export interface TableCollectionConfig<
-  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+  TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
 > extends Omit<CollectionConfig<TFields>, "name" | "fields" | "table"> {
   drizzleTable?: any;
   table?: TableViewConfig<string> | any;
@@ -116,18 +121,38 @@ export interface TableCollectionConfig<
 }
 
 export type DefineCollectionInput<
-  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+  TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
 > = CollectionConfig<TFields> | ResourceCollectionConfig<TFields> | TableCollectionConfig<TFields>;
 
-export type InferRecord<TFieldsOrCollection> = TFieldsOrCollection extends { fields: infer TFields extends Record<string, FieldConfig<any>> }
+export type InferRecord<TFieldsOrCollection> = TFieldsOrCollection extends { fields: infer TFields extends Record<string, any> }
   ? { [K in keyof TFields]: InferFieldValue<TFields[K]> }
-  : TFieldsOrCollection extends Record<string, FieldConfig<any>>
+  : TFieldsOrCollection extends Record<string, any>
   ? { [K in keyof TFieldsOrCollection]: InferFieldValue<TFieldsOrCollection[K]> }
   : Record<string, unknown>;
 
-export interface Collection<TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>>
-  extends CollectionConfig<TFields> {
+export type NormalizedField<T> = T extends { build(): infer TBuilt }
+  ? TBuilt extends FieldConfig<any>
+    ? TBuilt
+    : FieldConfig<any>
+  : T extends { toConfig(): infer TBuilt }
+  ? TBuilt extends FieldConfig<any>
+    ? TBuilt
+    : FieldConfig<any>
+  : T extends FieldConfig<any>
+  ? T
+  : FieldConfig<any>;
+
+export type NormalizedFields<TFields extends Record<string, any>> = {
+  [K in keyof TFields]: NormalizedField<TFields[K]>;
+};
+
+export interface Collection<TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>>
+  extends Omit<CollectionConfig<TFields>, "fields"> {
   readonly _isCollection: true;
-  getField: (key: keyof TFields) => TFields[keyof TFields] | undefined;
+  endpoint: string;
+  label: string;
+  fields: NormalizedFields<TFields>;
+  defaultView: ViewType;
+  getField: (key: keyof TFields) => FieldConfig<any> | undefined;
   getFieldKeys: () => (keyof TFields)[];
 }
