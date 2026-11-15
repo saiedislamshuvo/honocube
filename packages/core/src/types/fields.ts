@@ -13,7 +13,9 @@ export type BaseFieldType =
   | "relation"
   | "collection"
   | "computed"
-  | "series";
+  | "series"
+  | "image"
+  | "media";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -109,6 +111,31 @@ export interface ComputedFieldConfig<
   compute: (record: TRecord, parentRecord?: TParentRecord) => TReturn;
 }
 
+/**
+ * Standard media asset representation across HonoCube media library and image pickers.
+ */
+export interface MediaAsset {
+  id: string;
+  url: string;
+  name: string;
+  size?: number;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+  uploadedAt?: string;
+  thumbnailUrl?: string;
+}
+
+export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "media" | "image";
+  multiple?: boolean;
+  accept?: string;
+  maxSize?: number;
+  uploadEndpoint?: string;
+  default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -119,7 +146,8 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | SeriesFieldConfig<TRecord>
   | RelationFieldConfig<TRecord>
   | SubCollectionFieldConfig<any, TRecord>
-  | ComputedFieldConfig<any, TRecord>;
+  | ComputedFieldConfig<any, TRecord>
+  | MediaFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
@@ -145,4 +173,8 @@ export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? Array<{ [K in keyof TChildFields]: InferFieldValue<TChildFields[K]> }>
   : TField extends { type: "computed"; compute: (...args: any[]) => infer TReturn }
   ? TReturn
+  : TField extends { type: "media" | "image"; multiple: true }
+  ? string[] | MediaAsset[]
+  : TField extends { type: "media" | "image" }
+  ? string | MediaAsset
   : unknown;

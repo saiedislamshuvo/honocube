@@ -16,6 +16,7 @@ import {
   Textarea,
 } from "@honocube/ui";
 import { toHumanLabel, type FormFieldProps } from "@honocube/core";
+import { ImagePickerField } from "../media/image-picker-field.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -272,6 +273,22 @@ export function FormField({
                 disabled={isDisabled}
                 placeholder={field.placeholder || `Select ${field.target}...`}
                 className={errorMessage ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+            );
+
+          case "image":
+          case "media":
+            return (
+              <ImagePickerField
+                id={name}
+                value={fieldState.value}
+                onChange={onChange}
+                multiple={Boolean((field as any).multiple)}
+                accept={(field as any).accept || (field.type === "image" ? "image/*" : undefined)}
+                maxSize={(field as any).maxSize}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                hasError={Boolean(errorMessage)}
               />
             );
 
