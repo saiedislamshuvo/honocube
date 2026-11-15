@@ -417,5 +417,5 @@ export const app = defineApp({
       items: [invoicesCollection],
     },
   ],
-  collections: [dealsCollection, contactsCollection, invoicesCollection, invoiceItemsCollection],
+  extraCollections: [invoiceItemsCollection],
 });

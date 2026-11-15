@@ -66,10 +66,11 @@ export function WorkspaceSidebar({
   // 1. Resolve Navigation Groups
   let groups: NavigationGroup[] = [];
 
-  if (app.navigation && app.navigation.length > 0) {
-    groups = app.navigation;
-  } else {
-    const collections = app.getCollections ? app.getCollections() : app.collections || [];
+  const nav = app.getNavigation ? app.getNavigation() : app.navigation;
+  if (Array.isArray(nav) && nav.length > 0) {
+    groups = nav;
+  } else if (!app.navigation && !app.getNavigation) {
+    const collections = app.collections || [];
     const groupMap = new Map<string, Collection<any>[]>();
 
     for (const col of collections) {
