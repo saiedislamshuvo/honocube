@@ -95,6 +95,30 @@ export interface CollectionConfig<
   bulkActions?: BulkAction[];
 }
 
+export type FieldOverrideMap = Record<string, Partial<FieldConfig<any>> | any>;
+
+export interface ResourceCollectionConfig<
+  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+> extends Omit<CollectionConfig<TFields>, "name" | "fields" | "table"> {
+  resource: any;
+  name?: string;
+  table?: TableViewConfig<string> | any;
+  fields?: FieldOverrideMap | TFields;
+}
+
+export interface TableCollectionConfig<
+  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+> extends Omit<CollectionConfig<TFields>, "name" | "fields" | "table"> {
+  drizzleTable?: any;
+  table?: TableViewConfig<string> | any;
+  name?: string;
+  fields?: FieldOverrideMap | TFields;
+}
+
+export type DefineCollectionInput<
+  TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
+> = CollectionConfig<TFields> | ResourceCollectionConfig<TFields> | TableCollectionConfig<TFields>;
+
 export type InferRecord<TFieldsOrCollection> = TFieldsOrCollection extends { fields: infer TFields extends Record<string, FieldConfig<any>> }
   ? { [K in keyof TFields]: InferFieldValue<TFields[K]> }
   : TFieldsOrCollection extends Record<string, FieldConfig<any>>
