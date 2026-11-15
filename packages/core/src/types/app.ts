@@ -74,6 +74,7 @@ export interface AppConfig {
   idempotency?: IdempotencyConfig;
   navigation?: NavigationGroup[];
   collections?: Collection<any>[];
+  extraCollections?: Collection<any>[];
   layout?: AppLayoutConfig;
   components?: {
     fields?: Record<string, any>;

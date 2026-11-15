@@ -96,6 +96,12 @@ describe("Showcase CRM App Verification", () => {
       expect(route.recordId).toBe("1");
     });
 
+    it("resolves route for extra non-navigation collections (e.g. invoice-items)", () => {
+      const route = resolveWorkspaceRoute(app, ["invoice-items"]);
+      expect(route.type).toBe("list");
+      expect(route.collectionName).toBe("invoice-items");
+    });
+
     it("resolves 404 not-found route for non-existent collections", () => {
       const route = resolveWorkspaceRoute(app, ["non-existent-xyz"]);
       expect(route.type).toBe("not-found");
