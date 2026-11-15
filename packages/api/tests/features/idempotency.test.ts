@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { createApp } from "../../src/core/factory.js";
+import { createMemoryIdempotencyStorage } from "../../src/utils/idempotency.js";
 import { IdempotencyRecord, IdempotencyStorage } from "../../src/types.js";
 import { createTestDb, posts } from "../fixtures/db.js";
 
@@ -525,5 +526,50 @@ describe("Mutation Idempotency Key Engine", () => {
     });
     expect(res2.status).toBe(200);
     expect(res2.headers.get("Idempotent-Replayed")).toBeNull();
+  });
+
+  it("createMemoryIdempotencyStorage manages records with expiration and clearing", async () => {
+    const storage = createMemoryIdempotencyStorage();
+    expect(await storage.get("non-existent")).toBeNull();
+
+    await storage.set(
+      "key-1",
+      {
+        fingerprint: "fp1",
+        status: "completed",
+        responseStatus: 200,
+        responseHeaders: {},
+        responseBody: '{"ok":true}',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 1000,
+      },
+      1000
+    );
+
+    const rec = await storage.get("key-1");
+    expect(rec?.status).toBe("completed");
+
+    // Expired record
+    await storage.set(
+      "key-expired",
+      {
+        fingerprint: "fp2",
+        status: "completed",
+        responseStatus: 200,
+        responseHeaders: {},
+        responseBody: '{"ok":true}',
+        createdAt: Date.now() - 5000,
+        expiresAt: Date.now() - 1000,
+      },
+      1000
+    );
+    expect(await storage.get("key-expired")).toBeNull();
+
+    await storage.delete("key-1");
+    expect(await storage.get("key-1")).toBeNull();
+
+    await storage.set("key-2", { fingerprint: "fp3", status: "in_flight", createdAt: Date.now(), expiresAt: Date.now() + 5000 }, 5000);
+    storage.clear?.();
+    expect(await storage.get("key-2")).toBeNull();
   });
 });

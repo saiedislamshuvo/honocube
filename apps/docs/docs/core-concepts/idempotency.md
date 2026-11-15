@@ -11,7 +11,7 @@ HonoCube provides an enterprise **Mutation Idempotency Engine** that guarantees 
 Enable idempotency in your resource:
 
 ```typescript
-import { MemoryIdempotencyStorage } from "@honocube/api";
+import { createMemoryIdempotencyStorage } from "@honocube/api";
 
 export const paymentsResource = defineResource({
   name: "payments",
@@ -20,7 +20,7 @@ export const paymentsResource = defineResource({
     enabled: true,
     header: "Idempotency-Key", // Header name (default: "Idempotency-Key")
     ttl: "24h",                 // Cache retention duration (default: "24h")
-    storage: new MemoryIdempotencyStorage(), // Default: MemoryIdempotencyStorage
+    storage: createMemoryIdempotencyStorage(), // Default: createMemoryIdempotencyStorage()
   },
 });
 ```

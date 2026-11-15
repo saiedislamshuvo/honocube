@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { createApp, DrizzleAdapter, defineApi } from "@honocube/api";
+import { createApp, createDrizzleAdapter, defineApi } from "@honocube/api";
 import { db, ensureDbInitialized } from "./db";
 import * as schema from "./schema";
 
-const adapter = new DrizzleAdapter(db, { dialect: "sqlite", schema });
+const adapter = createDrizzleAdapter(db, { dialect: "sqlite", schema });
 const { defineResource } = createApp({ adapter });
 
 export const dealsResource = defineResource({

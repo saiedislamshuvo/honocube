@@ -5,7 +5,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
-import { DrizzleAdapter } from "../../src/adapters/drizzle.js";
+import { createDrizzleAdapter } from "../../src/adapters/drizzle.js";
 import { createApp, DatabaseStrategy } from "../../src/core/factory.js";
 
 // Define test schema for strategies test
@@ -120,7 +120,7 @@ async function setupTestDb(strategy: DatabaseStrategy) {
     );
   `);
 
-  const adapter = new DrizzleAdapter(db, { dialect: "sqlite" });
+  const adapter = createDrizzleAdapter(db, { dialect: "sqlite" });
   const { defineResource, defineApi } = createApp({
     adapter,
     strategy,

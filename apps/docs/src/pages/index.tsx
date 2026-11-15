@@ -10,11 +10,11 @@ import useBaseUrl from '@docusaurus/useBaseUrl';
 
 import styles from './index.module.css';
 
-const codeExample = `import { createApp, DrizzleAdapter } from "@honocube/api";
+const codeExample = `import { createApp, createDrizzleAdapter } from "@honocube/api";
 import { db } from "./db";
 
 export const { defineResource, defineApi } = createApp({
-  adapter: new DrizzleAdapter(db),
+  adapter: createDrizzleAdapter(db, { dialect: "sqlite" }),
 });
 
 export const posts = defineResource({

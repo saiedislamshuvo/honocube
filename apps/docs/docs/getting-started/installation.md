@@ -35,11 +35,11 @@ Valibot or with ArkType is accepted. Install `zod` only if your own resources us
 To start using Honocube, you'll need to initialize your application configuration using `createApp`.
 
 ```typescript
-import { createApp, DrizzleAdapter } from "@honocube/api";
+import { createApp, createDrizzleAdapter } from "@honocube/api";
 import { db } from "./db"; // Your Drizzle DB instance
 
 export const { defineResource, defineApi } = createApp({
-  adapter: new DrizzleAdapter(db),
+  adapter: createDrizzleAdapter(db, { dialect: "sqlite" }),
   logger: {
     info: (msg) => console.log(msg),
     // ... other logger methods

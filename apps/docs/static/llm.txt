@@ -10,13 +10,13 @@ HonoCube is initialized using `createApp`, providing the global config (adapter,
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
-import { DrizzleAdapter, createApp } from '@honocube/api';
+import { createDrizzleAdapter, createApp } from '@honocube/api';
 import * as schema from './schema';
 
 const client = createClient({ url: process.env.DATABASE_URL! });
 const db = drizzle(client, { schema });
 
-const adapter = new DrizzleAdapter(db, { dialect: 'sqlite' });
+const adapter = createDrizzleAdapter(db, { dialect: 'sqlite' });
 
 const { defineResource, defineApi } = createApp({
   adapter,

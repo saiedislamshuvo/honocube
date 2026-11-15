@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useMemo } from "react";
 import type { AppInstance } from "../types/app.js";
-import { ApiClient, type ApiClientOptions, createApiClient } from "../client/api-client.js";
+import { type ApiClient, type ApiClientOptions, createApiClient } from "../client/api-client.js";
 
 export interface AppContextValue {
   app: AppInstance;

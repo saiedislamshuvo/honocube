@@ -11,7 +11,7 @@ It prevents API abuse, protects database connections, and automatically emits st
 Enable rate limiting directly on a resource:
 
 ```typescript
-import { MemoryRateLimitStore } from "@honocube/api";
+import { createMemoryRateLimitStore } from "@honocube/api";
 
 export const authResource = defineResource({
   name: "auth",
@@ -22,7 +22,7 @@ export const authResource = defineResource({
     keyGenerator: (c) => {  // Partition by IP or authenticated user
       return c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for") || "anonymous";
     },
-    store: new MemoryRateLimitStore(), // In-memory or distributed store
+    store: createMemoryRateLimitStore(), // In-memory or distributed store
   },
 });
 ```

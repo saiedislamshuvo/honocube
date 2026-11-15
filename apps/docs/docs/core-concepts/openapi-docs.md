@@ -11,7 +11,7 @@ It generates standard OpenAPI metadata by introspecting your Drizzle tables and 
 Enable documentation in `defineApi` with a single configuration option:
 
 ```typescript
-import { createApp, DrizzleAdapter, defineApi } from "@honocube/api";
+import { createApp, createDrizzleAdapter, defineApi } from "@honocube/api";
 import { postsResource, usersResource } from "./resources";
 
 export const api = defineApi(

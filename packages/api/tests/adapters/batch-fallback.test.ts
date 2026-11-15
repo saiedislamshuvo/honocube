@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { pgTable, serial, text as pgText } from "drizzle-orm/pg-core";
 import { createApp } from "../../src/core/factory.js";
-import { DrizzleAdapter } from "../../src/adapters/drizzle.js";
+import { createDrizzleAdapter } from "../../src/adapters/drizzle.js";
 import { createTestDb, posts, comments } from "../fixtures/db.js";
 
 describe("Batch Strategy Fallback & Dialect Portability", () => {
@@ -69,9 +69,9 @@ describe("Batch Strategy Fallback & Dialect Portability", () => {
     const dialect = new SQLiteSyncDialect();
     const pgPosts = pgTable("posts", { id: serial("id").primaryKey(), title: pgText("title") });
 
-    const sqliteAdapter = new DrizzleAdapter({} as any, { dialect: "sqlite" });
-    const pgAdapter = new DrizzleAdapter({} as any, { dialect: "postgresql" });
-    const mysqlAdapter = new DrizzleAdapter({} as any, { dialect: "mysql" });
+    const sqliteAdapter = createDrizzleAdapter({} as any, { dialect: "sqlite" });
+    const pgAdapter = createDrizzleAdapter({} as any, { dialect: "postgresql" });
+    const mysqlAdapter = createDrizzleAdapter({} as any, { dialect: "mysql" });
 
     const sqliteSql = dialect.sqlToQuery(sqliteAdapter.parentIdExpression(posts) as any).sql;
     const pgSql = dialect.sqlToQuery(pgAdapter.parentIdExpression(pgPosts) as any).sql;

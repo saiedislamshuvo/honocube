@@ -145,7 +145,7 @@ directory working, and `./package.json` is exported explicitly. If you import th
 that is not part of the published files, import it from the root instead:
 
 ```typescript
-import { createApp, DrizzleAdapter, ApiError } from "@honocube/api";
+import { createApp, createDrizzleAdapter, ApiError } from "@honocube/api";
 ```
 
 ## Is 1.x deprecated?

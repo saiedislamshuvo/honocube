@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiClient, ApiClientError, createApiClient } from "../src/index.js";
+import { type ApiClient, ApiClientError, createApiClient } from "../src/index.js";
 
-describe("ApiClient", () => {
+describe("createApiClient", () => {
   it("normalizes trailing slashes on apiBaseUrl and builds paths", () => {
     const client = createApiClient({ apiBaseUrl: "https://api.example.com///" });
     expect(client.apiBaseUrl).toBe("https://api.example.com");
@@ -24,7 +24,7 @@ describe("ApiClient", () => {
       });
     });
 
-    const client = new ApiClient({
+    const client = createApiClient({
       apiBaseUrl: "https://api.example.com",
       auth: {
         type: "bearer",
@@ -70,7 +70,7 @@ describe("ApiClient", () => {
       });
     });
 
-    const client = new ApiClient({
+    const client = createApiClient({
       apiBaseUrl: "https://api.example.com",
       fetch: mockFetch as any,
     });
@@ -112,7 +112,7 @@ describe("ApiClient", () => {
       });
     });
 
-    const client = new ApiClient({
+    const client = createApiClient({
       apiBaseUrl: "https://api.example.com",
       fetch: mockFetch as any,
     });
@@ -128,5 +128,34 @@ describe("ApiClient", () => {
       expect(apiErr.message).toBe("Status must be draft or submitted");
       expect(apiErr.details).toEqual({ field: "status" });
     }
+  });
+
+  it("supports callback and method destructuring without losing this context", async () => {
+    const mockFetch = vi.fn().mockImplementation(async () => {
+      return new Response(JSON.stringify({ success: true, data: { id: 99 } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const client: ApiClient = createApiClient({
+      apiBaseUrl: "https://api.example.com",
+      fetch: mockFetch as any,
+    });
+
+    // Method destructuring (calling standalone without .bind())
+    const { get, post, patch, delete: del } = client;
+
+    const resGet = await get("/api/items");
+    expect(resGet.data).toEqual({ id: 99 });
+
+    const resPost = await post("/api/items", { name: "Test" });
+    expect(resPost.data).toEqual({ id: 99 });
+
+    const resPatch = await patch("/api/items/1", { name: "Updated" });
+    expect(resPatch.data).toEqual({ id: 99 });
+
+    const resDel = await del("/api/items/1");
+    expect(resDel.data).toEqual({ id: 99 });
   });
 });

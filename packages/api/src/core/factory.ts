@@ -2,8 +2,8 @@ import { Hono, Context } from "hono";
 import { ResourceConfig, AppConfig, IdempotencyStorage, RateLimitStore, TenancyValue, AuditAction, AuditEntry, AuditFieldDiff, OutboxEvent, OutboxRecord, OutboxStatus, WebhookEndpointConfig } from "../types.js";
 import { dispatchSingleWebhook, isWebhookEventMatch, calculateRetryBackoff } from "../utils/webhooks.js";
 import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
-import { MemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
-import { MemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
+import { createMemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
+import { createMemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
 import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
@@ -72,14 +72,14 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
   if (appConfig.rateLimit && !appConfig.rateLimit.store) {
     appConfig.rateLimit = {
       ...appConfig.rateLimit,
-      store: new MemoryRateLimitStore(),
+      store: createMemoryRateLimitStore(),
     };
   }
 
   if (appConfig.idempotency && !appConfig.idempotency.storage) {
     appConfig.idempotency = {
       ...appConfig.idempotency,
-      storage: new MemoryIdempotencyStorage(),
+      storage: createMemoryIdempotencyStorage(),
     };
   }
 
@@ -805,7 +805,7 @@ export function defineResource<
   const idempotencyStorage: IdempotencyStorage =
     config.idempotency?.storage ??
     globalConfig?.idempotency?.storage ??
-    new MemoryIdempotencyStorage();
+    createMemoryIdempotencyStorage();
 
   const idempotencyTtlMs: number =
     config.idempotency?.ttlMs ??
@@ -1644,7 +1644,7 @@ export function defineResource<
     }
   };
 
-  const globalDefaultRateLimitStore = new MemoryRateLimitStore();
+  const globalDefaultRateLimitStore = createMemoryRateLimitStore();
 
   const checkRateLimit = async (c: Context, appContext: any) => {
     const rateLimitConfig = config.rateLimit ?? globalConfig?.rateLimit;

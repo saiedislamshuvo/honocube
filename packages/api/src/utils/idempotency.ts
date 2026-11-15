@@ -55,32 +55,34 @@ export async function computeFingerprint(
 }
 
 /**
- * Default in-memory implementation of IdempotencyStorage.
+ * Default in-memory functional implementation of IdempotencyStorage.
  * Automatically clears expired keys upon lookup.
  */
-export class MemoryIdempotencyStorage implements IdempotencyStorage {
-  private store = new Map<string, IdempotencyRecord>();
+export function createMemoryIdempotencyStorage(): IdempotencyStorage {
+  const store = new Map<string, IdempotencyRecord>();
 
-  async get(key: string): Promise<IdempotencyRecord | null> {
-    const record = this.store.get(key);
-    if (!record) return null;
-    if (Date.now() > record.expiresAt) {
-      this.store.delete(key);
-      return null;
-    }
-    return record;
-  }
+  return {
+    async get(key: string): Promise<IdempotencyRecord | null> {
+      const record = store.get(key);
+      if (!record) return null;
+      if (Date.now() > record.expiresAt) {
+        store.delete(key);
+        return null;
+      }
+      return record;
+    },
 
-  async set(key: string, record: IdempotencyRecord, ttlMs: number): Promise<void> {
-    const expiresAt = record.expiresAt || Date.now() + ttlMs;
-    this.store.set(key, { ...record, expiresAt });
-  }
+    async set(key: string, record: IdempotencyRecord, ttlMs: number): Promise<void> {
+      const expiresAt = record.expiresAt || Date.now() + ttlMs;
+      store.set(key, { ...record, expiresAt });
+    },
 
-  async delete(key: string): Promise<void> {
-    this.store.delete(key);
-  }
+    async delete(key: string): Promise<void> {
+      store.delete(key);
+    },
 
-  clear(): void {
-    this.store.clear();
-  }
+    clear(): void {
+      store.clear();
+    },
+  };
 }

@@ -32,11 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SHA-256 payload fingerprinting to prevent key reuse with modified payloads (`422 IDEMPOTENCY_KEY_MISMATCH`).
   - Concurrent lock resolution with atomic acquisition (`409 IDEMPOTENCY_KEY_LOCKED`).
   - Automatic response caching and cached replay (`Idempotent-Replayed: true`).
-  - In-memory `MemoryIdempotencyStorage` and pluggable interface for Redis / Upstash / KV.
+  - In-memory `createMemoryIdempotencyStorage()` and pluggable interface for Redis / Upstash / KV.
 - **Distributed Edge Rate Limiting:**
   - High-performance sliding window counter algorithm optimized for edge and serverless runtimes (Cloudflare Workers, Fastly, Bun, Node).
   - Standard RFC 6585 / IETF headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, `Retry-After`).
-  - In-memory `MemoryRateLimitStore` and pluggable distributed store adapters.
+  - In-memory `createMemoryRateLimitStore()` and pluggable distributed store adapters.
 - **Keyset & Cursor Pagination:**
   - O(1) seek performance for large datasets using indexed composite keys.
   - Bidirectional forward and backward seeking (`cursor`, `after`, `before`, `direction`).

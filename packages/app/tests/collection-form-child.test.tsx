@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { defineCollection } from "../src/core/collection.js";
 import { defineApp } from "../src/core/app.js";
 import { AppProvider } from "../src/query/provider.js";
-import { ApiClient } from "../src/client/api-client.js";
+import { createApiClient } from "../src/client/api-client.js";
 import { useCollectionForm } from "../src/form/use-collection-form.js";
 import { useChildCollection } from "../src/form/use-child-collection.js";
 
@@ -68,7 +68,7 @@ describe("Collection Form Child Collections Integration", () => {
     }
 
     const qc = new QueryClient();
-    const client = new ApiClient(app);
+    const client = createApiClient(app);
 
     renderToString(
       <QueryClientProvider client={qc}>
@@ -118,7 +118,7 @@ describe("Collection Form Child Collections Integration", () => {
     }
 
     const qc = new QueryClient();
-    const client = new ApiClient(app);
+    const client = createApiClient(app);
     const mockPost = vi.fn().mockResolvedValue({ data: {}, meta: {} });
     client.post = mockPost;
 
