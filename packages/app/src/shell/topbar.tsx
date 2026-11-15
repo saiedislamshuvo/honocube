@@ -1,14 +1,15 @@
 import React from "react";
-import { Menu, Moon, Search, Sun } from "lucide-react";
-import { Button, cn } from "@honocube/ui";
+import { Moon, Search, Sun } from "lucide-react";
+import { Button, Separator, SidebarTrigger, cn } from "@honocube/ui";
 import { WorkspaceBreadcrumbs } from "./breadcrumbs.js";
 import { TenantSwitcher } from "./tenant-switcher.js";
 import { UserProfileDropdown } from "./user-profile.js";
+import { ThemeSwitcher } from "../theme/theme-switcher.js";
 import type { WorkspaceTopbarProps } from "./types.js";
 
 /**
- * Top sticky navigation bar housing breadcrumbs, spotlight trigger, tenant switcher,
- * theme toggle, and user profile menu.
+ * Top sticky navigation bar housing official SidebarTrigger, breadcrumbs,
+ * spotlight trigger, tenant switcher, theme toggle, and user profile menu.
  */
 export function WorkspaceTopbar({
   app,
@@ -16,8 +17,12 @@ export function WorkspaceTopbar({
   tenants,
   activeTenantId,
   onTenantChange,
+  onAddTenant,
+  tenantSwitcherPosition: propTenantPos,
   currentUser,
   onLogout,
+  onSettingsClick,
+  userProfilePosition: propUserPos,
   theme,
   onThemeChange,
   onSpotlightOpen,
@@ -27,28 +32,27 @@ export function WorkspaceTopbar({
   extraSlot,
   className = "",
 }: WorkspaceTopbarProps): React.JSX.Element {
+  const tenantSwitcherPosition =
+    propTenantPos || app.layout?.tenantSwitcher || "sidebar";
+  const userProfilePosition =
+    propUserPos || app.layout?.userProfile || "sidebar";
+
   return (
     <header
       data-testid="workspace-topbar"
       className={cn(
-        "sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6",
+        "sticky top-0 z-30 flex h-14 shrink-0 w-full items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6",
         className
       )}
     >
-      {/* Left: Sidebar Toggle + Breadcrumbs */}
-      <div className="flex items-center gap-3 truncate">
-        {onSidebarToggle && (
-          <Button
-            data-testid="sidebar-toggle-button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-            onClick={onSidebarToggle}
-            aria-label="Toggle sidebar"
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        )}
+      {/* Left: Official SidebarTrigger + Separator + Breadcrumbs */}
+      <div className="flex items-center gap-2 truncate">
+        <SidebarTrigger
+          data-testid="sidebar-toggle-button"
+          onClick={onSidebarToggle}
+          className="-ml-1"
+        />
+        <Separator orientation="vertical" className="mr-2 h-4" />
 
         <WorkspaceBreadcrumbs
           app={app}
@@ -58,7 +62,7 @@ export function WorkspaceTopbar({
         />
       </div>
 
-      {/* Right: Spotlight + Tenant Switcher + Theme Toggle + User Menu */}
+      {/* Right: Spotlight + Header Placed Elements + Theme Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Spotlight Trigger Button */}
         {onSpotlightOpen && (
@@ -77,17 +81,20 @@ export function WorkspaceTopbar({
           </Button>
         )}
 
-        {/* Tenant Switcher */}
-        {tenants && tenants.length > 0 && (
+        {/* Tenant Switcher (when placed in Header) */}
+        {tenantSwitcherPosition === "header" && tenants && tenants.length > 0 && (
           <TenantSwitcher
+            app={app}
+            variant="default"
             tenants={tenants}
             activeTenantId={activeTenantId}
             onTenantChange={onTenantChange}
+            onAddTenant={onAddTenant}
           />
         )}
 
-        {/* Dark/Light Theme Toggle */}
-        {onThemeChange && (
+        {/* Dark/Light Theme Toggle & Palette Switcher */}
+        {onThemeChange ? (
           <Button
             data-testid="theme-toggle-button"
             variant="ghost"
@@ -99,15 +106,21 @@ export function WorkspaceTopbar({
             <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
+        ) : app.layout?.themeToggle !== false ? (
+          <ThemeSwitcher showPresets={app.layout?.themePresets !== false} />
+        ) : null}
+
+        {/* User Profile Menu (when placed in Header) */}
+        {userProfilePosition === "header" && currentUser && (
+          <UserProfileDropdown
+            variant="default"
+            user={currentUser}
+            onLogout={onLogout}
+            onSettingsClick={onSettingsClick}
+          />
         )}
 
-        {/* Extra Actions Slot */}
         {extraSlot}
-
-        {/* User Profile Dropdown */}
-        {currentUser && (
-          <UserProfileDropdown user={currentUser} onLogout={onLogout} />
-        )}
       </div>
     </header>
   );

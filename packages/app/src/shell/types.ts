@@ -1,5 +1,5 @@
 import type React from "react";
-import type { AppInstance } from "../types/app.js";
+import type { AppInstance, ShellElementPosition } from "../types/app.js";
 
 export interface ShellTenant {
   id: string;
@@ -31,10 +31,13 @@ export interface WorkspaceBreadcrumbsProps {
 }
 
 export interface TenantSwitcherProps {
+  app?: AppInstance;
   tenants?: ShellTenant[];
   activeTenantId?: string;
   onTenantChange?: (tenantId: string) => void;
   onAddTenant?: () => void;
+  variant?: "default" | "sidebar";
+  collapsed?: boolean;
   className?: string;
 }
 
@@ -42,6 +45,8 @@ export interface UserProfileDropdownProps {
   user?: ShellUser;
   onLogout?: () => void;
   onSettingsClick?: () => void;
+  variant?: "default" | "sidebar";
+  collapsed?: boolean;
   className?: string;
 }
 
@@ -65,6 +70,15 @@ export interface WorkspaceSidebarProps {
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   onNavigate?: (href: string) => void;
+  tenants?: ShellTenant[];
+  activeTenantId?: string;
+  onTenantChange?: (tenantId: string) => void;
+  onAddTenant?: () => void;
+  tenantSwitcherPosition?: ShellElementPosition;
+  currentUser?: ShellUser;
+  onLogout?: () => void;
+  onSettingsClick?: () => void;
+  userProfilePosition?: ShellElementPosition;
   headerSlot?: React.ReactNode;
   footerSlot?: React.ReactNode;
   className?: string;
@@ -76,8 +90,12 @@ export interface WorkspaceTopbarProps {
   tenants?: ShellTenant[];
   activeTenantId?: string;
   onTenantChange?: (tenantId: string) => void;
+  onAddTenant?: () => void;
+  tenantSwitcherPosition?: ShellElementPosition;
   currentUser?: ShellUser;
   onLogout?: () => void;
+  onSettingsClick?: () => void;
+  userProfilePosition?: ShellElementPosition;
   theme?: "light" | "dark" | "system";
   onThemeChange?: (theme: "light" | "dark") => void;
   onSpotlightOpen?: () => void;
@@ -95,8 +113,12 @@ export interface WorkspaceShellProps {
   tenants?: ShellTenant[];
   activeTenantId?: string;
   onTenantChange?: (tenantId: string) => void;
+  onAddTenant?: () => void;
+  tenantSwitcherPosition?: ShellElementPosition;
   currentUser?: ShellUser;
   onLogout?: () => void;
+  onSettingsClick?: () => void;
+  userProfilePosition?: ShellElementPosition;
   theme?: "light" | "dark" | "system";
   onThemeChange?: (theme: "light" | "dark") => void;
   collapsed?: boolean;

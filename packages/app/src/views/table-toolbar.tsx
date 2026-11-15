@@ -17,6 +17,11 @@ import {
   Popover,
   PopoverTrigger,
   PopoverContent,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@honocube/ui";
 import type { Collection, BulkAction } from "../types/collection.js";
 import type {
@@ -112,18 +117,18 @@ export function TableToolbar<TCollection extends Collection<any>>({
               <PopoverContent className="w-72 p-3 space-y-3" align="start">
                 <div className="font-medium text-sm">Add Filter</div>
                 <div className="space-y-2">
-                  <select
-                    className="w-full h-8 px-2 text-xs border rounded-md bg-background"
-                    value={filterField}
-                    onChange={(e) => setFilterField(e.target.value)}
-                  >
-                    <option value="">Select field...</option>
-                    {fieldKeys.map((key) => (
-                      <option key={String(key)} value={String(key)}>
-                        {collection.getField(String(key))?.label || toHumanLabel(String(key))}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={filterField} onValueChange={setFilterField}>
+                    <SelectTrigger className="w-full h-8 px-2 text-xs">
+                      <SelectValue placeholder="Select field..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fieldKeys.map((key) => (
+                        <SelectItem key={String(key)} value={String(key)} className="text-xs">
+                          {collection.getField(String(key))?.label || toHumanLabel(String(key))}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Input
                     placeholder="Filter value..."
                     value={filterValue}

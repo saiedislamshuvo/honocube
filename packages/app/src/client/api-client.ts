@@ -107,7 +107,17 @@ export class ApiClient {
 
   buildUrl(path: string, params?: QueryParams): string {
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
-    const url = new URL(`${this.apiBaseUrl}${cleanPath}`);
+    const normalizedPath =
+      this.apiBaseUrl.replace(/\/+$/, "").endsWith("/api") && cleanPath.startsWith("/api/")
+        ? cleanPath.slice(4)
+        : cleanPath;
+    const isAbsolute = this.apiBaseUrl.startsWith("http://") || this.apiBaseUrl.startsWith("https://");
+    const base = isAbsolute
+      ? this.apiBaseUrl.replace(/\/+$/, "")
+      : typeof window !== "undefined" && window.location?.origin
+      ? String(window.location.origin) + (this.apiBaseUrl ? "/" + this.apiBaseUrl.replace(/^\/+|\/+$/g, "") : "")
+      : "http://localhost" + (this.apiBaseUrl ? "/" + this.apiBaseUrl.replace(/^\/+|\/+$/g, "") : "");
+    const url = new URL(base + normalizedPath);
 
     if (params) {
       for (const [key, value] of Object.entries(params)) {
@@ -129,7 +139,7 @@ export class ApiClient {
       }
     }
 
-    return url.toString();
+    return isAbsolute ? url.toString() : `${url.pathname}${url.search}`;
   }
 
   async request<T = unknown>(

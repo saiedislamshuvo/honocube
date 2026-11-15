@@ -1,0 +1,19 @@
+# Next.js & Turbo build output
+.next/
+.turbo/
+out/
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Local databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment variables
+.env*
+!.env.example

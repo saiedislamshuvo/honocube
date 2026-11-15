@@ -10,6 +10,7 @@ import { evaluateFieldCapability } from "./capabilities.js";
 import { validateField, validateRecord } from "./validation.js";
 import { createChildCollectionHelper } from "./child.js";
 import { useCollectionWorkflow } from "../workflow/use-workflow.js";
+import { toast } from "@honocube/ui";
 import type {
   CollectionFormOptions,
   CollectionFormReturn,
@@ -267,14 +268,24 @@ export function useCollectionForm<TCollection extends Collection<any>>(
               id,
               data: currentValues,
             });
+            toast.success(
+              `Updated ${collection.singular || collection.label || collection.name} successfully`
+            );
             onSuccess?.(res.data);
           } else {
             const res = await mutation.create.mutateAsync(currentValues);
+            toast.success(
+              `Created ${collection.singular || collection.label || collection.name} successfully`
+            );
             onSuccess?.(res.data);
           }
         }
       } catch (err: any) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
+        toast.error(
+          errorObj.message ||
+            `Failed to save ${collection.singular || collection.label || collection.name}`
+        );
         onError?.(errorObj);
         throw errorObj;
       } finally {

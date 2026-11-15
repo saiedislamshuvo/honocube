@@ -8,20 +8,30 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  useSidebar,
   cn,
 } from "@honocube/ui";
 import type { TenantSwitcherProps } from "./types.js";
 
 /**
- * Multi-tenant company/workspace switcher dropdown for topbar and sidebar.
+ * Multi-tenant company/workspace switcher dropdown for topbar and sidebar (canonical shadcn sidebar-07 style).
  */
 export function TenantSwitcher({
+  app,
   tenants = [],
   activeTenantId,
   onTenantChange,
   onAddTenant,
+  variant = "default",
+  collapsed: propCollapsed,
   className = "",
 }: TenantSwitcherProps): React.JSX.Element | null {
+  const { isMobile, state } = useSidebar();
+  const collapsed = propCollapsed !== undefined ? propCollapsed : state === "collapsed";
+
   if (tenants.length === 0) {
     return null;
   }
@@ -29,6 +39,101 @@ export function TenantSwitcher({
   const activeTenant =
     tenants.find((t) => t.id === activeTenantId) || tenants[0];
 
+  const initial = activeTenant?.name ? activeTenant.name.charAt(0).toUpperCase() : "W";
+
+  // 1. Sidebar Variant (official shadcn sidebar-07 team-switcher)
+  if (variant === "sidebar") {
+    return (
+      <SidebarMenu className={className}>
+        <SidebarMenuItem>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton
+                size="lg"
+                data-testid="tenant-switcher-trigger"
+                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                title={activeTenant?.name}
+              >
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-xs shadow-sm">
+                  {initial}
+                </div>
+                {!collapsed && (
+                  <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+                    <span className="truncate font-semibold text-sidebar-foreground">
+                      {activeTenant?.name || "Select Workspace"}
+                    </span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {activeTenant?.plan || "Workspace"}
+                      {app?.title ? ` · ${app.title}` : ""}
+                    </span>
+                  </div>
+                )}
+                {!collapsed && (
+                  <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
+                )}
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg text-xs"
+              align="start"
+              side={isMobile ? "bottom" : "right"}
+              sideOffset={4}
+            >
+              <DropdownMenuLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-2 py-1">
+                Workspaces
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {tenants.map((tenant) => {
+                const isActive = tenant.id === activeTenant?.id;
+
+                return (
+                  <DropdownMenuItem
+                    key={tenant.id}
+                    data-testid={`tenant-item-${tenant.id}`}
+                    onClick={() => onTenantChange?.(tenant.id)}
+                    className="flex items-center justify-between cursor-pointer py-1.5 px-2"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted font-semibold text-[11px] text-foreground">
+                        {tenant.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col truncate">
+                        <span className="truncate font-medium">{tenant.name}</span>
+                        {tenant.plan && (
+                          <span className="text-[10px] text-muted-foreground truncate leading-none">
+                            {tenant.plan}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {isActive && <Check className="h-3.5 w-3.5 text-primary shrink-0 ml-2" />}
+                  </DropdownMenuItem>
+                );
+              })}
+
+              {onAddTenant && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    data-testid="add-tenant-action"
+                    onClick={onAddTenant}
+                    className="gap-2 cursor-pointer text-muted-foreground focus:text-foreground py-1.5"
+                  >
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-border text-muted-foreground">
+                      <Plus className="h-3 w-3" />
+                    </div>
+                    <span className="font-medium">Create Workspace</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
+
+  // 2. Default Topbar Variant (Header button)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
