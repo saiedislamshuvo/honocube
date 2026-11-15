@@ -16,7 +16,7 @@ import {
 import type {
   CollectionListPagination,
   CollectionListSelection,
-} from "../table/types.js";
+} from "@honocube/core";
 
 export interface TablePaginationProps {
   pagination: CollectionListPagination;

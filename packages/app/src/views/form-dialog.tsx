@@ -7,9 +7,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
+import { type Collection, type FormDialogProps } from "@honocube/core";
 import { FormView } from "./form-view.js";
-import type { FormDialogProps } from "./types.js";
 
 export function FormDialog<TCollection extends Collection<any>>({
   collection,

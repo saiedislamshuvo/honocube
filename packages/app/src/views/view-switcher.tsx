@@ -1,8 +1,7 @@
 import React from "react";
 import { Table2, Columns3, Calendar, List, LayoutGrid } from "lucide-react";
 import { Button } from "@honocube/ui";
-import type { ViewType } from "../types/views.js";
-import type { ViewSwitcherProps } from "./types.js";
+import { type ViewType, type ViewSwitcherProps } from "@honocube/core";
 
 const VIEW_CONFIGS: Record<ViewType, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   table: { label: "Table", icon: Table2 },

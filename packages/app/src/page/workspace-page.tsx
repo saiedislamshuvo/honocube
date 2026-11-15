@@ -1,14 +1,16 @@
 import React from "react";
 import { FileQuestion, Plus } from "lucide-react";
 import { Button, cn } from "@honocube/ui";
-import type { AppInstance } from "../types/app.js";
-import { resolveWorkspaceRoute } from "./resolve-route.js";
+import {
+  resolveWorkspaceRoute,
+  isHonoCubeTheme,
+  type AppInstance,
+  type WorkspacePageProps,
+} from "@honocube/core";
 import { WorkspaceDashboard } from "./workspace-dashboard.js";
 import { CollectionDetailPage } from "./collection-detail-page.js";
 import { CollectionMultiView } from "../views/multi-view.js";
 import { FormPage } from "../views/form-page.js";
-import { isHonoCubeTheme } from "../theme/theme-contract.js";
-import type { WorkspacePageProps } from "./types.js";
 
 function unwrapValue<T>(val: T | Promise<T> | undefined): T | undefined {
   if (!val) return undefined;

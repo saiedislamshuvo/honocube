@@ -15,8 +15,7 @@ import {
   SelectValue,
   Textarea,
 } from "@honocube/ui";
-import { toHumanLabel } from "../utils/format.js";
-import type { FormFieldProps } from "./types.js";
+import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 
 interface DatePickerFieldProps {
   id: string;

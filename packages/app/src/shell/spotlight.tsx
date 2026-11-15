@@ -10,7 +10,7 @@ import {
   CommandItem,
   CommandShortcut,
 } from "@honocube/ui";
-import type { SpotlightProps } from "./types.js";
+import type { SpotlightProps } from "@honocube/core";
 
 /**
  * Global Spotlight command palette (⌘K / Ctrl+K) enabling instant search,

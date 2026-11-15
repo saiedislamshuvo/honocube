@@ -23,14 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@honocube/ui";
-import type { Collection, BulkAction } from "../types/collection.js";
-import type {
-  CollectionListFilters,
-  CollectionListSearch,
-  CollectionListSelection,
-  CollectionListVisibility,
-} from "../table/types.js";
-import { toHumanLabel } from "../utils/format.js";
+import {
+  toHumanLabel,
+  type Collection,
+  type BulkAction,
+  type CollectionListFilters,
+  type CollectionListSearch,
+  type CollectionListSelection,
+  type CollectionListVisibility,
+} from "@honocube/core";
 
 export interface TableToolbarProps<TCollection extends Collection<any>> {
   collection: TCollection;

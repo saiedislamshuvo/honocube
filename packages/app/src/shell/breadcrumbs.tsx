@@ -8,11 +8,11 @@ import {
   BreadcrumbSeparator,
   cn,
 } from "@honocube/ui";
-import { toHumanLabel } from "../utils/format.js";
-import type {
-  WorkspaceBreadcrumbsProps,
-  BreadcrumbItemData,
-} from "./types.js";
+import {
+  toHumanLabel,
+  type WorkspaceBreadcrumbsProps,
+  type BreadcrumbItemData,
+} from "@honocube/core";
 
 /**
  * Parses pathname into a hierarchical breadcrumb trail mapped against app collections.

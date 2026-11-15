@@ -1,10 +1,13 @@
 import React, { useMemo } from "react";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { Badge } from "@honocube/ui";
-import type { Collection, InferRecord } from "../types/collection.js";
-import { useCollectionQuery } from "../query/use-query.js";
-import { formatCellValue } from "../utils/format.js";
-import type { ListViewProps } from "./types.js";
+import {
+  useCollectionQuery,
+  formatCellValue,
+  type Collection,
+  type InferRecord,
+  type ListViewProps,
+} from "@honocube/core";
 
 export function ListView<TCollection extends Collection<any>>({
   collection,

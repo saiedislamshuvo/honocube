@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Loader2, Lock } from "lucide-react";
 import { Button, cn } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
-import { useCollectionWorkflow } from "../workflow/use-workflow.js";
-import type { WorkflowActionBarProps } from "./types.js";
+import {
+  useCollectionWorkflow,
+  type Collection,
+  type WorkflowActionBarProps,
+} from "@honocube/core";
 
 /**
  * Contextual workflow transition buttons matching available state transitions.

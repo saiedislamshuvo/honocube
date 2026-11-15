@@ -3,8 +3,7 @@ import { SidebarInset, SidebarProvider, Toaster, cn } from "@honocube/ui";
 import { WorkspaceSidebar } from "./sidebar.js";
 import { WorkspaceTopbar } from "./topbar.js";
 import { Spotlight } from "./spotlight.js";
-import { isHonoCubeTheme } from "../theme/theme-contract.js";
-import type { WorkspaceShellProps } from "./types.js";
+import { isHonoCubeTheme, type WorkspaceShellProps } from "@honocube/core";
 
 /**
  * Root Next.js application workspace shell layout (`app/(workspace)/layout.tsx`)

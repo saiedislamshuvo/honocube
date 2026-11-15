@@ -1,12 +1,14 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
-import { useCollectionQuery } from "../query/use-query.js";
+import {
+  useCollectionQuery,
+  type Collection,
+  type CollectionDetailPageProps,
+} from "@honocube/core";
 import { DocumentHeader } from "../views/document-header.js";
 import { FormView } from "../views/form-view.js";
 import { SidePanel } from "../views/side-panel.js";
-import type { CollectionDetailPageProps } from "./types.js";
 
 /**
  * Composite record workspace page composing DocumentHeader, FormView (edit mode),

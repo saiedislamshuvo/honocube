@@ -7,9 +7,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
+import { type Collection, type FormSheetProps } from "@honocube/core";
 import { FormView } from "./form-view.js";
-import type { FormSheetProps } from "./types.js";
 
 export function FormSheet<TCollection extends Collection<any>>({
   collection,

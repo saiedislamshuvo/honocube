@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useMemo } from "react";
 import type { AppInstance } from "../types/app.js";
 import { type ApiClient, type ApiClientOptions, createApiClient } from "../client/api-client.js";
+import type { FormNotifier } from "../form/types.js";
 
 export interface AppContextValue {
   app: AppInstance;
   client: ApiClient;
+  notify?: FormNotifier;
 }
 
 export const AppContext = createContext<AppContextValue | null>(null);
@@ -13,10 +15,11 @@ export interface AppProviderProps {
   app: AppInstance;
   client?: ApiClient;
   clientOptions?: Partial<ApiClientOptions>;
+  notify?: FormNotifier;
   children: React.ReactNode;
 }
 
-export function AppProvider({ app, client, clientOptions, children }: AppProviderProps): React.JSX.Element {
+export function AppProvider({ app, client, clientOptions, notify, children }: AppProviderProps): React.JSX.Element {
   const apiClient = useMemo(() => {
     if (client) return client;
     return createApiClient({
@@ -25,7 +28,7 @@ export function AppProvider({ app, client, clientOptions, children }: AppProvide
     });
   }, [app, client, clientOptions]);
 
-  const value = useMemo(() => ({ app, client: apiClient }), [app, apiClient]);
+  const value = useMemo(() => ({ app, client: apiClient, notify }), [app, apiClient, notify]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

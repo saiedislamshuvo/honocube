@@ -60,6 +60,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@honocube/core": "*",
     "@honocube/ui": "*",
     "lucide-react": "^1.66.0"
   },

@@ -15,8 +15,7 @@ import {
   TableHead,
   TableCell,
 } from "@honocube/ui";
-import { toHumanLabel } from "../utils/format.js";
-import type { ChildTableProps } from "./types.js";
+import { toHumanLabel, type ChildTableProps } from "@honocube/core";
 
 export function ChildTable({
   name,

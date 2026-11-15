@@ -71,7 +71,16 @@ export interface ChildCollectionHelper<TChild = Record<string, unknown>> {
   childCollection?: Collection<any>;
 }
 
+export interface FormNotifier {
+  success?: (message: string) => void;
+  error?: (message: string) => void;
+}
+
 export interface CollectionFormOptions<TCollection extends Collection<any>> {
+  /**
+   * Optional notification callback handler (e.g. toast notifications).
+   */
+  notify?: FormNotifier;
   /**
    * Record ID if editing or viewing an existing record.
    * If omitted, the form runs in "create" mode.

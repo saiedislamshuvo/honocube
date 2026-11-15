@@ -12,6 +12,7 @@
   "dependencies": {
     "@honocube/api": "*",
     "@honocube/app": "*",
+    "@honocube/core": "*",
     "@honocube/ui": "*",
     "@libsql/client": "^0.18.0",
     "@tanstack/react-form": "^0.41.3",

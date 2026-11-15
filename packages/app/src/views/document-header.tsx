@@ -16,10 +16,13 @@ import {
   DropdownMenuTrigger,
   cn,
 } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
-import { getCurrentWorkflowState, getStateMetadata } from "../workflow/engine.js";
+import {
+  getCurrentWorkflowState,
+  getStateMetadata,
+  type Collection,
+  type DocumentHeaderProps,
+} from "@honocube/core";
 import { WorkflowActionBar } from "./workflow-action-bar.js";
-import type { DocumentHeaderProps } from "./types.js";
 
 /**
  * Prominent ERP/CRM document header displaying naming series badge, record title,

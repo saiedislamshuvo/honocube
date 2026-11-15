@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
 } from "@honocube/ui";
 import { useTheme } from "./theme-provider.js";
-import type { ColorPreset } from "../types/app.js";
+import type { ColorPreset } from "@honocube/core";
 
 const PRESETS: Array<{ id: ColorPreset; label: string; color: string }> = [
   { id: "zinc", label: "Zinc", color: "bg-zinc-500" },

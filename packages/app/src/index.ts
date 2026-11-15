@@ -5,90 +5,8 @@
 
 export const VERSION = "2.0.2";
 
-// Core APIs
-export { defineCollection } from "./core/collection.js";
-export { defineApp } from "./core/app.js";
-
-// HTTP & Client
-export { createApiClient } from "./client/api-client.js";
-export { ApiClientError } from "./client/errors.js";
-export type {
-  ApiClient,
-  ApiClientOptions,
-  ApiResponse,
-  PaginationMeta,
-  PaginationParams,
-  QueryParams,
-  RequestOptions,
-} from "./client/api-client.js";
-export type { ErrorEnvelope } from "./client/errors.js";
-
-// Query & Hooks
-export { queryKeys } from "./query/keys.js";
-export { AppContext, AppProvider, useApp, useApiClient } from "./query/provider.js";
-export type { AppContextValue, AppProviderProps } from "./query/provider.js";
-export { useCollectionQuery } from "./query/use-query.js";
-export type {
-  UseCollectionDetailOptions,
-  UseCollectionListOptions,
-  UseCollectionQueryOptions,
-} from "./query/use-query.js";
-export { useCollectionMutation } from "./query/use-mutation.js";
-export type { UseCollectionMutationResult } from "./query/use-mutation.js";
-
-// Table & Collection List Engine
-export { useCollectionList } from "./table/use-collection-list.js";
-export { generateColumnsFromCollection } from "./table/columns.js";
-export {
-  parseTableStateFromUrl,
-  serializeTableStateToUrl,
-  syncUrlState,
-} from "./table/url-sync.js";
-export type {
-  CollectionListFilters,
-  CollectionListOptions,
-  CollectionListPagination,
-  CollectionListResult,
-  CollectionListSearch,
-  CollectionListSelection,
-  CollectionListSorting,
-  CollectionListVisibility,
-  SortOrder,
-  SortState,
-  TableUrlState,
-} from "./table/types.js";
-
-// Form & Record Engine
-export { useCollectionForm } from "./form/use-collection-form.js";
-export { createChildCollectionHelper } from "./form/child.js";
-export { useChildCollection } from "./form/use-child-collection.js";
-export { evaluateComputedFields } from "./form/computed.js";
-export { evaluateFieldCapability } from "./form/capabilities.js";
-export { validateField, validateRecord } from "./form/validation.js";
-export { getDefaultFormValues } from "./form/defaults.js";
-export type {
-  CollectionFormOptions,
-  CollectionFormReturn,
-  FieldCapabilityState,
-  FormFieldState,
-  FormMode,
-  ChildCollectionHelper,
-} from "./form/types.js";
-
-// Workflow State Machine Engine
-export { useCollectionWorkflow } from "./workflow/use-workflow.js";
-export {
-  getCurrentWorkflowState,
-  getStateMetadata,
-  isRecordLocked,
-  getAvailableTransitions,
-} from "./workflow/engine.js";
-export type {
-  AvailableTransition,
-  WorkflowStateMeta,
-  UseWorkflowOptions,
-  UseWorkflowReturn,
-} from "./workflow/types.js";
+// Pure Headless Data Layer, State Machines & Contracts (from @honocube/core)
+export * from "@honocube/core";
 
 // Enterprise Views
 export { TableView } from "./views/table-view.js";
@@ -109,29 +27,6 @@ export { CollectionMultiView } from "./views/multi-view.js";
 export { WorkflowActionBar } from "./views/workflow-action-bar.js";
 export { DocumentHeader } from "./views/document-header.js";
 export { SidePanel } from "./views/side-panel.js";
-export type {
-  TableViewProps,
-  FormViewProps,
-  FormDialogProps,
-  FormSheetProps,
-  FormPageProps,
-  FormFieldProps,
-  ChildTableProps,
-  KanbanColumn,
-  KanbanViewProps,
-  CalendarViewProps,
-  ListViewProps,
-  GridViewProps,
-  ViewSwitcherProps,
-  CollectionMultiViewProps,
-  WorkflowActionBarProps,
-  DocumentHeaderProps,
-  SidePanelProps,
-  AuditFieldDiff,
-  AuditActivity,
-  DocumentComment,
-  DocumentAttachment,
-} from "./views/types.js";
 
 // Workspace Shell Layout & Navigation
 export { WorkspaceShell } from "./shell/workspace-shell.js";
@@ -141,25 +36,8 @@ export { WorkspaceBreadcrumbs, parsePathnameToBreadcrumbs } from "./shell/breadc
 export { Spotlight } from "./shell/spotlight.js";
 export { TenantSwitcher } from "./shell/tenant-switcher.js";
 export { UserProfileDropdown } from "./shell/user-profile.js";
-export type {
-  ShellTenant,
-  ShellUser,
-  BreadcrumbItemData,
-  WorkspaceBreadcrumbsProps,
-  TenantSwitcherProps,
-  UserProfileDropdownProps,
-  SpotlightProps,
-  WorkspaceSidebarProps,
-  WorkspaceTopbarProps,
-  WorkspaceShellProps,
-} from "./shell/types.js";
 
 // Theming, Layout Templates & Appearance
-export {
-  createTheme,
-  isHonoCubeTheme,
-  resolveTheme,
-} from "./theme/theme-contract.js";
 export { defaultTheme } from "./theme/default-theme.js";
 export {
   ThemeProvider,
@@ -167,10 +45,6 @@ export {
   useAppTheme,
 } from "./theme/theme-provider.js";
 export { ThemeSwitcher } from "./theme/theme-switcher.js";
-export type {
-  HonoCubeTheme,
-  ThemeComponents,
-} from "./theme/theme-contract.js";
 export type {
   ThemeProviderProps,
   ThemeContextValue,
@@ -181,89 +55,3 @@ export { toast, Toaster, type ToasterProps } from "@honocube/ui";
 export { WorkspacePage } from "./page/workspace-page.js";
 export { WorkspaceDashboard } from "./page/workspace-dashboard.js";
 export { CollectionDetailPage } from "./page/collection-detail-page.js";
-export { resolveWorkspaceRoute } from "./page/resolve-route.js";
-export type {
-  WorkspaceRouteType,
-  WorkspaceResolvedRoute,
-  WorkspacePageProps,
-  WorkspaceDashboardProps,
-  CollectionDetailPageProps,
-} from "./page/types.js";
-
-// Format & String Utilities
-export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js";
-
-// Collection & Record Types
-export type {
-  Collection,
-  CollectionConfig,
-  InferRecord,
-  FormLayoutConfig,
-  FormTab,
-  FormSection,
-  PresentationMode,
-  PresentationConfig,
-  SidePanelConfig,
-  DocumentAction,
-  BulkAction,
-  CollectionIdentifier,
-} from "./types/collection.js";
-
-// Field Types
-export type {
-  BaseFieldType,
-  FieldCapabilityContext,
-  DynamicRule,
-  SelectOption,
-  BaseFieldConfig,
-  TextFieldConfig,
-  NumberFieldConfig,
-  DateFieldConfig,
-  BooleanFieldConfig,
-  SelectFieldConfig,
-  JsonFieldConfig,
-  SeriesFieldConfig,
-  RelationFieldConfig,
-  SubCollectionFieldConfig,
-  ComputedFieldConfig,
-  FieldConfig,
-  InferFieldValue,
-} from "./types/fields.js";
-
-// View Types
-export type {
-  ViewType,
-  TableViewConfig,
-  ListViewConfig,
-  GridViewConfig,
-  KanbanViewConfig,
-  CalendarViewConfig,
-  GanttViewConfig,
-  TreeViewConfig,
-} from "./types/views.js";
-
-// Workflow Types
-export type {
-  WorkflowVariant,
-  WorkflowState,
-  WorkflowTransition,
-  WorkflowConfig,
-} from "./types/workflow.js";
-
-// App Types
-export type {
-  AuthType,
-  AuthConfig,
-  TenantConfig,
-  IdempotencyConfig,
-  CustomNavigationLink,
-  NavigationItem,
-  NavigationGroup,
-  AppConfig,
-  AppInstance,
-  ShellElementPosition,
-  AppLayoutConfig,
-  ThemeMode,
-  ColorPreset,
-  ThemeConfig,
-} from "./types/app.js";

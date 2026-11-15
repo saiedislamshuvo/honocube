@@ -1,16 +1,15 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef, useContext } from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import type { Collection, InferRecord } from "../types/collection.js";
 import { useCollectionQuery } from "../query/use-query.js";
 import { useCollectionMutation } from "../query/use-mutation.js";
-import { useApiClient } from "../query/provider.js";
+import { useApiClient, AppContext } from "../query/provider.js";
 import { getDefaultFormValues } from "./defaults.js";
 import { evaluateComputedFields } from "./computed.js";
 import { evaluateFieldCapability } from "./capabilities.js";
 import { validateField, validateRecord } from "./validation.js";
 import { createChildCollectionHelper } from "./child.js";
 import { useCollectionWorkflow } from "../workflow/use-workflow.js";
-import { toast } from "@honocube/ui";
 import type {
   CollectionFormOptions,
   CollectionFormReturn,
@@ -37,6 +36,8 @@ export function useCollectionForm<TCollection extends Collection<any>>(
   } = options;
 
   const client = useApiClient();
+  const appContext = useContext(AppContext);
+  const notify = options.notify ?? appContext?.notify;
   const mutation = useCollectionMutation(collection);
 
   const mode: FormMode = useMemo(() => {
@@ -268,13 +269,13 @@ export function useCollectionForm<TCollection extends Collection<any>>(
               id,
               data: currentValues,
             });
-            toast.success(
+            notify?.success?.(
               `Updated ${collection.singular || collection.label || collection.name} successfully`
             );
             onSuccess?.(res.data);
           } else {
             const res = await mutation.create.mutateAsync(currentValues);
-            toast.success(
+            notify?.success?.(
               `Created ${collection.singular || collection.label || collection.name} successfully`
             );
             onSuccess?.(res.data);
@@ -282,7 +283,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
         }
       } catch (err: any) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
-        toast.error(
+        notify?.error?.(
           errorObj.message ||
             `Failed to save ${collection.singular || collection.label || collection.name}`
         );
@@ -302,6 +303,7 @@ export function useCollectionForm<TCollection extends Collection<any>>(
       isEdit,
       id,
       client,
+      notify,
       mutation.update,
       mutation.create,
       onSuccess,

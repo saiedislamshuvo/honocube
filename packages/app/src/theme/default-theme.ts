@@ -18,7 +18,7 @@ import { SidePanel } from "../views/side-panel.js";
 import { DocumentHeader } from "../views/document-header.js";
 import { WorkflowActionBar } from "../views/workflow-action-bar.js";
 import { FormField } from "../views/form-field.js";
-import type { HonoCubeTheme } from "./theme-contract.js";
+import type { HonoCubeTheme } from "@honocube/core";
 
 /**
  * Official reference default theme for HonoCube.
