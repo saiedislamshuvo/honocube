@@ -12,6 +12,8 @@ import type {
   CalendarViewConfig,
   GanttViewConfig,
   TreeViewConfig,
+  SelectableFieldKeys,
+  DateFieldKeys,
   ViewType,
 } from "./views.js";
 import type { WorkflowConfig } from "./workflow.js";
@@ -66,10 +68,10 @@ export interface BulkAction {
   execute: (ctx: { selectedIds: (string | number)[]; api?: any }) => Promise<void> | void;
 }
 
-export interface CollectionIdentifier {
-  field?: string;
-  series?: string;
-  titleField?: string;
+export interface CollectionIdentifier<TFieldKeys extends string = string> {
+  field?: TFieldKeys;
+  series?: TFieldKeys;
+  titleField?: TFieldKeys;
 }
 
 export interface CollectionConfig<
@@ -82,15 +84,15 @@ export interface CollectionConfig<
   icon?: string;
   group?: string;
   hidden?: boolean;
-  identifier?: CollectionIdentifier;
+  identifier?: CollectionIdentifier<Extract<keyof TFields, string>>;
   fields: TFields;
   form?: FormLayoutConfig<Extract<keyof TFields, string>>;
   table?: TableViewConfig<Extract<keyof TFields, string>>;
   list?: ListViewConfig<Extract<keyof TFields, string>>;
   grid?: GridViewConfig<Extract<keyof TFields, string>>;
-  kanban?: KanbanViewConfig<Extract<keyof TFields, string>>;
-  calendar?: CalendarViewConfig<Extract<keyof TFields, string>>;
-  gantt?: GanttViewConfig<Extract<keyof TFields, string>>;
+  kanban?: KanbanViewConfig<Extract<keyof TFields, string>, SelectableFieldKeys<TFields>>;
+  calendar?: CalendarViewConfig<Extract<keyof TFields, string>, DateFieldKeys<TFields>>;
+  gantt?: GanttViewConfig<Extract<keyof TFields, string>, DateFieldKeys<TFields>>;
   tree?: TreeViewConfig<Extract<keyof TFields, string>>;
   defaultView?: ViewType;
   workflow?: WorkflowConfig<InferRecord<TFields>>;
@@ -102,23 +104,51 @@ export interface CollectionConfig<
 
 export type FieldOverrideMap = Record<string, Partial<FieldConfig<any>> | any>;
 
-export interface ResourceCollectionConfig<
+export interface BaseDerivedCollectionConfig<
   TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
-> extends Omit<CollectionConfig<TFields>, "name" | "fields" | "table"> {
-  resource: any;
+> {
   name?: string;
-  table?: TableViewConfig<string> | any;
+  endpoint?: string;
+  label?: string;
+  singular?: string;
+  icon?: string;
+  group?: string;
+  hidden?: boolean;
+  identifier?: CollectionIdentifier<string>;
   fields?: FieldOverrideMap | TFields;
+  form?: FormLayoutConfig<string>;
+  table?: TableViewConfig<string> | any;
+  list?: ListViewConfig<string>;
+  grid?: GridViewConfig<string>;
+  kanban?: KanbanViewConfig<string, string>;
+  calendar?: CalendarViewConfig<string, string>;
+  gantt?: GanttViewConfig<string, string>;
+  tree?: TreeViewConfig<string>;
+  defaultView?: ViewType;
+  workflow?: WorkflowConfig<any>;
+  sidePanel?: SidePanelConfig;
+  presentation?: PresentationConfig;
+  actions?: DocumentAction<any>[];
+  bulkActions?: BulkAction[];
 }
 
-export interface TableCollectionConfig<
+export interface ResourceCollectionConfig<
   TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
-> extends Omit<CollectionConfig<TFields>, "name" | "fields" | "table"> {
-  drizzleTable?: any;
-  table?: TableViewConfig<string> | any;
-  name?: string;
-  fields?: FieldOverrideMap | TFields;
+> extends BaseDerivedCollectionConfig<TFields> {
+  resource: any;
 }
+
+export type TableCollectionConfig<
+  TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
+> =
+  | (BaseDerivedCollectionConfig<TFields> & {
+      drizzleTable: any;
+      table?: TableViewConfig<string> | any;
+    })
+  | (BaseDerivedCollectionConfig<TFields> & {
+      drizzleTable?: never;
+      table: { _: any } | { [key: symbol]: any };
+    });
 
 export type DefineCollectionInput<
   TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>

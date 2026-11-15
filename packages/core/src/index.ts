@@ -192,8 +192,11 @@ export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js
 // Schema, Field, Collection & App Types
 export type {
   AnyFieldDef,
+  NormalizedField,
+  NormalizedFields,
   Collection,
   CollectionConfig,
+  BaseDerivedCollectionConfig,
   ResourceCollectionConfig,
   TableCollectionConfig,
   DefineCollectionInput,
@@ -253,6 +256,10 @@ export type {
   CalendarViewConfig,
   GanttViewConfig,
   TreeViewConfig,
+  SelectableFieldKeys,
+  DateFieldKeys,
+  NumericFieldKeys,
+  TextFieldKeys,
 } from "./types/views.js";
 
 export type {

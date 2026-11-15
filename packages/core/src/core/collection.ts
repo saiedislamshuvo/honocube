@@ -1,4 +1,11 @@
-import type { AnyFieldDef, Collection, DefineCollectionInput } from "../types/collection.js";
+import type {
+  AnyFieldDef,
+  Collection,
+  CollectionConfig,
+  ResourceCollectionConfig,
+  TableCollectionConfig,
+  DefineCollectionInput,
+} from "../types/collection.js";
 import type { FieldConfig } from "../types/fields.js";
 import { toHumanLabel } from "../utils/format.js";
 import {
@@ -9,9 +16,38 @@ import {
   unwrapResourceConfig,
 } from "./derivation.js";
 
+/**
+ * Overload 1: Standard collection definition with explicit fields and strict view key autocomplete.
+ */
+export function defineCollection<
+  const TFields extends Record<string, AnyFieldDef<any>>
+>(config: CollectionConfig<TFields>): Collection<TFields>;
+
+/**
+ * Overload 2: Derived collection from an API resource with optional overrides.
+ */
+export function defineCollection<
+  const TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
+>(config: ResourceCollectionConfig<TFields>): Collection<TFields>;
+
+/**
+ * Overload 3: Derived collection directly from a Drizzle table with optional overrides.
+ */
+export function defineCollection<
+  const TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
+>(config: TableCollectionConfig<TFields>): Collection<TFields>;
+
+/**
+ * Overload 4: Fallback union definition input.
+ */
 export function defineCollection<
   TFields extends Record<string, AnyFieldDef<any>> = Record<string, AnyFieldDef<any>>
->(config: DefineCollectionInput<TFields>): Collection<TFields> {
+>(config: DefineCollectionInput<TFields>): Collection<TFields>;
+
+/**
+ * Implementation of defineCollection.
+ */
+export function defineCollection(config: any): Collection<any> {
   if (!config || typeof config !== "object") {
     throw new Error("defineCollection: Configuration object is required.");
   }
@@ -109,19 +145,19 @@ export function defineCollection<
     identifier = { field: "id", ...(titleField ? { titleField } : {}) };
   }
 
-  const fieldKeys = Object.keys(derivedFields) as (keyof TFields)[];
+  const fieldKeys = Object.keys(derivedFields);
 
-  const collection: Collection<TFields> = {
+  const collection: Collection<any> = {
     ...anyConfig,
     name,
     endpoint,
     label,
-    fields: derivedFields as TFields,
+    fields: derivedFields as any,
     table: tableViewConfig,
     defaultView,
     identifier,
     _isCollection: true,
-    getField: (key: keyof TFields) => (derivedFields as any)[key],
+    getField: (key: string) => (derivedFields as any)[key],
     getFieldKeys: () => fieldKeys,
   };
 
