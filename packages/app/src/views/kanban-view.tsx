@@ -1,11 +1,16 @@
 import React, { useState, useMemo } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import { Badge, Button, Card, CardContent } from "@honocube/ui";
-import type { Collection, InferRecord } from "../types/collection.js";
-import { useCollectionQuery } from "../query/use-query.js";
-import { useCollectionMutation } from "../query/use-mutation.js";
-import { toHumanLabel, formatCellValue } from "../utils/format.js";
-import type { KanbanViewProps, KanbanColumn } from "./types.js";
+import {
+  useCollectionQuery,
+  useCollectionMutation,
+  toHumanLabel,
+  formatCellValue,
+  type Collection,
+  type InferRecord,
+  type KanbanViewProps,
+  type KanbanColumn,
+} from "@honocube/core";
 
 export function KanbanView<TCollection extends Collection<any>>({
   collection,

@@ -5,7 +5,7 @@ import { WorkspaceBreadcrumbs } from "./breadcrumbs.js";
 import { TenantSwitcher } from "./tenant-switcher.js";
 import { UserProfileDropdown } from "./user-profile.js";
 import { ThemeSwitcher } from "../theme/theme-switcher.js";
-import type { WorkspaceTopbarProps } from "./types.js";
+import type { WorkspaceTopbarProps } from "@honocube/core";
 
 /**
  * Top sticky navigation bar housing official SidebarTrigger, breadcrumbs,

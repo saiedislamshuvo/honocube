@@ -8,9 +8,12 @@ import {
   CardDescription,
   CardContent,
 } from "@honocube/ui";
-import type { Collection, InferRecord } from "../types/collection.js";
-import { useCollectionQuery } from "../query/use-query.js";
-import type { GridViewProps } from "./types.js";
+import {
+  useCollectionQuery,
+  type Collection,
+  type InferRecord,
+  type GridViewProps,
+} from "@honocube/core";
 
 export function GridView<TCollection extends Collection<any>>({
   collection,

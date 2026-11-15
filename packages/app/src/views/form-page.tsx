@@ -1,9 +1,8 @@
 import React from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button, Card, CardContent, CardHeader } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
+import { type Collection, type FormPageProps } from "@honocube/core";
 import { FormView } from "./form-view.js";
-import type { FormPageProps } from "./types.js";
 
 export function FormPage<TCollection extends Collection<any>>({
   collection,

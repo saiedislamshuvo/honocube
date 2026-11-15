@@ -11,7 +11,7 @@ import {
   CardTitle,
   cn,
 } from "@honocube/ui";
-import type { WorkspaceDashboardProps } from "./types.js";
+import type { WorkspaceDashboardProps } from "@honocube/core";
 
 /**
  * Default home / dashboard overview rendering collection cards, quick statistics,

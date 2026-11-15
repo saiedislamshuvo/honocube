@@ -18,11 +18,14 @@ import {
   useSidebar,
   cn,
 } from "@honocube/ui";
-import type { NavigationGroup, NavigationItem } from "../types/app.js";
-import type { Collection } from "../types/collection.js";
+import type {
+  NavigationGroup,
+  NavigationItem,
+  Collection,
+  WorkspaceSidebarProps,
+} from "@honocube/core";
 import { TenantSwitcher } from "./tenant-switcher.js";
 import { UserProfileDropdown } from "./user-profile.js";
-import type { WorkspaceSidebarProps } from "./types.js";
 
 function isCollection(item: NavigationItem): item is Collection<any> {
   return typeof item === "object" && item !== null && "_isCollection" in item;

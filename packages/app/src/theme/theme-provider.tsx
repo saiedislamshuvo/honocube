@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
-import type { ThemeMode, ColorPreset } from "../types/app.js";
-import type { HonoCubeTheme } from "./theme-contract.js";
+import type { ThemeMode, ColorPreset, HonoCubeTheme } from "@honocube/core";
 
 export interface ThemeContextValue {
   theme: ThemeMode;

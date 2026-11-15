@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from "react";
-import type { Collection } from "../types/collection.js";
-import type { ViewType } from "../types/views.js";
+import {
+  type Collection,
+  type ViewType,
+  type CollectionMultiViewProps,
+} from "@honocube/core";
 import { ViewSwitcher } from "./view-switcher.js";
 import { TableView } from "./table-view.js";
 import { KanbanView } from "./kanban-view.js";
@@ -8,7 +11,6 @@ import { CalendarView } from "./calendar-view.js";
 import { ListView } from "./list-view.js";
 import { GridView } from "./grid-view.js";
 import { useAppTheme } from "../theme/theme-provider.js";
-import type { CollectionMultiViewProps } from "./types.js";
 
 export function CollectionMultiView<TCollection extends Collection<any>>({
   collection,

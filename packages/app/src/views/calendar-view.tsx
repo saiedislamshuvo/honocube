@@ -1,9 +1,12 @@
 import React, { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { Button } from "@honocube/ui";
-import type { Collection, InferRecord } from "../types/collection.js";
-import { useCollectionQuery } from "../query/use-query.js";
-import type { CalendarViewProps } from "./types.js";
+import {
+  useCollectionQuery,
+  type Collection,
+  type InferRecord,
+  type CalendarViewProps,
+} from "@honocube/core";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [

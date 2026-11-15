@@ -18,7 +18,7 @@ import {
   useSidebar,
   cn,
 } from "@honocube/ui";
-import type { UserProfileDropdownProps } from "./types.js";
+import type { UserProfileDropdownProps } from "@honocube/core";
 
 /**
  * User profile dropdown with initials avatar, account info, settings, and logout (canonical shadcn sidebar-07 nav-user style).

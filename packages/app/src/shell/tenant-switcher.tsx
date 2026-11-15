@@ -14,7 +14,7 @@ import {
   useSidebar,
   cn,
 } from "@honocube/ui";
-import type { TenantSwitcherProps } from "./types.js";
+import type { TenantSwitcherProps } from "@honocube/core";
 
 /**
  * Multi-tenant company/workspace switcher dropdown for topbar and sidebar (canonical shadcn sidebar-07 style).

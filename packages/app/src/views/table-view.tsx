@@ -11,11 +11,14 @@ import {
   Checkbox,
   EmptyState,
 } from "@honocube/ui";
-import type { Collection, BulkAction } from "../types/collection.js";
-import { useCollectionList } from "../table/use-collection-list.js";
+import {
+  useCollectionList,
+  type Collection,
+  type BulkAction,
+  type TableViewProps,
+} from "@honocube/core";
 import { TableToolbar } from "./table-toolbar.js";
 import { TablePagination } from "./table-pagination.js";
-import type { TableViewProps } from "./types.js";
 
 export function TableView<TCollection extends Collection<any>>({
   collection,

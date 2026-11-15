@@ -22,14 +22,14 @@ import {
   Textarea,
   cn,
 } from "@honocube/ui";
-import type { Collection } from "../types/collection.js";
-import { formatFileSize } from "../utils/format.js";
-import type {
-  SidePanelProps,
-  AuditActivity,
-  DocumentComment,
-  DocumentAttachment,
-} from "./types.js";
+import {
+  formatFileSize,
+  type Collection,
+  type SidePanelProps,
+  type AuditActivity,
+  type DocumentComment,
+  type DocumentAttachment,
+} from "@honocube/core";
 
 /**
  * Collaboration and audit side panel for records, featuring field-level activity diffs,
