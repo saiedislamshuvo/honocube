@@ -12,6 +12,7 @@ import {
   TabsList,
   TabsTrigger,
   TabsContent,
+  toast,
 } from "@honocube/ui";
 import type { Collection, FormTab, FormSection } from "../types/collection.js";
 import type { SubCollectionFieldConfig } from "../types/fields.js";
@@ -49,6 +50,7 @@ export function FormView<TCollection extends Collection<any>>({
     onSubmit,
     user,
     parentRecord,
+    notify: toast,
   });
 
   const {

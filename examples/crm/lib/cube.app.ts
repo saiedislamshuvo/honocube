@@ -1,4 +1,4 @@
-import { defineCollection, defineApp } from "@honocube/app";
+import { defineCollection, defineApp } from "@honocube/core";
 
 // 1. Deals & Pipelines Collection (Twenty CRM style Kanban)
 export const dealsCollection = defineCollection({
