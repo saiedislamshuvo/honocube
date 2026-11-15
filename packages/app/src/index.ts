@@ -153,9 +153,23 @@ export type {
   WorkspaceShellProps,
 } from "./shell/types.js";
 
-// Theming & Appearance
-export { ThemeProvider, useTheme } from "./theme/theme-provider.js";
+// Theming, Layout Templates & Appearance
+export {
+  createTheme,
+  isHonoCubeTheme,
+  resolveTheme,
+} from "./theme/theme-contract.js";
+export { defaultTheme } from "./theme/default-theme.js";
+export {
+  ThemeProvider,
+  useTheme,
+  useAppTheme,
+} from "./theme/theme-provider.js";
 export { ThemeSwitcher } from "./theme/theme-switcher.js";
+export type {
+  HonoCubeTheme,
+  ThemeComponents,
+} from "./theme/theme-contract.js";
 export type {
   ThemeProviderProps,
   ThemeContextValue,

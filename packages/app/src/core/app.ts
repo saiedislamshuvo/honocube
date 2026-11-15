@@ -1,5 +1,6 @@
 import type { AppConfig, AppInstance, NavigationItem } from "../types/app.js";
 import type { Collection } from "../types/collection.js";
+import { isHonoCubeTheme, type HonoCubeTheme } from "../theme/theme-contract.js";
 
 function isCollection(item: NavigationItem): item is Collection<any> {
   return typeof item === "object" && item !== null && "_isCollection" in item;
@@ -39,6 +40,17 @@ export function defineApp(config: AppConfig): AppInstance {
 
   const allCollections = Array.from(collectionsMap.values());
 
+  let resolvedTheme: HonoCubeTheme | undefined;
+  if (isHonoCubeTheme(config.theme)) {
+    resolvedTheme = config.theme;
+  } else if (
+    config.theme &&
+    typeof config.theme === "object" &&
+    isHonoCubeTheme((config.theme as any).theme)
+  ) {
+    resolvedTheme = (config.theme as any).theme;
+  }
+
   const app: AppInstance = {
     ...config,
     _isApp: true,
@@ -47,6 +59,7 @@ export function defineApp(config: AppConfig): AppInstance {
     getCollection: (name: string) => collectionsMap.get(name),
     getCollections: () => allCollections,
     getNavigation: () => navigation,
+    getTheme: () => resolvedTheme,
   };
 
   return Object.freeze(app);

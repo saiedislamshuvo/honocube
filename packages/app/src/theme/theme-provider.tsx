@@ -1,12 +1,15 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
 import type { ThemeMode, ColorPreset } from "../types/app.js";
+import type { HonoCubeTheme } from "./theme-contract.js";
 
 export interface ThemeContextValue {
   theme: ThemeMode;
   setTheme: (mode: ThemeMode) => void;
-  preset: ColorPreset;
-  setPreset: (preset: ColorPreset) => void;
+  preset: ColorPreset | string;
+  setPreset: (preset: ColorPreset | string) => void;
   resolvedTheme: "light" | "dark";
+  activeTheme?: HonoCubeTheme;
+  setActiveTheme?: (theme: HonoCubeTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
@@ -14,9 +17,10 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 export interface ThemeProviderProps {
   children: React.ReactNode;
   defaultTheme?: ThemeMode;
-  defaultPreset?: ColorPreset;
+  defaultPreset?: ColorPreset | string;
   storageKeyTheme?: string;
   storageKeyPreset?: string;
+  themeContract?: HonoCubeTheme;
 }
 
 export function ThemeProvider({
@@ -25,7 +29,11 @@ export function ThemeProvider({
   defaultPreset = "zinc",
   storageKeyTheme = "honocube-theme",
   storageKeyPreset = "honocube-theme-preset",
+  themeContract,
 }: ThemeProviderProps): React.JSX.Element {
+  const initialThemeMode = themeContract?.defaultMode || defaultTheme;
+  const initialPreset = themeContract?.defaultPreset || defaultPreset;
+
   const [theme, setThemeState] = useState<ThemeMode>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(storageKeyTheme);
@@ -33,16 +41,26 @@ export function ThemeProvider({
         return stored;
       }
     }
-    return defaultTheme;
+    return initialThemeMode;
   });
 
-  const [preset, setPresetState] = useState<ColorPreset>(() => {
+  const [preset, setPresetState] = useState<ColorPreset | string>(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(storageKeyPreset) as ColorPreset;
+      const stored = localStorage.getItem(storageKeyPreset);
       if (stored) return stored;
     }
-    return defaultPreset;
+    return initialPreset;
   });
+
+  const [activeTheme, setActiveTheme] = useState<HonoCubeTheme | undefined>(
+    themeContract
+  );
+
+  useEffect(() => {
+    if (themeContract) {
+      setActiveTheme(themeContract);
+    }
+  }, [themeContract]);
 
   const [systemDark, setSystemDark] = useState<boolean>(() => {
     if (typeof window !== "undefined" && window.matchMedia) {
@@ -82,7 +100,7 @@ export function ThemeProvider({
     }
   };
 
-  const setPreset = (newPreset: ColorPreset) => {
+  const setPreset = (newPreset: ColorPreset | string) => {
     setPresetState(newPreset);
     if (typeof window !== "undefined") {
       localStorage.setItem(storageKeyPreset, newPreset);
@@ -96,8 +114,10 @@ export function ThemeProvider({
       preset,
       setPreset,
       resolvedTheme,
+      activeTheme,
+      setActiveTheme,
     }),
-    [theme, preset, resolvedTheme]
+    [theme, preset, resolvedTheme, activeTheme]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -112,7 +132,14 @@ export function useTheme(): ThemeContextValue {
       preset: "zinc",
       setPreset: () => {},
       resolvedTheme: "light",
+      activeTheme: undefined,
+      setActiveTheme: () => {},
     };
   }
   return ctx;
+}
+
+export function useAppTheme(): HonoCubeTheme | undefined {
+  const ctx = useContext(ThemeContext);
+  return ctx?.activeTheme;
 }
