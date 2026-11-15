@@ -131,6 +131,7 @@ export interface RateLimitStore {
     windowMs: number
   ): Promise<RateLimitResult> | RateLimitResult;
   reset?(key: string): Promise<void> | void;
+  clear?(): Promise<void> | void;
 }
 
 export interface RateLimiter {
@@ -340,6 +341,7 @@ export interface IdempotencyStorage {
   get(key: string): Promise<IdempotencyRecord | null | undefined> | IdempotencyRecord | null | undefined;
   set(key: string, record: IdempotencyRecord, ttlMs: number): Promise<void> | void;
   delete?(key: string): Promise<void> | void;
+  clear?(): Promise<void> | void;
 }
 
 export interface IdempotencyConfig {

@@ -45,81 +45,83 @@ interface MemoryWindowBucket {
 }
 
 /**
- * In-memory Sliding Window Counter Rate Limit Store.
+ * In-memory functional Sliding Window Counter Rate Limit Store.
  * Provides O(1) memory usage per key and eliminates window boundary burst anomalies.
  */
-export class MemoryRateLimitStore implements RateLimitStore {
-  private buckets = new Map<string, MemoryWindowBucket>();
+export function createMemoryRateLimitStore(): RateLimitStore {
+  const buckets = new Map<string, MemoryWindowBucket>();
 
-  increment(
-    key: string,
-    cost: number = 1,
-    limit: number,
-    windowMs: number
-  ): RateLimitResult {
-    const now = Date.now();
-    const currentWindowStart = Math.floor(now / windowMs) * windowMs;
-    let bucket = this.buckets.get(key);
+  return {
+    increment(
+      key: string,
+      cost: number = 1,
+      limit: number,
+      windowMs: number
+    ): RateLimitResult {
+      const now = Date.now();
+      const currentWindowStart = Math.floor(now / windowMs) * windowMs;
+      let bucket = buckets.get(key);
 
-    if (!bucket) {
-      bucket = {
-        previousCount: 0,
-        currentCount: 0,
-        currentWindowStart,
-      };
-      this.buckets.set(key, bucket);
-    } else if (bucket.currentWindowStart < currentWindowStart) {
-      const elapsedWindows = Math.floor(
-        (currentWindowStart - bucket.currentWindowStart) / windowMs
-      );
-      if (elapsedWindows === 1) {
-        bucket.previousCount = bucket.currentCount;
-      } else {
-        bucket.previousCount = 0;
+      if (!bucket) {
+        bucket = {
+          previousCount: 0,
+          currentCount: 0,
+          currentWindowStart,
+        };
+        buckets.set(key, bucket);
+      } else if (bucket.currentWindowStart < currentWindowStart) {
+        const elapsedWindows = Math.floor(
+          (currentWindowStart - bucket.currentWindowStart) / windowMs
+        );
+        if (elapsedWindows === 1) {
+          bucket.previousCount = bucket.currentCount;
+        } else {
+          bucket.previousCount = 0;
+        }
+        bucket.currentCount = 0;
+        bucket.currentWindowStart = currentWindowStart;
       }
-      bucket.currentCount = 0;
-      bucket.currentWindowStart = currentWindowStart;
-    }
 
-    const timeIntoCurrentWindow = now - currentWindowStart;
-    const weight = Math.max(0, (windowMs - timeIntoCurrentWindow) / windowMs);
-    const estimatedCount = bucket.previousCount * weight + bucket.currentCount;
+      const timeIntoCurrentWindow = now - currentWindowStart;
+      const weight = Math.max(0, (windowMs - timeIntoCurrentWindow) / windowMs);
+      const estimatedCount = bucket.previousCount * weight + bucket.currentCount;
 
-    const reset = Math.max(
-      1,
-      Math.ceil((currentWindowStart + windowMs - now) / 1000)
-    );
+      const reset = Math.max(
+        1,
+        Math.ceil((currentWindowStart + windowMs - now) / 1000)
+      );
 
-    if (estimatedCount + cost > limit) {
-      const remaining = Math.max(0, Math.floor(limit - estimatedCount));
+      if (estimatedCount + cost > limit) {
+        const remaining = Math.max(0, Math.floor(limit - estimatedCount));
+        return {
+          allowed: false,
+          limit,
+          remaining,
+          reset,
+          retryAfter: reset,
+        };
+      }
+
+      bucket.currentCount += cost;
+      const newEstimated = bucket.previousCount * weight + bucket.currentCount;
+      const remaining = Math.max(0, Math.floor(limit - newEstimated));
+
       return {
-        allowed: false,
+        allowed: true,
         limit,
         remaining,
         reset,
-        retryAfter: reset,
       };
-    }
+    },
 
-    bucket.currentCount += cost;
-    const newEstimated = bucket.previousCount * weight + bucket.currentCount;
-    const remaining = Math.max(0, Math.floor(limit - newEstimated));
+    reset(key: string): void {
+      buckets.delete(key);
+    },
 
-    return {
-      allowed: true,
-      limit,
-      remaining,
-      reset,
-    };
-  }
-
-  reset(key: string): void {
-    this.buckets.delete(key);
-  }
-
-  clear(): void {
-    this.buckets.clear();
-  }
+    clear(): void {
+      buckets.clear();
+    },
+  };
 }
 
 export const SLIDING_WINDOW_LUA = `

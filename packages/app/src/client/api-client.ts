@@ -51,50 +51,55 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   params?: QueryParams;
 }
 
-export class ApiClient {
+export interface ApiClient {
   readonly apiBaseUrl: string;
   readonly auth?: AppConfig["auth"];
   readonly tenant?: AppConfig["tenant"];
   readonly idempotency?: AppConfig["idempotency"];
-  private customFetch: typeof fetch;
+  buildUrl: (path: string, params?: QueryParams) => string;
+  request: <T = unknown>(path: string, options?: RequestOptions) => Promise<ApiResponse<T>>;
+  get: <T = unknown>(path: string, params?: QueryParams, init?: Omit<RequestOptions, "params" | "method">) => Promise<ApiResponse<T>>;
+  post: <T = unknown>(path: string, body?: unknown, init?: Omit<RequestOptions, "body" | "method">) => Promise<ApiResponse<T>>;
+  patch: <T = unknown>(path: string, body?: unknown, init?: Omit<RequestOptions, "body" | "method">) => Promise<ApiResponse<T>>;
+  delete: <T = unknown>(path: string, init?: Omit<RequestOptions, "method">) => Promise<ApiResponse<T>>;
+}
 
-  constructor(options: ApiClientOptions | AppInstance | AppConfig) {
-    this.apiBaseUrl = options.apiBaseUrl.replace(/\/+$/, "");
-    this.auth = options.auth;
-    this.tenant = options.tenant;
-    this.idempotency = options.idempotency;
-    this.customFetch = "fetch" in options && options.fetch ? options.fetch : globalThis.fetch.bind(globalThis);
-  }
+export function createApiClient(options: ApiClientOptions | AppInstance | AppConfig): ApiClient {
+  const apiBaseUrl = options.apiBaseUrl.replace(/\/+$/, "");
+  const auth = options.auth;
+  const tenant = options.tenant;
+  const idempotency = options.idempotency;
+  const customFetch = "fetch" in options && options.fetch ? options.fetch : globalThis.fetch.bind(globalThis);
 
-  private async buildHeaders(method: string, customHeaders?: HeadersInit): Promise<Headers> {
+  const buildHeaders = async (method: string, customHeaders?: HeadersInit): Promise<Headers> => {
     const headers = new Headers(customHeaders);
 
     // 1. Bearer Token Auth
-    if (this.auth?.type === "bearer" && typeof this.auth.getToken === "function") {
-      const token = await this.auth.getToken();
+    if (auth?.type === "bearer" && typeof auth.getToken === "function") {
+      const token = await auth.getToken();
       if (token) {
-        const headerName = this.auth.headerName || "Authorization";
-        const prefix = this.auth.tokenPrefix ?? "Bearer ";
+        const headerName = auth.headerName || "Authorization";
+        const prefix = auth.tokenPrefix ?? "Bearer ";
         headers.set(headerName, `${prefix}${token}`);
       }
     }
 
     // 2. Multi-Tenancy / Workspace Isolation
-    if (typeof this.tenant?.getTenantId === "function") {
-      const tenantId = await this.tenant.getTenantId();
+    if (typeof tenant?.getTenantId === "function") {
+      const tenantId = await tenant.getTenantId();
       if (tenantId) {
-        const headerName = this.tenant.header || "X-Tenant-Id";
+        const headerName = tenant.header || "X-Tenant-Id";
         headers.set(headerName, tenantId);
       }
     }
 
     // 3. Mutation Idempotency
     const isMutation = ["POST", "PATCH", "DELETE", "PUT"].includes(method.toUpperCase());
-    if (isMutation && this.idempotency?.enabled !== false) {
-      const headerName = this.idempotency?.header || "Idempotency-Key";
+    if (isMutation && idempotency?.enabled !== false) {
+      const headerName = idempotency?.header || "Idempotency-Key";
       if (!headers.has(headerName)) {
-        const key = this.idempotency?.generateKey
-          ? this.idempotency.generateKey()
+        const key = idempotency?.generateKey
+          ? idempotency.generateKey()
           : typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
           ? crypto.randomUUID()
           : Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -103,20 +108,20 @@ export class ApiClient {
     }
 
     return headers;
-  }
+  };
 
-  buildUrl(path: string, params?: QueryParams): string {
+  const buildUrl = (path: string, params?: QueryParams): string => {
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
     const normalizedPath =
-      this.apiBaseUrl.replace(/\/+$/, "").endsWith("/api") && cleanPath.startsWith("/api/")
+      apiBaseUrl.replace(/\/+$/, "").endsWith("/api") && cleanPath.startsWith("/api/")
         ? cleanPath.slice(4)
         : cleanPath;
-    const isAbsolute = this.apiBaseUrl.startsWith("http://") || this.apiBaseUrl.startsWith("https://");
+    const isAbsolute = apiBaseUrl.startsWith("http://") || apiBaseUrl.startsWith("https://");
     const base = isAbsolute
-      ? this.apiBaseUrl.replace(/\/+$/, "")
+      ? apiBaseUrl.replace(/\/+$/, "")
       : typeof window !== "undefined" && window.location?.origin
-      ? String(window.location.origin) + (this.apiBaseUrl ? "/" + this.apiBaseUrl.replace(/^\/+|\/+$/g, "") : "")
-      : "http://localhost" + (this.apiBaseUrl ? "/" + this.apiBaseUrl.replace(/^\/+|\/+$/g, "") : "");
+      ? String(window.location.origin) + (apiBaseUrl ? "/" + apiBaseUrl.replace(/^\/+|\/+$/g, "") : "")
+      : "http://localhost" + (apiBaseUrl ? "/" + apiBaseUrl.replace(/^\/+|\/+$/g, "") : "");
     const url = new URL(base + normalizedPath);
 
     if (params) {
@@ -140,15 +145,15 @@ export class ApiClient {
     }
 
     return isAbsolute ? url.toString() : `${url.pathname}${url.search}`;
-  }
+  };
 
-  async request<T = unknown>(
+  const request = async <T = unknown>(
     path: string,
-    options: RequestOptions = {}
-  ): Promise<ApiResponse<T>> {
-    const { params, headers: customHeaders, body, method = "GET", ...rest } = options;
-    const url = this.buildUrl(path, params);
-    const headers = await this.buildHeaders(method, customHeaders);
+    requestOptions: RequestOptions = {}
+  ): Promise<ApiResponse<T>> => {
+    const { params, headers: customHeaders, body, method = "GET", ...rest } = requestOptions;
+    const url = buildUrl(path, params);
+    const headers = await buildHeaders(method, customHeaders);
 
     let finalBody: BodyInit | undefined = undefined;
     if (body !== undefined && body !== null) {
@@ -162,7 +167,7 @@ export class ApiClient {
       }
     }
 
-    const response = await this.customFetch(url, {
+    const response = await customFetch(url, {
       ...rest,
       method,
       headers,
@@ -194,25 +199,34 @@ export class ApiClient {
       success: true,
       data: responseData as T,
     };
-  }
+  };
 
-  get<T = unknown>(path: string, params?: QueryParams, init?: Omit<RequestOptions, "params" | "method">): Promise<ApiResponse<T>> {
-    return this.request<T>(path, { ...init, method: "GET", params });
-  }
+  const get = <T = unknown>(path: string, params?: QueryParams, init?: Omit<RequestOptions, "params" | "method">): Promise<ApiResponse<T>> => {
+    return request<T>(path, { ...init, method: "GET", params });
+  };
 
-  post<T = unknown>(path: string, body?: unknown, init?: Omit<RequestOptions, "body" | "method">): Promise<ApiResponse<T>> {
-    return this.request<T>(path, { ...init, method: "POST", body });
-  }
+  const post = <T = unknown>(path: string, body?: unknown, init?: Omit<RequestOptions, "body" | "method">): Promise<ApiResponse<T>> => {
+    return request<T>(path, { ...init, method: "POST", body });
+  };
 
-  patch<T = unknown>(path: string, body?: unknown, init?: Omit<RequestOptions, "body" | "method">): Promise<ApiResponse<T>> {
-    return this.request<T>(path, { ...init, method: "PATCH", body });
-  }
+  const patch = <T = unknown>(path: string, body?: unknown, init?: Omit<RequestOptions, "body" | "method">): Promise<ApiResponse<T>> => {
+    return request<T>(path, { ...init, method: "PATCH", body });
+  };
 
-  delete<T = unknown>(path: string, init?: Omit<RequestOptions, "method">): Promise<ApiResponse<T>> {
-    return this.request<T>(path, { ...init, method: "DELETE" });
-  }
-}
+  const deleteFn = <T = unknown>(path: string, init?: Omit<RequestOptions, "method">): Promise<ApiResponse<T>> => {
+    return request<T>(path, { ...init, method: "DELETE" });
+  };
 
-export function createApiClient(options: ApiClientOptions | AppInstance | AppConfig): ApiClient {
-  return new ApiClient(options);
+  return {
+    apiBaseUrl,
+    auth,
+    tenant,
+    idempotency,
+    buildUrl,
+    request,
+    get,
+    post,
+    patch,
+    delete: deleteFn,
+  };
 }

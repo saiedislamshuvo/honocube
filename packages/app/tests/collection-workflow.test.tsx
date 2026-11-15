@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { defineCollection } from "../src/core/collection.js";
 import { defineApp } from "../src/core/app.js";
 import { AppProvider } from "../src/query/provider.js";
-import { ApiClient } from "../src/client/api-client.js";
+import { createApiClient } from "../src/client/api-client.js";
 import { useCollectionWorkflow } from "../src/workflow/use-workflow.js";
 import { useCollectionForm } from "../src/form/use-collection-form.js";
 
@@ -68,7 +68,7 @@ describe("Collection Workflow Integration", () => {
     }
 
     const qc = new QueryClient();
-    const client = new ApiClient(app);
+    const client = createApiClient(app);
     const mockPatch = vi.fn().mockResolvedValue({
       data: { id: "inv-101", customer: "Acme", status: "submitted" },
       meta: {},
@@ -116,7 +116,7 @@ describe("Collection Workflow Integration", () => {
     }
 
     const qc = new QueryClient();
-    const client = new ApiClient(app);
+    const client = createApiClient(app);
 
     // 1. In draft mode: fields are editable
     renderToString(

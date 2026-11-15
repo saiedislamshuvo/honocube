@@ -10,9 +10,10 @@ export { defineCollection } from "./core/collection.js";
 export { defineApp } from "./core/app.js";
 
 // HTTP & Client
-export { ApiClient, createApiClient } from "./client/api-client.js";
+export { createApiClient } from "./client/api-client.js";
 export { ApiClientError } from "./client/errors.js";
 export type {
+  ApiClient,
   ApiClientOptions,
   ApiResponse,
   PaginationMeta,

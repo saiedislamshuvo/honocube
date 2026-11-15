@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import { createApp } from "../../src/core/factory.js";
 import {
-  MemoryRateLimitStore,
+  createMemoryRateLimitStore,
   createRedisRateLimiter,
   createUpstashRateLimiter,
   parseWindow,
@@ -75,7 +75,7 @@ describe("Distributed Edge Rate Limiting Engine", () => {
   });
 
   it("smooths rate limit across sliding window boundaries without burst spike anomalies", async () => {
-    const store = new MemoryRateLimitStore();
+    const store = createMemoryRateLimitStore();
     const windowMs = 1000; // 1 second window
     const limit = 10;
     const key = "test-sliding-window";

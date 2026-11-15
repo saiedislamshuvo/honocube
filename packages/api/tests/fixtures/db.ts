@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { DrizzleAdapter } from "../../src/adapters/drizzle.js";
+import { createDrizzleAdapter } from "../../src/adapters/drizzle.js";
 
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -156,7 +156,7 @@ export async function createTestDb() {
     );
   `);
 
-  const adapter = new DrizzleAdapter(db, { dialect: "sqlite", schema });
+  const adapter = createDrizzleAdapter(db, { dialect: "sqlite", schema });
 
   return { client, db, schema, adapter };
 }

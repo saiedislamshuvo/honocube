@@ -30,7 +30,7 @@ npm install @honocube/api hono drizzle-orm
 ### 2. Define Resources & API Gateway
 
 ```typescript
-import { createApp, DrizzleAdapter, defineApi } from "@honocube/api";
+import { createApp, createDrizzleAdapter, defineApi } from "@honocube/api";
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
 
@@ -43,7 +43,7 @@ export const posts = sqliteTable("posts", {
 
 // App initialization
 export const app = createApp({
-  adapter: new DrizzleAdapter(db),
+  adapter: createDrizzleAdapter(db, { dialect: "sqlite" }),
 });
 
 // Resource definition
