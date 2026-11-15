@@ -1,8 +1,14 @@
-import { defineCollection, defineApp } from "@honocube/core";
+import { defineCollection, defineApp } from "@honocube/app";
+import {
+  dealsResource,
+  contactsResource,
+  invoicesResource,
+  invoiceItemsResource,
+} from "./cube.api";
 
 // 1. Deals & Pipelines Collection (Twenty CRM style Kanban)
 export const dealsCollection = defineCollection({
-  name: "deals",
+  resource: dealsResource,
   label: "Deals & Pipelines",
   singular: "Deal",
   icon: "Briefcase",
@@ -14,36 +20,23 @@ export const dealsCollection = defineCollection({
   },
   fields: {
     id: {
-      type: "number",
       label: "ID",
-      readOnly: true,
       visible: false,
     },
     title: {
-      type: "text",
       label: "Deal Title",
-      required: true,
       placeholder: "e.g. Stripe Global Integration",
     },
     company: {
-      type: "text",
       label: "Company / Account",
-      required: true,
       placeholder: "e.g. Acme Corp",
     },
     amount: {
-      type: "number",
       label: "Deal Value ($)",
-      required: true,
-      min: 0,
-      default: 0,
       format: "currency",
     },
     stage: {
-      type: "select",
       label: "Stage",
-      required: true,
-      default: "lead",
       options: [
         { value: "lead", label: "Lead In" },
         { value: "qualified", label: "Qualified" },
@@ -54,9 +47,7 @@ export const dealsCollection = defineCollection({
       ],
     },
     priority: {
-      type: "select",
       label: "Priority",
-      default: "medium",
       options: [
         { value: "low", label: "Low" },
         { value: "medium", label: "Medium" },
@@ -65,12 +56,10 @@ export const dealsCollection = defineCollection({
       ],
     },
     contactName: {
-      type: "text",
       label: "Contact Person",
       placeholder: "e.g. Sarah Connor",
     },
     contactEmail: {
-      type: "text",
       label: "Contact Email",
       placeholder: "e.g. sarah@acme.com",
     },
@@ -127,7 +116,7 @@ export const dealsCollection = defineCollection({
 
 // 2. Contacts Collection (Twenty CRM style customer directory)
 export const contactsCollection = defineCollection({
-  name: "contacts",
+  resource: contactsResource,
   label: "Contacts & Leads",
   singular: "Contact",
   icon: "Users",
@@ -139,42 +128,30 @@ export const contactsCollection = defineCollection({
   },
   fields: {
     id: {
-      type: "number",
       label: "ID",
-      readOnly: true,
       visible: false,
     },
     name: {
-      type: "text",
       label: "Full Name",
-      required: true,
       placeholder: "e.g. Sarah Connor",
     },
     email: {
-      type: "text",
       label: "Email Address",
-      required: true,
       placeholder: "sarah@acme.com",
     },
     company: {
-      type: "text",
-      label: "Company",
       placeholder: "Acme Corp",
     },
     phone: {
-      type: "text",
       label: "Phone Number",
       placeholder: "+1 (555) 0101",
     },
     city: {
-      type: "text",
       label: "City / Location",
       placeholder: "San Francisco",
     },
     status: {
-      type: "select",
       label: "Relationship Status",
-      default: "lead",
       options: [
         { value: "lead", label: "Lead" },
         { value: "active", label: "Active Customer" },
@@ -203,36 +180,23 @@ export const contactsCollection = defineCollection({
 
 // 3. Invoice Items Child Collection (ERPNext style Line Items Table)
 export const invoiceItemsCollection = defineCollection({
-  name: "invoice-items",
+  resource: invoiceItemsResource,
   label: "Invoice Line Items",
   singular: "Line Item",
-  endpoint: "/api/invoice-items",
   fields: {
     id: {
-      type: "number",
       label: "ID",
-      readOnly: true,
       visible: false,
     },
     description: {
-      type: "text",
-      label: "Description",
-      required: true,
       placeholder: "e.g. Cloud Architecture Consulting",
     },
     quantity: {
-      type: "number",
       label: "Qty",
-      required: true,
-      default: 1,
       min: 1,
     },
     unitPrice: {
-      type: "number",
       label: "Unit Price ($)",
-      required: true,
-      default: 0,
-      min: 0,
       format: "currency",
     },
     amount: {
@@ -246,7 +210,7 @@ export const invoiceItemsCollection = defineCollection({
 
 // 4. Invoices Collection (ERPNext style Naming Series + Workflow State Machine with Roles + Child Table)
 export const invoicesCollection = defineCollection({
-  name: "invoices",
+  resource: invoicesResource,
   label: "Invoices & Billing",
   singular: "Invoice",
   icon: "Receipt",
@@ -259,39 +223,29 @@ export const invoicesCollection = defineCollection({
   },
   fields: {
     id: {
-      type: "number",
       label: "ID",
-      readOnly: true,
       visible: false,
     },
     invoiceNumber: {
       type: "series",
       prefix: "INV-",
       label: "Invoice #",
-      required: true,
       readOnly: true,
       placeholder: "Auto-generated (e.g. INV-2026-0001)",
     },
     customerName: {
-      type: "text",
       label: "Customer / Account",
-      required: true,
       placeholder: "Acme Corp",
     },
     issueDate: {
       type: "date",
       label: "Issue Date",
-      required: true,
     },
     dueDate: {
       type: "date",
       label: "Payment Due Date",
-      required: true,
     },
     currency: {
-      type: "select",
-      label: "Currency",
-      default: "USD",
       options: [
         { value: "USD", label: "USD ($)" },
         { value: "EUR", label: "EUR (€)" },
@@ -299,10 +253,8 @@ export const invoicesCollection = defineCollection({
       ],
     },
     status: {
-      type: "select",
       label: "Invoice Status",
       readOnly: true,
-      default: "draft",
       options: [
         { value: "draft", label: "Draft" },
         { value: "submitted", label: "Pending Approval" },
@@ -321,7 +273,6 @@ export const invoicesCollection = defineCollection({
     subtotal: {
       type: "computed",
       label: "Subtotal ($)",
-      default: 0,
       format: "currency",
       compute: (r) =>
         (r.items || []).reduce(
@@ -332,14 +283,12 @@ export const invoicesCollection = defineCollection({
     tax: {
       type: "computed",
       label: "Tax (10%) ($)",
-      default: 0,
       format: "currency",
       compute: (r) => Math.round((r.subtotal || 0) * 0.1),
     },
     grandTotal: {
       type: "computed",
       label: "Grand Total ($)",
-      default: 0,
       format: "currency",
       compute: (r) => (r.subtotal || 0) + (r.tax || 0),
     },

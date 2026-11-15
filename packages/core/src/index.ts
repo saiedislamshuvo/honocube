@@ -6,9 +6,26 @@
 
 export const VERSION = "2.0.2";
 
-// Core Schemas
+// Core Schemas & Derivation Engine
 export { defineCollection } from "./core/collection.js";
 export { defineApp } from "./core/app.js";
+export {
+  fromResource,
+  fromDrizzleTable,
+  deriveFieldsFromResource,
+  deriveFieldsFromDrizzleTable,
+  deriveFieldsFromZod,
+  deriveFieldFromDrizzleColumn,
+  deriveFieldFromZodType,
+  inferFieldTypeFromDrizzleColumn,
+  isDrizzleTable,
+  getDrizzleTableName,
+  getDrizzleColumns,
+  getZodShape,
+  unwrapZodType,
+  unwrapResourceConfig,
+} from "./core/derivation.js";
+export type { DerivedCollectionDefinition } from "./core/derivation.js";
 
 // Client & Network
 export { createApiClient } from "./client/api-client.js";
@@ -159,6 +176,10 @@ export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js
 export type {
   Collection,
   CollectionConfig,
+  ResourceCollectionConfig,
+  TableCollectionConfig,
+  DefineCollectionInput,
+  FieldOverrideMap,
   InferRecord,
   FormLayoutConfig,
   FormTab,

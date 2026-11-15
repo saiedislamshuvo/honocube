@@ -1,33 +1,89 @@
-import type { Collection, CollectionConfig } from "../types/collection.js";
+import type { Collection, DefineCollectionInput } from "../types/collection.js";
 import type { FieldConfig } from "../types/fields.js";
 import { toHumanLabel } from "../utils/format.js";
+import {
+  deriveFieldsFromDrizzleTable,
+  deriveFieldsFromResource,
+  getDrizzleTableName,
+  isDrizzleTable,
+  unwrapResourceConfig,
+} from "./derivation.js";
 
 export function defineCollection<
   TFields extends Record<string, FieldConfig<any>> = Record<string, FieldConfig<any>>
->(config: CollectionConfig<TFields>): Collection<TFields> {
+>(config: DefineCollectionInput<TFields>): Collection<TFields> {
   if (!config || typeof config !== "object") {
     throw new Error("defineCollection: Configuration object is required.");
   }
-  if (!config.name || typeof config.name !== "string" || config.name.trim() === "") {
-    throw new Error("defineCollection: Collection 'name' is required.");
+
+  const anyConfig = config as any;
+  let derivedFields: Record<string, FieldConfig<any>> | undefined = undefined;
+  let defaultName: string | undefined = undefined;
+
+  // 1. Derivation from API resource
+  if (anyConfig.resource) {
+    const resource = unwrapResourceConfig(anyConfig.resource);
+    defaultName = resource.name || getDrizzleTableName(resource.table);
+    derivedFields = deriveFieldsFromResource(resource, anyConfig.fields);
   }
-  if (!config.fields || typeof config.fields !== "object") {
-    throw new Error(`defineCollection('${config.name}'): 'fields' object is required.`);
+  // 2. Derivation from Drizzle table (drizzleTable or table when isDrizzleTable is true)
+  else if (anyConfig.drizzleTable || (anyConfig.table && isDrizzleTable(anyConfig.table))) {
+    const table = anyConfig.drizzleTable || anyConfig.table;
+    defaultName = getDrizzleTableName(table);
+    derivedFields = deriveFieldsFromDrizzleTable(table, anyConfig.fields);
+  }
+  // 3. Explicit fields provided
+  else if (anyConfig.fields && typeof anyConfig.fields === "object") {
+    derivedFields = { ...anyConfig.fields };
   }
 
-  const endpoint = config.endpoint || `/api/${config.name}`;
-  const label = config.label || toHumanLabel(config.name);
-  const defaultView = config.defaultView || (config.table ? "table" : config.kanban ? "kanban" : "table");
+  const name = anyConfig.name || defaultName;
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    throw new Error(
+      "defineCollection: Collection 'name' is required (or provide a 'resource' with a valid name)."
+    );
+  }
 
-  const fieldKeys = Object.keys(config.fields) as (keyof TFields)[];
+  if (!derivedFields || Object.keys(derivedFields).length === 0) {
+    throw new Error(
+      `defineCollection('${name}'): 'fields' object is required (or provide a valid 'resource' or 'table').`
+    );
+  }
+
+  const endpoint = anyConfig.endpoint || `/api/${name}`;
+  const label = anyConfig.label || toHumanLabel(name);
+
+  // Distinguish TableViewConfig from Drizzle table instance
+  const tableViewConfig =
+    anyConfig.table && !isDrizzleTable(anyConfig.table) ? anyConfig.table : undefined;
+
+  const defaultView =
+    anyConfig.defaultView || (tableViewConfig ? "table" : anyConfig.kanban ? "kanban" : "table");
+
+  // Auto-detect identifier if not explicitly provided
+  let identifier = anyConfig.identifier;
+  if (!identifier && derivedFields.id) {
+    const titleField = derivedFields.title
+      ? "title"
+      : derivedFields.name
+      ? "name"
+      : undefined;
+    identifier = { field: "id", ...(titleField ? { titleField } : {}) };
+  }
+
+  const fieldKeys = Object.keys(derivedFields) as (keyof TFields)[];
 
   const collection: Collection<TFields> = {
-    ...config,
-    _isCollection: true,
+    ...anyConfig,
+    name,
     endpoint,
     label,
+    fields: derivedFields as TFields,
+    table: tableViewConfig,
     defaultView,
-    getField: (key: keyof TFields) => config.fields[key],
+    identifier,
+    _isCollection: true,
+    getField: (key: keyof TFields) => (derivedFields as TFields)[key],
     getFieldKeys: () => fieldKeys,
   };
 
