@@ -28,6 +28,18 @@ export { WorkflowActionBar } from "./views/workflow-action-bar.js";
 export { DocumentHeader } from "./views/document-header.js";
 export { SidePanel } from "./views/side-panel.js";
 
+// Media Library & Asset Management
+export {
+  MediaLibrary,
+  MediaLibraryDialog,
+  type MediaLibraryProps,
+  type MediaLibraryDialogProps,
+} from "./media/media-library.js";
+export {
+  ImagePickerField,
+  type ImagePickerFieldProps,
+} from "./media/image-picker-field.js";
+
 // Workspace Shell Layout & Navigation
 export { WorkspaceShell } from "./shell/workspace-shell.js";
 export { WorkspaceSidebar } from "./shell/sidebar.js";

@@ -17,6 +17,8 @@ describe("Fluent Field Builder API (`f` / `field`)", () => {
     expect(typeof f.json).toBe("function");
     expect(typeof f.series).toBe("function");
     expect(typeof f.collection).toBe("function");
+    expect(typeof f.image).toBe("function");
+    expect(typeof f.media).toBe("function");
     expect(typeof f.custom).toBe("function");
   });
 
@@ -329,6 +331,39 @@ describe("Fluent Field Builder API (`f` / `field`)", () => {
     expect(collection.fields.organization_id.label).toBe("Organization");
     expect(collection.fields.parent_account_id.label).toBe("Parent Account");
     expect(collection.fields.assigned_user_id.label).toBe("Account Owner");
+  });
+
+  it("builds image and media fields with chaining modifiers", () => {
+    const avatar = f
+      .image("User Avatar")
+      .required()
+      .accept("image/png,image/jpeg")
+      .maxSize(5 * 1024 * 1024)
+      .placeholder("Choose avatar");
+
+    expect(isFieldBuilder(avatar)).toBe(true);
+    expect(avatar.type).toBe("image");
+    expect(avatar.build()).toEqual({
+      type: "image",
+      label: "User Avatar",
+      accept: "image/png,image/jpeg",
+      maxSize: 5242880,
+      required: true,
+      placeholder: "Choose avatar",
+    });
+
+    const gallery = f
+      .media("Gallery Attachments")
+      .multiple()
+      .uploadEndpoint("/api/uploads/gallery");
+
+    expect(gallery.type).toBe("media");
+    expect(gallery.build()).toEqual({
+      type: "media",
+      label: "Gallery Attachments",
+      multiple: true,
+      uploadEndpoint: "/api/uploads/gallery",
+    });
   });
 
   it("verifies type-level InferRecord mapping with field builders", () => {

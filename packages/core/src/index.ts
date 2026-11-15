@@ -25,6 +25,7 @@ export {
   JsonFieldBuilder,
   SeriesFieldBuilder,
   SubCollectionFieldBuilder,
+  MediaFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -225,10 +226,12 @@ export type {
   IJsonFieldBuilder,
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
+  IMediaFieldBuilder,
 } from "./types/builder.js";
 
 export type {
   BaseFieldType,
+  MediaAsset,
   FieldCapabilityContext,
   DynamicRule,
   SelectOption,
@@ -243,6 +246,7 @@ export type {
   RelationFieldConfig,
   SubCollectionFieldConfig,
   ComputedFieldConfig,
+  MediaFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";

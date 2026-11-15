@@ -11,6 +11,7 @@ import type {
   RelationFieldConfig,
   SubCollectionFieldConfig,
   ComputedFieldConfig,
+  MediaFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -27,6 +28,7 @@ import type {
   IJsonFieldBuilder,
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
+  IMediaFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -278,6 +280,29 @@ export class SubCollectionFieldBuilder<
 
   inline(inline: boolean = true): this {
     return this._set("inline" as any, inline as any);
+  }
+}
+
+/**
+ * Media library and image picker field builder.
+ */
+export class MediaFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<MediaFieldConfig<TRecord>, any, TRecord>
+  implements IMediaFieldBuilder<TRecord> {
+  multiple(multiple: boolean = true): this {
+    return this._set("multiple" as any, multiple as any);
+  }
+
+  accept(acceptTypes: string): this {
+    return this._set("accept" as any, acceptTypes as any);
+  }
+
+  maxSize(bytes: number): this {
+    return this._set("maxSize" as any, bytes as any);
+  }
+
+  uploadEndpoint(endpoint: string): this {
+    return this._set("uploadEndpoint" as any, endpoint as any);
   }
 }
 
@@ -557,6 +582,39 @@ export const f = Object.assign(createFieldBuilder, {
       }
     }
     return new SubCollectionFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for single or multiple image picker fields.
+   */
+  image(labelOrConfig?: string | Partial<MediaFieldConfig>, label?: string): MediaFieldBuilder {
+    let cfg: MediaFieldConfig = {
+      type: "image",
+      accept: "image/*",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new MediaFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for general media and file asset fields.
+   */
+  media(labelOrConfig?: string | Partial<MediaFieldConfig>, label?: string): MediaFieldBuilder {
+    let cfg: MediaFieldConfig = {
+      type: "media",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new MediaFieldBuilder(cfg);
   },
 
   /**

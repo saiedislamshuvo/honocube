@@ -11,6 +11,7 @@ import type {
   RelationFieldConfig,
   SubCollectionFieldConfig,
   ComputedFieldConfig,
+  MediaFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -139,4 +140,15 @@ export interface ISubCollectionFieldBuilder<
 > extends IFieldBuilder<SubCollectionFieldConfig<TChildCollection, TRecord>, any, TRecord> {
   relation(rel: "hasMany" | "hasOne"): this;
   inline(inline?: boolean): this;
+}
+
+/**
+ * Fluent builder for media library and image picker fields.
+ */
+export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<MediaFieldConfig<TRecord>, any, TRecord> {
+  multiple(multiple?: boolean): this;
+  accept(acceptTypes: string): this;
+  maxSize(bytes: number): this;
+  uploadEndpoint(endpoint: string): this;
 }
