@@ -19,6 +19,8 @@ import type {
   IconFieldConfig,
   TagsFieldConfig,
   SlugFieldConfig,
+  BarcodeFieldConfig,
+  QRCodeFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -42,6 +44,8 @@ import type {
   IIconFieldBuilder,
   ITagsFieldBuilder,
   ISlugFieldBuilder,
+  IBarcodeFieldBuilder,
+  IQRCodeFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -462,6 +466,48 @@ export class SlugFieldBuilder<TRecord = Record<string, unknown>>
 
   slugify(fn: (text: string) => string): this {
     return this._set("slugify" as any, fn as any);
+  }
+}
+
+/**
+ * Scannable 1D barcode field builder.
+ */
+export class BarcodeFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<BarcodeFieldConfig<TRecord>, string, TRecord>
+  implements IBarcodeFieldBuilder<TRecord> {
+  format(fmt: "code128" | "code39" | "ean13" | "upca"): this {
+    return this._set("format" as any, fmt as any);
+  }
+
+  displayValue(display: boolean = true): this {
+    return this._set("displayValue" as any, display as any);
+  }
+
+  width(w: number): this {
+    return this._set("width" as any, w as any);
+  }
+
+  height(h: number): this {
+    return this._set("height" as any, h as any);
+  }
+}
+
+/**
+ * 2D QR code field builder.
+ */
+export class QRCodeFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<QRCodeFieldConfig<TRecord>, string, TRecord>
+  implements IQRCodeFieldBuilder<TRecord> {
+  size(pixelSize: number): this {
+    return this._set("size" as any, pixelSize as any);
+  }
+
+  level(ecl: "L" | "M" | "Q" | "H"): this {
+    return this._set("level" as any, ecl as any);
+  }
+
+  includeMargin(margin: boolean = true): this {
+    return this._set("includeMargin" as any, margin as any);
   }
 }
 
@@ -895,6 +941,60 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new SlugFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for 1D barcode fields.
+   */
+  barcode(
+    labelOrConfig?: string | Partial<BarcodeFieldConfig>,
+    label?: string
+  ): BarcodeFieldBuilder {
+    let cfg: BarcodeFieldConfig = {
+      type: "barcode",
+      format: "code128",
+      displayValue: true,
+      height: 70,
+      width: 2,
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new BarcodeFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for 2D QR code fields.
+   */
+  qrCode(
+    labelOrConfig?: string | Partial<QRCodeFieldConfig>,
+    label?: string
+  ): QRCodeFieldBuilder {
+    let cfg: QRCodeFieldConfig = {
+      type: "qrcode",
+      size: 160,
+      level: "M",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new QRCodeFieldBuilder(cfg);
+  },
+
+  /**
+   * Alias for `qrCode`.
+   */
+  qrcode(
+    labelOrConfig?: string | Partial<QRCodeFieldConfig>,
+    label?: string
+  ): QRCodeFieldBuilder {
+    return (this as any).qrCode(labelOrConfig, label);
   },
 
   /**

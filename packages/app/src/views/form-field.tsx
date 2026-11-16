@@ -24,6 +24,8 @@ import { ColorPickerField } from "./color-picker-field.js";
 import { IconPickerField } from "./icon-picker-field.js";
 import { TagsInputField } from "./tags-input-field.js";
 import { SlugInputField } from "./slug-input-field.js";
+import { BarcodeField } from "./barcode-field.js";
+import { QRCodeField } from "./qr-code-field.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -411,6 +413,43 @@ export function FormField({
                 lowercase={slugConfig.lowercase}
                 locked={slugConfig.locked}
                 slugify={slugConfig.slugify}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "barcode": {
+            const barcodeConfig = field as any;
+            return (
+              <BarcodeField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                format={barcodeConfig.format}
+                displayValue={barcodeConfig.displayValue}
+                width={barcodeConfig.width}
+                height={barcodeConfig.height}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "qrcode": {
+            const qrConfig = field as any;
+            return (
+              <QRCodeField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                size={qrConfig.size}
+                level={qrConfig.level}
+                includeMargin={qrConfig.includeMargin}
                 hasError={Boolean(errorMessage)}
               />
             );

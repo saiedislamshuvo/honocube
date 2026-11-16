@@ -21,7 +21,9 @@ export type BaseFieldType =
   | "color"
   | "icon"
   | "tags"
-  | "slug";
+  | "slug"
+  | "barcode"
+  | "qrcode";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -216,6 +218,23 @@ export interface SlugFieldConfig<TRecord = Record<string, unknown>> extends Base
   slugify?: (text: string) => string;
 }
 
+export interface BarcodeFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "barcode";
+  default?: string | (() => string);
+  format?: "code128" | "code39" | "ean13" | "upca";
+  displayValue?: boolean;
+  width?: number;
+  height?: number;
+}
+
+export interface QRCodeFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "qrcode";
+  default?: string | (() => string);
+  size?: number;
+  level?: "L" | "M" | "Q" | "H";
+  includeMargin?: boolean;
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -233,7 +252,9 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | ColorFieldConfig<TRecord>
   | IconFieldConfig<TRecord>
   | TagsFieldConfig<TRecord>
-  | SlugFieldConfig<TRecord>;
+  | SlugFieldConfig<TRecord>
+  | BarcodeFieldConfig<TRecord>
+  | QRCodeFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
@@ -241,7 +262,7 @@ export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? DateRangeValue
   : TField extends { type: "tags" }
   ? string[]
-  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" }
+  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" | "barcode" | "qrcode" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number
