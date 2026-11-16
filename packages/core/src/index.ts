@@ -185,6 +185,8 @@ export type {
   QRCodeFieldProps,
   SignaturePadProps,
   RichTextEditorProps,
+  ComboboxOption,
+  AsyncComboboxProps,
   DateRangePickerProps,
   FloatingSaveBarProps,
   PhoneInputFieldProps,

@@ -474,6 +474,49 @@ export interface RichTextEditorProps {
   className?: string;
 }
 
+export interface ComboboxOption {
+  value: string | number;
+  label: string;
+  subtitle?: string;
+  disabled?: boolean;
+  data?: Record<string, unknown>;
+}
+
+export interface AsyncComboboxProps {
+  id?: string;
+  name?: string;
+  value?: string | number | null;
+  onChange: (value: string | number | null, option?: ComboboxOption | null) => void;
+  target?: string;
+  endpoint?: string;
+  valueKey?: string;
+  labelKey?: string;
+  subtitleKey?: string;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  loadingText?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  clearable?: boolean;
+  searchable?: boolean;
+  pageSize?: number;
+  debounceMs?: number;
+  filterParams?: Record<string, unknown>;
+  options?: ComboboxOption[];
+  fetchOptions?: (
+    query: string,
+    page: number,
+    signal?: AbortSignal
+  ) => Promise<{ options: ComboboxOption[]; hasMore?: boolean; total?: number }>;
+  resolveOption?: (
+    value: string | number,
+    signal?: AbortSignal
+  ) => Promise<ComboboxOption | null>;
+  className?: string;
+  hasError?: boolean;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

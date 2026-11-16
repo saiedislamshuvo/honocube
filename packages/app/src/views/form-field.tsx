@@ -28,6 +28,7 @@ import { BarcodeField } from "./barcode-field.js";
 import { QRCodeField } from "./qr-code-field.js";
 import { SignaturePad } from "./signature-pad.js";
 import { RichTextEditor } from "./rich-text-editor.js";
+import { AsyncCombobox } from "./async-combobox.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -301,17 +302,30 @@ export function FormField({
               />
             );
 
-          case "relation":
+          case "relation": {
+            const relConfig = field as any;
             return (
-              <Input
+              <AsyncCombobox
                 id={name}
-                value={String(fieldState.value ?? "")}
-                onChange={(e) => onChange(e.target.value)}
+                name={name}
+                value={fieldState.value}
+                onChange={(val) => onChange(val)}
+                target={relConfig.target}
+                endpoint={relConfig.endpoint}
+                valueKey={relConfig.valueKey}
+                labelKey={relConfig.labelKey}
+                subtitleKey={relConfig.subtitleKey}
+                pageSize={relConfig.pageSize}
+                debounceMs={relConfig.debounceMs}
+                filterParams={relConfig.filterParams}
+                clearable={relConfig.clearable ?? true}
+                searchable={relConfig.searchable ?? true}
                 disabled={isDisabled}
-                placeholder={field.placeholder || `Select ${field.target}...`}
-                className={errorMessage ? "border-destructive focus-visible:ring-destructive" : ""}
+                placeholder={field.placeholder || `Select ${relConfig.target || "option"}...`}
+                hasError={Boolean(errorMessage)}
               />
             );
+          }
 
           case "image":
           case "media":

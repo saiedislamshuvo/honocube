@@ -51,6 +51,7 @@ export { BarcodeField } from "./views/barcode-field.js";
 export { QRCodeField } from "./views/qr-code-field.js";
 export { SignaturePad } from "./views/signature-pad.js";
 export { RichTextEditor } from "./views/rich-text-editor.js";
+export { AsyncCombobox } from "./views/async-combobox.js";
 export { UnsavedChangesDialog } from "./views/unsaved-changes-dialog.js";
 export { ChildTable } from "./views/child-table.js";
 export { KanbanView } from "./views/kanban-view.js";
