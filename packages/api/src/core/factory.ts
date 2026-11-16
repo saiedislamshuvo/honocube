@@ -9,6 +9,7 @@ import { createEventBus } from "../realtime/event-bus.js";
 import { createNotificationEngine } from "../notifications/engine.js";
 import { createCustomFieldsStore, validateCustomFields } from "../custom-fields/store.js";
 import { createAutomationEngine } from "../automation/engine.js";
+import { createWebhookManager, type WebhookManager, type WebhookEndpoint } from "../webhooks/manager.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -5737,6 +5738,149 @@ export function defineApi<
     });
   }
 
+  // Outbound Webhook Management & Delivery Logging (Issue #143)
+  const webhookManagerOpt = (versionOrOptions as any)?.webhookManager;
+  const webhookConfig = (versionOrOptions as any)?.webhooks;
+  const shouldEnableWebhooks = Boolean(
+    webhookManagerOpt ||
+    webhookConfig?.enabled !== false ||
+    webhookConfig?.endpoints
+  );
+
+  let webhookManager: WebhookManager | undefined = webhookManagerOpt;
+  if (!webhookManager && shouldEnableWebhooks) {
+    const initialEndpoints: WebhookEndpoint[] = Array.isArray(webhookConfig?.endpoints)
+      ? webhookConfig.endpoints.map((ep: any, idx: number) => ({
+          id: ep.id || `wh_${idx + 1}`,
+          name: ep.name,
+          description: ep.description,
+          url: ep.url,
+          secret: ep.secret,
+          events: ep.events || ["*"],
+          headers: ep.headers,
+          enabled: !ep.disabled,
+        }))
+      : [];
+
+    webhookManager = createWebhookManager({
+      initialEndpoints,
+      eventBus,
+      fetchFn: webhookConfig?.fetch,
+      maxAttempts: webhookConfig?.maxAttempts,
+      retryBackoffMs: webhookConfig?.retryBackoffMs,
+    });
+  }
+
+  if (webhookManager) {
+    (api as any).webhookManager = webhookManager;
+
+    // GET /webhooks
+    api.get("/webhooks", (c) => {
+      const tenantId = (c as any).get?.("tenantId") || c.req.query("tenantId");
+      const endpoints = webhookManager!.getEndpoints(tenantId);
+      return c.json({ data: endpoints });
+    });
+
+    // POST /webhooks
+    api.post("/webhooks", async (c) => {
+      const body = await c.req.json();
+      if (!body.url || !body.secret) {
+        return c.json({ error: "url and secret are required" }, 400);
+      }
+      const tenantId = (c as any).get?.("tenantId") || body.tenantId;
+      const endpoint = webhookManager!.registerEndpoint({
+        ...body,
+        tenantId,
+      });
+      return c.json({ data: endpoint }, 201);
+    });
+
+    // GET /webhooks/deliveries
+    api.get("/webhooks/deliveries", (c) => {
+      const endpointUrl = c.req.query("endpointUrl");
+      const event = c.req.query("event");
+      const status = c.req.query("status") as any;
+      const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 50;
+      const tenantId = (c as any).get?.("tenantId") || c.req.query("tenantId");
+      const deliveries = webhookManager!.getDeliveries({
+        endpointUrl,
+        event,
+        status,
+        limit,
+        tenantId,
+      });
+      return c.json({ data: deliveries });
+    });
+
+    // POST /webhooks/deliveries/clear
+    api.post("/webhooks/deliveries/clear", (c) => {
+      webhookManager!.clearDeliveries();
+      return c.json({ success: true });
+    });
+
+    // GET /webhooks/deliveries/:id
+    api.get("/webhooks/deliveries/:id", (c) => {
+      const id = c.req.param("id");
+      const delivery = webhookManager!.getDelivery(id);
+      if (!delivery) {
+        return c.json({ error: "Webhook delivery not found" }, 404);
+      }
+      return c.json({ data: delivery });
+    });
+
+    // POST /webhooks/deliveries/:id/retry
+    api.post("/webhooks/deliveries/:id/retry", async (c) => {
+      const id = c.req.param("id");
+      const delivery = await webhookManager!.retryDelivery(id);
+      if (!delivery) {
+        return c.json({ error: "Webhook delivery not found" }, 404);
+      }
+      return c.json({ data: delivery });
+    });
+
+    // POST /webhooks/test
+    api.post("/webhooks/test", async (c) => {
+      const body = await c.req.json();
+      if (!body.url || !body.secret) {
+        return c.json({ error: "url and secret are required" }, 400);
+      }
+      const delivery = await webhookManager!.testEndpoint(
+        body,
+        body.event || "ping",
+        body.payload
+      );
+      return c.json({ data: delivery });
+    });
+
+    // GET /webhooks/:id
+    api.get("/webhooks/:id", (c) => {
+      const id = c.req.param("id");
+      const endpoint = webhookManager!.getEndpoint(id);
+      if (!endpoint) {
+        return c.json({ error: "Webhook endpoint not found" }, 404);
+      }
+      return c.json({ data: endpoint });
+    });
+
+    // PUT /webhooks/:id
+    api.put("/webhooks/:id", async (c) => {
+      const id = c.req.param("id");
+      const body = await c.req.json();
+      const updated = webhookManager!.updateEndpoint(id, body);
+      if (!updated) {
+        return c.json({ error: "Webhook endpoint not found" }, 404);
+      }
+      return c.json({ data: updated });
+    });
+
+    // DELETE /webhooks/:id
+    api.delete("/webhooks/:id", (c) => {
+      const id = c.req.param("id");
+      const success = webhookManager!.deleteEndpoint(id);
+      return c.json({ success });
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -5755,6 +5899,9 @@ export function defineApi<
     }
     if (automationEngine) {
       (versionedApi as any).automationEngine = automationEngine;
+    }
+    if (webhookManager) {
+      (versionedApi as any).webhookManager = webhookManager;
     }
     return versionedApi as any;
   }
