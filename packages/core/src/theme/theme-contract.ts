@@ -22,6 +22,7 @@ import type {
   ListViewProps,
   GridViewProps,
   TreeViewProps,
+  SpreadsheetViewProps,
   SettingsPanelProps,
   ChildTableProps,
   SidePanelProps,
@@ -75,6 +76,7 @@ export interface ThemeComponents {
     list?: React.ComponentType<ListViewProps<any>>;
     grid?: React.ComponentType<GridViewProps<any>>;
     tree?: React.ComponentType<TreeViewProps<any>>;
+    spreadsheet?: React.ComponentType<SpreadsheetViewProps<any>>;
     singleton?: React.ComponentType<SettingsPanelProps<any>>;
     settings?: React.ComponentType<SettingsPanelProps<any>>;
     childTable?: React.ComponentType<ChildTableProps>;

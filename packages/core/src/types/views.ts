@@ -5,7 +5,8 @@ export type ViewType =
   | "kanban"
   | "calendar"
   | "gantt"
-  | "tree";
+  | "tree"
+  | "spreadsheet";
 
 export interface TableViewConfig<TFieldKeys extends string = string> {
   columns?: TFieldKeys[];
@@ -80,6 +81,16 @@ export interface TreeViewConfig<TFieldKeys extends string = string> {
   orderField?: TFieldKeys;
   initialExpandedDepth?: number;
   allowDragAndDrop?: boolean;
+}
+
+export interface SpreadsheetViewConfig<TFieldKeys extends string = string> {
+  columns?: TFieldKeys[];
+  allowAddRows?: boolean;
+  allowDeleteRows?: boolean;
+  showSummaryRow?: boolean;
+  showFormulaBar?: boolean;
+  pageSize?: number;
+  initialRowCount?: number;
 }
 
 /**

@@ -226,6 +226,9 @@ export type {
   SparklineProps,
   MetricCardProps,
   AnalyticsChartCardProps,
+  SpreadsheetCellChange,
+  SpreadsheetColumn,
+  SpreadsheetViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -326,6 +329,7 @@ export type {
   CalendarViewConfig,
   GanttViewConfig,
   TreeViewConfig,
+  SpreadsheetViewConfig,
   SelectableFieldKeys,
   DateFieldKeys,
   NumericFieldKeys,
