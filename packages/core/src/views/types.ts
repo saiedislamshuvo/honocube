@@ -156,6 +156,25 @@ export interface FormViewProps<TCollection extends Collection<any>> {
    * Custom label for the primary submit button.
    */
   submitLabel?: string;
+
+  /**
+   * Whether to display a contextual floating save bar when form values are dirty.
+   */
+  floatingSaveBar?: boolean;
+}
+
+export interface FloatingSaveBarProps {
+  isDirty?: boolean;
+  isSubmitting?: boolean;
+  onSave?: (e?: React.FormEvent) => void | Promise<void>;
+  onDiscard?: () => void | Promise<void>;
+  saveLabel?: string;
+  discardLabel?: string;
+  showDiscard?: boolean;
+  message?: React.ReactNode;
+  visible?: boolean;
+  actions?: React.ReactNode;
+  className?: string;
 }
 
 export interface FormDialogProps<TCollection extends Collection<any>>
