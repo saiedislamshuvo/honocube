@@ -17,6 +17,7 @@ import {
 } from "@honocube/ui";
 import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 import { ImagePickerField } from "../media/image-picker-field.js";
+import { DateRangePicker } from "./date-range-picker.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -215,6 +216,21 @@ export function FormField({
                 onChange={onChange}
                 disabled={isDisabled}
                 placeholder={field.placeholder || (field.type === "datetime" ? "Pick date & time" : "Pick a date")}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+
+          case "daterange":
+            return (
+              <DateRangePicker
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder || "Select date range"}
+                includeTime={(field as any).includeTime}
+                presets={(field as any).presets}
                 hasError={Boolean(errorMessage)}
               />
             );

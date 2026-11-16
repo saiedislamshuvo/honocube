@@ -15,7 +15,8 @@ export type BaseFieldType =
   | "computed"
   | "series"
   | "image"
-  | "media";
+  | "media"
+  | "daterange";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -136,6 +137,19 @@ export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends Bas
   default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
 }
 
+export interface DateRangeValue {
+  from?: string | Date;
+  to?: string | Date;
+}
+
+export interface DateRangeFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "daterange";
+  default?: DateRangeValue | (() => DateRangeValue);
+  includeTime?: boolean;
+  format?: string;
+  presets?: boolean | string[];
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -147,10 +161,13 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | RelationFieldConfig<TRecord>
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>
-  | MediaFieldConfig<TRecord>;
+  | MediaFieldConfig<TRecord>
+  | DateRangeFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
+  : TField extends { type: "daterange" }
+  ? DateRangeValue
   : TField extends { type: "text" | "textarea" | "series" }
   ? string
   : TField extends { type: "number" | "currency" }

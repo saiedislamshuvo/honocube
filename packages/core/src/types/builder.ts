@@ -12,6 +12,8 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  DateRangeFieldConfig,
+  DateRangeValue,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -151,4 +153,14 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
   accept(acceptTypes: string): this;
   maxSize(bytes: number): this;
   uploadEndpoint(endpoint: string): this;
+}
+
+/**
+ * Fluent builder for date range and datetime range fields.
+ */
+export interface IDateRangeFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<DateRangeFieldConfig<TRecord>, DateRangeValue, TRecord> {
+  includeTime(include?: boolean): this;
+  format(formatString: string): this;
+  presets(presetList: boolean | string[]): this;
 }

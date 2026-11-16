@@ -26,6 +26,7 @@ export {
   SeriesFieldBuilder,
   SubCollectionFieldBuilder,
   MediaFieldBuilder,
+  DateRangeFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -170,6 +171,7 @@ export type {
   FormSheetProps,
   FormPageProps,
   FormFieldProps,
+  DateRangePickerProps,
   FloatingSaveBarProps,
   ChildTableProps,
   KanbanColumn,
@@ -231,6 +233,7 @@ export type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  IDateRangeFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -251,6 +254,8 @@ export type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  DateRangeValue,
+  DateRangeFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";
