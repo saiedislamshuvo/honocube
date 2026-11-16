@@ -208,4 +208,3 @@ export interface ISlugFieldBuilder<TRecord = Record<string, unknown>>
   locked(isLocked?: boolean): this;
   slugify(fn: (text: string) => string): this;
 }
-}
