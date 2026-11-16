@@ -19,6 +19,8 @@ import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 import { ImagePickerField } from "../media/image-picker-field.js";
 import { ColorPickerField } from "./color-picker-field.js";
 import { IconPickerField } from "./icon-picker-field.js";
+import { TagsInputField } from "./tags-input-field.js";
+import { SlugInputField } from "./slug-input-field.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -134,6 +136,7 @@ export function FormField({
   onChange,
   disabled = false,
   className = "",
+  values,
 }: FormFieldProps): React.JSX.Element | null {
   if (fieldState.visible === false) {
     return null;
@@ -321,6 +324,47 @@ export function FormField({
                 disabled={isDisabled}
                 placeholder={field.placeholder}
                 icons={iconConfig.icons}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "tags": {
+            const tagsConfig = field as any;
+            return (
+              <TagsInputField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                maxTags={tagsConfig.maxTags}
+                suggestions={tagsConfig.suggestions}
+                delimiters={tagsConfig.delimiters}
+                allowDuplicates={tagsConfig.allowDuplicates}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "slug": {
+            const slugConfig = field as any;
+            const sourceFieldName = slugConfig.from || "title";
+            const sourceVal = values ? values[sourceFieldName] : undefined;
+            return (
+              <SlugInputField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                sourceValue={sourceVal !== undefined ? String(sourceVal) : undefined}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                separator={slugConfig.separator}
+                lowercase={slugConfig.lowercase}
+                locked={slugConfig.locked}
+                slugify={slugConfig.slugify}
                 hasError={Boolean(errorMessage)}
               />
             );

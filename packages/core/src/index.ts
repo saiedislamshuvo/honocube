@@ -28,6 +28,8 @@ export {
   MediaFieldBuilder,
   ColorFieldBuilder,
   IconFieldBuilder,
+  TagsFieldBuilder,
+  SlugFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -175,6 +177,9 @@ export type {
   FloatingSaveBarProps,
   ColorPickerFieldProps,
   IconPickerFieldProps,
+  TagsInputFieldProps,
+  SlugInputFieldProps,
+  UnsavedChangesDialogProps,
   ChildTableProps,
   KanbanColumn,
   KanbanViewProps,
@@ -197,6 +202,7 @@ export type {
 
 // Utilities & Formatting
 export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js";
+export { slugify, type SlugifyOptions } from "./utils/slug.js";
 
 // Schema, Field, Collection & App Types
 export type {
@@ -237,6 +243,8 @@ export type {
   IMediaFieldBuilder,
   IColorFieldBuilder,
   IIconFieldBuilder,
+  ITagsFieldBuilder,
+  ISlugFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -259,6 +267,8 @@ export type {
   MediaFieldConfig,
   ColorFieldConfig,
   IconFieldConfig,
+  TagsFieldConfig,
+  SlugFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";

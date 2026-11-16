@@ -14,6 +14,8 @@ import type {
   MediaFieldConfig,
   ColorFieldConfig,
   IconFieldConfig,
+  TagsFieldConfig,
+  SlugFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -156,6 +158,7 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
 }
 
 /**
+/**
  * Fluent builder for visual color picker fields.
  */
 export interface IColorFieldBuilder<TRecord = Record<string, unknown>>
@@ -170,4 +173,28 @@ export interface IColorFieldBuilder<TRecord = Record<string, unknown>>
 export interface IIconFieldBuilder<TRecord = Record<string, unknown>>
   extends IFieldBuilder<IconFieldConfig<TRecord>, string, TRecord> {
   icons(iconList: string[]): this;
+}
+
+/**
+ * Fluent builder for tags and multi-chip input fields.
+ */
+export interface ITagsFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<TagsFieldConfig<TRecord>, string[], TRecord> {
+  maxTags(count: number): this;
+  suggestions(suggestions: string[]): this;
+  delimiters(delimiters: string[]): this;
+  allowDuplicates(allow?: boolean): this;
+}
+
+/**
+ * Fluent builder for URL-friendly slug fields.
+ */
+export interface ISlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord> {
+  from(sourceField: keyof TRecord | string): this;
+  separator(sep: string): this;
+  lowercase(enable?: boolean): this;
+  locked(isLocked?: boolean): this;
+  slugify(fn: (text: string) => string): this;
+}
 }

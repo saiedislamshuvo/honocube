@@ -25,6 +25,7 @@ import {
 import { FormField } from "./form-field.js";
 import { ChildTable } from "./child-table.js";
 import { FloatingSaveBar } from "./floating-save-bar.js";
+import { useUnsavedChangesGuard } from "../navigation/navigation-guard.js";
 
 export function FormView<TCollection extends Collection<any>>({
   collection,
@@ -45,6 +46,7 @@ export function FormView<TCollection extends Collection<any>>({
   showFooter = true,
   submitLabel,
   floatingSaveBar = true,
+  unsavedChangesGuard = true,
 }: FormViewProps<TCollection>): React.JSX.Element {
   // 1. Initialize Headless Collection Form Engine
   const formReturn = useCollectionForm(collection, {
@@ -74,6 +76,12 @@ export function FormView<TCollection extends Collection<any>>({
 
   const isLocked = Boolean(workflow?.isLocked);
   const isFormDisabled = isLocked || resolvedMode === "view";
+
+  // Navigation guard against accidental route exit or tab closure when form has uncommitted changes
+  const { renderDialog } = useUnsavedChangesGuard({
+    isDirty: Boolean(isDirty && !isFormDisabled && !isLoading),
+    enabled: unsavedChangesGuard !== false,
+  });
 
   // Keyboard shortcut Ctrl+S / Cmd+S to submit form when dirty
   React.useEffect(() => {
@@ -122,6 +130,7 @@ export function FormView<TCollection extends Collection<any>>({
         fieldState={getFieldState(fieldKey as any)}
         onChange={(val) => setFieldValue(fieldKey as any, val)}
         disabled={isFormDisabled}
+        values={formReturn.values}
       />
     );
   };
@@ -137,6 +146,7 @@ export function FormView<TCollection extends Collection<any>>({
 
   return (
     <form
+      data-testid="form-view"
       onSubmit={handleSubmit}
       className={`space-y-6 ${className}`}
       noValidate
@@ -294,6 +304,9 @@ export function FormView<TCollection extends Collection<any>>({
           onDiscard={reset}
         />
       )}
+
+      {/* 6. Unsaved changes confirmation dialog if not wrapped in NavigationGuardProvider */}
+      {renderDialog()}
     </form>
   );
 }

@@ -14,6 +14,8 @@ import type {
   MediaFieldConfig,
   ColorFieldConfig,
   IconFieldConfig,
+  TagsFieldConfig,
+  SlugFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -33,6 +35,8 @@ import type {
   IMediaFieldBuilder,
   IColorFieldBuilder,
   IIconFieldBuilder,
+  ITagsFieldBuilder,
+  ISlugFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -333,6 +337,56 @@ export class IconFieldBuilder<TRecord = Record<string, unknown>>
   implements IIconFieldBuilder<TRecord> {
   icons(iconList: string[]): this {
     return this._set("icons" as any, [...iconList] as any);
+  }
+}
+
+/**
+ * Tags and chip multi-select field builder.
+ */
+export class TagsFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<TagsFieldConfig<TRecord>, string[], TRecord>
+  implements ITagsFieldBuilder<TRecord> {
+  maxTags(count: number): this {
+    return this._set("maxTags" as any, count as any);
+  }
+
+  suggestions(items: string[]): this {
+    return this._set("suggestions" as any, [...items] as any);
+  }
+
+  delimiters(delims: string[]): this {
+    return this._set("delimiters" as any, [...delims] as any);
+  }
+
+  allowDuplicates(allow: boolean = true): this {
+    return this._set("allowDuplicates" as any, allow as any);
+  }
+}
+
+/**
+ * URL-friendly slug field builder.
+ */
+export class SlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord>
+  implements ISlugFieldBuilder<TRecord> {
+  from(sourceField: keyof TRecord | string): this {
+    return this._set("from" as any, sourceField as any);
+  }
+
+  separator(sep: string): this {
+    return this._set("separator" as any, sep as any);
+  }
+
+  lowercase(enable: boolean = true): this {
+    return this._set("lowercase" as any, enable as any);
+  }
+
+  locked(isLocked: boolean = true): this {
+    return this._set("locked" as any, isLocked as any);
+  }
+
+  slugify(fn: (text: string) => string): this {
+    return this._set("slugify" as any, fn as any);
   }
 }
 
@@ -678,6 +732,40 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new IconFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for tags and multi-chip input fields.
+   */
+  tags(labelOrConfig?: string | Partial<TagsFieldConfig>, label?: string): TagsFieldBuilder {
+    let cfg: TagsFieldConfig = {
+      type: "tags",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new TagsFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for URL-friendly slug fields.
+   */
+  slug(labelOrConfig?: string | Partial<SlugFieldConfig>, label?: string): SlugFieldBuilder {
+    let cfg: SlugFieldConfig = {
+      type: "slug",
+      separator: "-",
+      lowercase: true,
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new SlugFieldBuilder(cfg);
   },
 
   /**

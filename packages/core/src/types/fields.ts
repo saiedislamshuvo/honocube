@@ -17,7 +17,9 @@ export type BaseFieldType =
   | "image"
   | "media"
   | "color"
-  | "icon";
+  | "icon"
+  | "tags"
+  | "slug";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -151,6 +153,40 @@ export interface IconFieldConfig<TRecord = Record<string, unknown>> extends Base
   icons?: string[];
 }
 
+export interface TagsFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "tags";
+  default?: string[] | (() => string[]);
+  maxTags?: number;
+  suggestions?: string[];
+  delimiters?: string[];
+  allowDuplicates?: boolean;
+}
+
+export interface SlugFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "slug";
+  default?: string | (() => string);
+  /**
+   * Source field name to automatically derive the slug from (e.g. 'title' or 'name').
+   */
+  from?: keyof TRecord | string;
+  /**
+   * Character used to delimit slug segments. Defaults to '-'.
+   */
+  separator?: string;
+  /**
+   * Whether to transform the slug to lowercase. Defaults to true.
+   */
+  lowercase?: boolean;
+  /**
+   * Whether the slug should start locked against auto-updates from the source field.
+   */
+  locked?: boolean;
+  /**
+   * Custom slug transformation function.
+   */
+  slugify?: (text: string) => string;
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -164,11 +200,15 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | ComputedFieldConfig<any, TRecord>
   | MediaFieldConfig<TRecord>
   | ColorFieldConfig<TRecord>
-  | IconFieldConfig<TRecord>;
+  | IconFieldConfig<TRecord>
+  | TagsFieldConfig<TRecord>
+  | SlugFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
-  : TField extends { type: "text" | "textarea" | "series" | "color" | "icon" }
+  : TField extends { type: "tags" }
+  ? string[]
+  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number
