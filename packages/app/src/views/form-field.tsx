@@ -17,6 +17,7 @@ import {
 } from "@honocube/ui";
 import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 import { ImagePickerField } from "../media/image-picker-field.js";
+import { TagsInputField } from "./tags-input-field.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -291,6 +292,25 @@ export function FormField({
                 hasError={Boolean(errorMessage)}
               />
             );
+
+          case "tags": {
+            const tagsConfig = field as any;
+            return (
+              <TagsInputField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                maxTags={tagsConfig.maxTags}
+                suggestions={tagsConfig.suggestions}
+                delimiters={tagsConfig.delimiters}
+                allowDuplicates={tagsConfig.allowDuplicates}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
 
           case "text":
           case "series":

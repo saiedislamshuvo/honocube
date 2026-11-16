@@ -26,6 +26,7 @@ export {
   SeriesFieldBuilder,
   SubCollectionFieldBuilder,
   MediaFieldBuilder,
+  TagsFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -171,6 +172,7 @@ export type {
   FormPageProps,
   FormFieldProps,
   FloatingSaveBarProps,
+  TagsInputFieldProps,
   ChildTableProps,
   KanbanColumn,
   KanbanViewProps,
@@ -231,6 +233,7 @@ export type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  ITagsFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -251,6 +254,7 @@ export type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  TagsFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";

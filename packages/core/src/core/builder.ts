@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  TagsFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -29,6 +30,7 @@ import type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  ITagsFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -303,6 +305,29 @@ export class MediaFieldBuilder<TRecord = Record<string, unknown>>
 
   uploadEndpoint(endpoint: string): this {
     return this._set("uploadEndpoint" as any, endpoint as any);
+  }
+}
+
+/**
+ * Tags and chip multi-select field builder.
+ */
+export class TagsFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<TagsFieldConfig<TRecord>, string[], TRecord>
+  implements ITagsFieldBuilder<TRecord> {
+  maxTags(count: number): this {
+    return this._set("maxTags" as any, count as any);
+  }
+
+  suggestions(items: string[]): this {
+    return this._set("suggestions" as any, [...items] as any);
+  }
+
+  delimiters(delims: string[]): this {
+    return this._set("delimiters" as any, [...delims] as any);
+  }
+
+  allowDuplicates(allow: boolean = true): this {
+    return this._set("allowDuplicates" as any, allow as any);
   }
 }
 
@@ -615,6 +640,22 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new MediaFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for tags and multi-chip input fields.
+   */
+  tags(labelOrConfig?: string | Partial<TagsFieldConfig>, label?: string): TagsFieldBuilder {
+    let cfg: TagsFieldConfig = {
+      type: "tags",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new TagsFieldBuilder(cfg);
   },
 
   /**

@@ -15,7 +15,8 @@ export type BaseFieldType =
   | "computed"
   | "series"
   | "image"
-  | "media";
+  | "media"
+  | "tags";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -136,6 +137,15 @@ export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends Bas
   default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
 }
 
+export interface TagsFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "tags";
+  default?: string[] | (() => string[]);
+  maxTags?: number;
+  suggestions?: string[];
+  delimiters?: string[];
+  allowDuplicates?: boolean;
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -147,10 +157,13 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | RelationFieldConfig<TRecord>
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>
-  | MediaFieldConfig<TRecord>;
+  | MediaFieldConfig<TRecord>
+  | TagsFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
+  : TField extends { type: "tags" }
+  ? string[]
   : TField extends { type: "text" | "textarea" | "series" }
   ? string
   : TField extends { type: "number" | "currency" }
