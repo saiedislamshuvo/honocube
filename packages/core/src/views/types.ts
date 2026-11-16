@@ -161,6 +161,12 @@ export interface FormViewProps<TCollection extends Collection<any>> {
    * Whether to display a contextual floating save bar when form values are dirty.
    */
   floatingSaveBar?: boolean;
+
+  /**
+   * Whether to guard against accidental navigation or tab closure when form has unsaved changes.
+   * Defaults to true.
+   */
+  unsavedChangesGuard?: boolean;
 }
 
 export interface FloatingSaveBarProps {
@@ -175,6 +181,16 @@ export interface FloatingSaveBarProps {
   visible?: boolean;
   actions?: React.ReactNode;
   className?: string;
+}
+
+export interface UnsavedChangesDialogProps {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export interface FormDialogProps<TCollection extends Collection<any>>
