@@ -177,6 +177,38 @@ export class NumberFieldBuilder<TRecord = Record<string, unknown>>
     this._set("currencyCode" as any, currencyCode as any);
     return this;
   }
+
+  percent(): this {
+    this._set("format" as any, "percent" as any);
+    if (!this._config.suffix) {
+      this._set("suffix" as any, "%" as any);
+    }
+    return this;
+  }
+
+  precision(precision: number): this {
+    return this._set("precision" as any, precision as any);
+  }
+
+  prefix(prefix: string): this {
+    return this._set("prefix" as any, prefix as any);
+  }
+
+  suffix(suffix: string): this {
+    return this._set("suffix" as any, suffix as any);
+  }
+
+  thousandSeparator(separator: boolean | string = true): this {
+    return this._set("thousandSeparator" as any, separator as any);
+  }
+
+  allowNegative(allow: boolean = true): this {
+    return this._set("allowNegative" as any, allow as any);
+  }
+
+  padDecimals(pad: boolean = true): this {
+    return this._set("padDecimals" as any, pad as any);
+  }
 }
 
 /**
@@ -518,6 +550,23 @@ export const f = Object.assign(createFieldBuilder, {
       type: "currency",
       format: "currency",
       currencyCode: "USD",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    return new NumberFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for percentage fields (with format="percent" and suffix="%").
+   */
+  percent(labelOrConfig?: string | Partial<NumberFieldConfig>): NumberFieldBuilder {
+    let cfg: NumberFieldConfig = {
+      type: "number",
+      format: "percent",
+      suffix: "%",
     };
     if (typeof labelOrConfig === "string") {
       cfg.label = labelOrConfig;

@@ -340,7 +340,7 @@ describe("Form and Detail Views", () => {
     expect(html).toContain("Organization details");
     expect(html).toContain("Opportunity Details");
     expect(html).toContain("Tech Corp");
-    expect(html).toContain("25000");
+    expect(html).toContain("25,000");
     expect(html).not.toContain('role="tablist"');
   });
 });

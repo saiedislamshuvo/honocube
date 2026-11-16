@@ -176,6 +176,7 @@ export type {
   FormSheetProps,
   FormPageProps,
   FormFieldProps,
+  MaskedNumericInputProps,
   DateRangePickerProps,
   FloatingSaveBarProps,
   PhoneInputFieldProps,

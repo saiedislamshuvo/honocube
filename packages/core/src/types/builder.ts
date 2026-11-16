@@ -71,6 +71,13 @@ export interface INumberFieldBuilder<TRecord = Record<string, unknown>>
   format(format: "currency" | "percent" | "number" | string): this;
   currencyCode(currencyCode: string): this;
   currency(currencyCode?: string): this;
+  percent(): this;
+  precision(precision: number): this;
+  prefix(prefix: string): this;
+  suffix(suffix: string): this;
+  thousandSeparator(separator?: boolean | string): this;
+  allowNegative(allow?: boolean): this;
+  padDecimals(pad?: boolean): this;
 }
 
 /**

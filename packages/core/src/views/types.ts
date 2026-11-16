@@ -385,6 +385,29 @@ export interface DateRangePickerProps {
   className?: string;
 }
 
+export interface MaskedNumericInputProps {
+  id?: string;
+  name?: string;
+  value?: number | string | null;
+  onChange: (value: number | null) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  precision?: number;
+  prefix?: string;
+  suffix?: string;
+  format?: "currency" | "percent" | "number" | string;
+  currencyCode?: string;
+  thousandSeparator?: boolean | string;
+  allowNegative?: boolean;
+  padDecimals?: boolean;
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

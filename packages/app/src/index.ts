@@ -18,6 +18,14 @@ export { FormSheet } from "./views/form-sheet.js";
 export { FormPage } from "./views/form-page.js";
 export { FormField } from "./views/form-field.js";
 export {
+  MaskedNumericInput,
+  formatNumericValue,
+  parseNumericString,
+  getCurrencySymbol,
+  type FormatNumericOptions,
+  type ParseNumericOptions,
+} from "./views/masked-numeric-input.js";
+export {
   DateRangePicker,
   DATE_RANGE_PRESETS,
   parseDateRange,

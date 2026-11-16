@@ -17,6 +17,7 @@ import {
 } from "@honocube/ui";
 import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 import { ImagePickerField } from "../media/image-picker-field.js";
+import { MaskedNumericInput } from "./masked-numeric-input.js";
 import { DateRangePicker } from "./date-range-picker.js";
 import { PhoneInputField } from "./phone-input-field.js";
 import { ColorPickerField } from "./color-picker-field.js";
@@ -200,15 +201,25 @@ export function FormField({
           case "number":
           case "currency":
             return (
-              <Input
+              <MaskedNumericInput
                 id={name}
-                type="number"
-                step={field.step ?? (field.type === "currency" ? "0.01" : "any")}
-                value={fieldState.value ?? ""}
-                onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
                 disabled={isDisabled}
                 placeholder={field.placeholder}
-                className={errorMessage ? "border-destructive focus-visible:ring-destructive" : ""}
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                precision={(field as any).precision}
+                prefix={(field as any).prefix}
+                suffix={(field as any).suffix}
+                format={(field as any).format || (field.type === "currency" ? "currency" : undefined)}
+                currencyCode={(field as any).currencyCode}
+                thousandSeparator={(field as any).thousandSeparator}
+                allowNegative={(field as any).allowNegative}
+                padDecimals={(field as any).padDecimals}
+                hasError={Boolean(errorMessage)}
               />
             );
 
