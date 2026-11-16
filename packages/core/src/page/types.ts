@@ -8,6 +8,7 @@ export type WorkspaceRouteType =
   | "list"
   | "create"
   | "detail"
+  | "singleton"
   | "not-found";
 
 export interface WorkspaceResolvedRoute {

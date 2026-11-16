@@ -41,7 +41,18 @@ export function resolveWorkspaceRoute(
     };
   }
 
-  // 3. Collection List route
+  // 3. Singleton Collection route (direct configuration panel, no tabular list)
+  if (collection.singleton) {
+    return {
+      type: "singleton",
+      collectionName,
+      collection,
+      recordId: slugArray[1],
+      slug: slugArray,
+    };
+  }
+
+  // 4. Collection List route
   if (slugArray.length === 1) {
     return {
       type: "list",

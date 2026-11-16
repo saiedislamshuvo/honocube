@@ -388,6 +388,23 @@ export interface CollectionMultiViewProps<TCollection extends Collection<any>> {
   className?: string;
 }
 
+export interface SettingsPanelProps<TCollection extends Collection<any> = Collection<any>> {
+  collection: TCollection;
+  data?: InferRecord<TCollection>;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  activeTab?: string;
+  onTabChange?: (tabKey: string) => void;
+  onSave?: (values: Record<string, any>) => Promise<void> | void;
+  onSuccess?: (savedRecord: InferRecord<TCollection>) => void;
+  onError?: (error: Error) => void;
+  actions?: React.ReactNode;
+  showHeader?: boolean;
+  showSaveBar?: boolean;
+  saveLabel?: string;
+  className?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Document Header & Collaboration Types
 // ---------------------------------------------------------------------------

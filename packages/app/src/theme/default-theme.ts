@@ -14,6 +14,7 @@ import { CalendarView } from "../views/calendar-view.js";
 import { ListView } from "../views/list-view.js";
 import { GridView } from "../views/grid-view.js";
 import { TreeView } from "../views/tree-view.js";
+import { SettingsPanel } from "../views/settings-panel.js";
 import { ChildTable } from "../views/child-table.js";
 import { SidePanel } from "../views/side-panel.js";
 import { DocumentHeader } from "../views/document-header.js";
@@ -50,6 +51,8 @@ export const defaultTheme: HonoCubeTheme = {
       list: ListView,
       grid: GridView,
       tree: TreeView,
+      singleton: SettingsPanel,
+      settings: SettingsPanel,
       childTable: ChildTable,
       sidePanel: SidePanel,
       documentHeader: DocumentHeader,

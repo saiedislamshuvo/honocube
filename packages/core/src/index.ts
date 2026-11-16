@@ -178,6 +178,7 @@ export type {
   GridViewProps,
   TreeViewProps,
   TreeNode,
+  SettingsPanelProps,
   ViewSwitcherProps,
   CollectionMultiViewProps,
   WorkflowActionBarProps,
