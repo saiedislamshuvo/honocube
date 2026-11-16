@@ -7,6 +7,7 @@ import { createMemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js"
 import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
 import { createEventBus } from "../realtime/event-bus.js";
 import { createNotificationEngine } from "../notifications/engine.js";
+import { createCustomFieldsStore, validateCustomFields } from "../custom-fields/store.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -5565,6 +5566,83 @@ export function defineApi<
     });
   }
 
+  // Runtime User-Defined Custom Fields (Issue #141)
+  const customFieldsStoreOpt = (versionOrOptions as any)?.customFieldsStore;
+  const customFieldsConfig = (versionOrOptions as any)?.customFields;
+  const shouldEnableCustomFields = Boolean(
+    customFieldsStoreOpt || customFieldsConfig?.enabled || customFieldsConfig?.definitions
+  );
+
+  let customFieldsStore: any = customFieldsStoreOpt;
+  if (!customFieldsStore && shouldEnableCustomFields) {
+    customFieldsStore =
+      customFieldsConfig?.store || createCustomFieldsStore(customFieldsConfig?.definitions);
+  }
+
+  if (customFieldsStore) {
+    (api as any).customFieldsStore = customFieldsStore;
+
+    // GET /custom-fields
+    api.get("/custom-fields", (c) => {
+      const collection = c.req.query("collection");
+      const tenantId = c.req.query("tenantId");
+      const items = customFieldsStore.list(collection, tenantId);
+      return c.json({ data: items, meta: { total: items.length } });
+    });
+
+    // POST /custom-fields
+    api.post("/custom-fields", async (c) => {
+      const body = await c.req.json();
+      if (!body.collection || !body.name || !body.label || !body.type) {
+        return c.json(
+          { error: "collection, name, label, and type are required" },
+          400
+        );
+      }
+      const created = customFieldsStore.create(body);
+      return c.json({ data: created }, 201);
+    });
+
+    // GET /custom-fields/:id
+    api.get("/custom-fields/:id", (c) => {
+      const id = c.req.param("id");
+      const item = customFieldsStore.get(id);
+      if (!item) {
+        return c.json({ error: "Custom field not found" }, 404);
+      }
+      return c.json({ data: item });
+    });
+
+    // PUT /custom-fields/:id
+    api.put("/custom-fields/:id", async (c) => {
+      const id = c.req.param("id");
+      const body = await c.req.json();
+      const updated = customFieldsStore.update(id, body);
+      if (!updated) {
+        return c.json({ error: "Custom field not found" }, 404);
+      }
+      return c.json({ data: updated });
+    });
+
+    // DELETE /custom-fields/:id
+    api.delete("/custom-fields/:id", (c) => {
+      const id = c.req.param("id");
+      const success = customFieldsStore.delete(id);
+      return c.json({ success });
+    });
+
+    // POST /custom-fields/validate
+    api.post("/custom-fields/validate", async (c) => {
+      const body = await c.req.json();
+      const collection = body.collection;
+      const values = body.values || {};
+      const tenantId = body.tenantId || c.req.query("tenantId");
+      const definitions = customFieldsStore.list(collection, tenantId);
+      const validation = validateCustomFields(definitions, values);
+      return c.json(validation);
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -5577,6 +5655,9 @@ export function defineApi<
     }
     if (notificationEngine) {
       (versionedApi as any).notificationEngine = notificationEngine;
+    }
+    if (customFieldsStore) {
+      (versionedApi as any).customFieldsStore = customFieldsStore;
     }
     return versionedApi as any;
   }

@@ -1306,6 +1306,12 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
     channelHandlers?: Record<string, any>;
   };
   notificationEngine?: any;
+  customFields?: {
+    enabled?: boolean;
+    definitions?: any[];
+    store?: any;
+  };
+  customFieldsStore?: any;
 }
 
 export interface ResourceConfig<

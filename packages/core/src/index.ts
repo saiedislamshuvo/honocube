@@ -271,6 +271,8 @@ export type {
   BulkMediaIngestButtonProps,
   NotificationBellProps,
   NotificationRuleDialogProps,
+  CustomFieldsManagerDialogProps,
+  CustomFieldsFormSectionProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -499,6 +501,22 @@ export type {
   InAppNotification,
   DispatchedNotification,
 } from "./notifications/rules.js";
+
+// Runtime User-Defined Custom Fields (Issue #141)
+export {
+  createCustomFieldsStore,
+  validateCustomFields,
+  injectCustomFieldsIntoCollection,
+  extractCustomFields,
+  mergeCustomFieldsWithRecord,
+} from "./custom-fields/runtime.js";
+
+export type {
+  CustomFieldType,
+  CustomFieldDefinition,
+  CustomFieldsStore,
+} from "./custom-fields/runtime.js";
+
 
 
 

@@ -6,6 +6,7 @@ import type { FieldConfig, SubCollectionFieldConfig, DateRangeValue } from "../t
 import type { ViewType } from "../types/views.js";
 import type { AvailableTransition } from "../workflow/types.js";
 import type { InAppNotification, NotificationRule } from "../notifications/rules.js";
+import type { CustomFieldDefinition } from "../custom-fields/runtime.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1266,6 +1267,26 @@ export interface NotificationRuleDialogProps {
   onSaveRule?: (rule: NotificationRule) => void | Promise<void>;
   isSaving?: boolean;
 }
+
+export interface CustomFieldsManagerDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  collectionName: string;
+  customFields?: CustomFieldDefinition[];
+  onSaveField?: (field: CustomFieldDefinition) => Promise<any> | void;
+  onDeleteField?: (id: string) => Promise<any> | void;
+  isLoading?: boolean;
+}
+
+export interface CustomFieldsFormSectionProps {
+  customFields: CustomFieldDefinition[];
+  values: Record<string, any>;
+  onChange: (name: string, value: any) => void;
+  errors?: Record<string, string>;
+  disabled?: boolean;
+  className?: string;
+}
+
 
 
 
