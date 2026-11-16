@@ -36,6 +36,7 @@ export {
   QRCodeFieldBuilder,
   SignatureFieldBuilder,
   RichTextFieldBuilder,
+  RepeaterFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -187,6 +188,7 @@ export type {
   RichTextEditorProps,
   ComboboxOption,
   AsyncComboboxProps,
+  RepeaterFieldProps,
   DateRangePickerProps,
   FloatingSaveBarProps,
   PhoneInputFieldProps,
@@ -266,6 +268,7 @@ export type {
   IQRCodeFieldBuilder,
   ISignatureFieldBuilder,
   IRichTextFieldBuilder,
+  IRepeaterFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -298,6 +301,7 @@ export type {
   SignatureFieldConfig,
   RichTextFieldConfig,
   RichTextToolbarTool,
+  RepeaterFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";
