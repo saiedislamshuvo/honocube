@@ -15,7 +15,8 @@ export type BaseFieldType =
   | "computed"
   | "series"
   | "image"
-  | "media";
+  | "media"
+  | "phone";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -136,6 +137,14 @@ export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends Bas
   default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
 }
 
+export interface PhoneFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "phone";
+  default?: string | (() => string);
+  defaultCountry?: string;
+  allowedCountries?: string[];
+  preferredCountries?: string[];
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -147,11 +156,12 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | RelationFieldConfig<TRecord>
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>
-  | MediaFieldConfig<TRecord>;
+  | MediaFieldConfig<TRecord>
+  | PhoneFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
-  : TField extends { type: "text" | "textarea" | "series" }
+  : TField extends { type: "text" | "textarea" | "series" | "phone" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number

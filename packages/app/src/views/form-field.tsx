@@ -17,6 +17,7 @@ import {
 } from "@honocube/ui";
 import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 import { ImagePickerField } from "../media/image-picker-field.js";
+import { PhoneInputField } from "./phone-input-field.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -291,6 +292,23 @@ export function FormField({
                 hasError={Boolean(errorMessage)}
               />
             );
+
+          case "phone": {
+            const phoneConfig = field as any;
+            return (
+              <PhoneInputField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                defaultCountry={phoneConfig.defaultCountry}
+                allowedCountries={phoneConfig.allowedCountries}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
 
           case "text":
           case "series":

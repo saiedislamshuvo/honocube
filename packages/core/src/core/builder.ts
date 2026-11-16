@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  PhoneFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -29,6 +30,7 @@ import type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  IPhoneFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -303,6 +305,25 @@ export class MediaFieldBuilder<TRecord = Record<string, unknown>>
 
   uploadEndpoint(endpoint: string): this {
     return this._set("uploadEndpoint" as any, endpoint as any);
+  }
+}
+
+/**
+ * International telephone input field builder.
+ */
+export class PhoneFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<PhoneFieldConfig<TRecord>, string, TRecord>
+  implements IPhoneFieldBuilder<TRecord> {
+  defaultCountry(isoCode: string): this {
+    return this._set("defaultCountry" as any, isoCode as any);
+  }
+
+  allowedCountries(isoCodes: string[]): this {
+    return this._set("allowedCountries" as any, [...isoCodes] as any);
+  }
+
+  preferredCountries(isoCodes: string[]): this {
+    return this._set("preferredCountries" as any, [...isoCodes] as any);
   }
 }
 
@@ -615,6 +636,23 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new MediaFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for international phone input fields.
+   */
+  phone(labelOrConfig?: string | Partial<PhoneFieldConfig>, label?: string): PhoneFieldBuilder {
+    let cfg: PhoneFieldConfig = {
+      type: "phone",
+      defaultCountry: "US",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new PhoneFieldBuilder(cfg);
   },
 
   /**

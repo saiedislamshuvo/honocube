@@ -18,6 +18,11 @@ export { FormSheet } from "./views/form-sheet.js";
 export { FormPage } from "./views/form-page.js";
 export { FormField } from "./views/form-field.js";
 export { FloatingSaveBar } from "./views/floating-save-bar.js";
+export {
+  PhoneInputField,
+  COUNTRY_CALLING_CODES,
+  parsePhoneNumber,
+} from "./views/phone-input-field.js";
 export { ChildTable } from "./views/child-table.js";
 export { KanbanView } from "./views/kanban-view.js";
 export { CalendarView } from "./views/calendar-view.js";

@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  PhoneFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -151,4 +152,14 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
   accept(acceptTypes: string): this;
   maxSize(bytes: number): this;
   uploadEndpoint(endpoint: string): this;
+}
+
+/**
+ * Fluent builder for international phone input fields.
+ */
+export interface IPhoneFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<PhoneFieldConfig<TRecord>, string, TRecord> {
+  defaultCountry(isoCode: string): this;
+  allowedCountries(isoCodes: string[]): this;
+  preferredCountries(isoCodes: string[]): this;
 }
