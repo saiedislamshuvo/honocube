@@ -13,6 +13,7 @@ import type {
   ComputedFieldConfig,
   MediaFieldConfig,
   TagsFieldConfig,
+  SlugFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -163,4 +164,16 @@ export interface ITagsFieldBuilder<TRecord = Record<string, unknown>>
   suggestions(suggestions: string[]): this;
   delimiters(delimiters: string[]): this;
   allowDuplicates(allow?: boolean): this;
+}
+
+/**
+ * Fluent builder for URL-friendly slug fields.
+ */
+export interface ISlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord> {
+  from(sourceField: keyof TRecord | string): this;
+  separator(sep: string): this;
+  lowercase(enable?: boolean): this;
+  locked(isLocked?: boolean): this;
+  slugify(fn: (text: string) => string): this;
 }

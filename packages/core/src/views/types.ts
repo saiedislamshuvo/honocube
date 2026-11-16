@@ -161,6 +161,12 @@ export interface FormViewProps<TCollection extends Collection<any>> {
    * Whether to display a contextual floating save bar when form values are dirty.
    */
   floatingSaveBar?: boolean;
+
+  /**
+   * Whether to guard against accidental navigation or tab closure when form has unsaved changes.
+   * Defaults to true.
+   */
+  unsavedChangesGuard?: boolean;
 }
 
 export interface FloatingSaveBarProps {
@@ -175,6 +181,16 @@ export interface FloatingSaveBarProps {
   visible?: boolean;
   actions?: React.ReactNode;
   className?: string;
+}
+
+export interface UnsavedChangesDialogProps {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export interface FormDialogProps<TCollection extends Collection<any>>
@@ -270,6 +286,29 @@ export interface FormFieldProps {
   /**
    * Custom CSS class name for the field container.
    */
+  className?: string;
+
+  /**
+   * Current snapshot of form record values, used by dependent fields like slugs.
+   */
+  values?: Record<string, any>;
+}
+
+export interface SlugInputFieldProps {
+  id?: string;
+  name: string;
+  value?: string | null;
+  onChange: (value: string) => void;
+  sourceValue?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  separator?: string;
+  lowercase?: boolean;
+  locked?: boolean;
+  onLockChange?: (locked: boolean) => void;
+  slugify?: (text: string) => string;
+  hasError?: boolean;
   className?: string;
 }
 
