@@ -198,6 +198,35 @@ export interface EventBus {
 export type TenantId = string | number;
 export type TenancyValue = TenantId | TenantId[] | null | undefined;
 
+export interface TenancyHierarchyConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  /**
+   * Resolves the parent company / holding tenant ID for a given tenant ID.
+   * Can return a single parent ID or an array of ancestor IDs.
+   */
+  getParentId?: (
+    tenantId: TenantId,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<TenantId | TenantId[] | null | undefined> | TenantId | TenantId[] | null | undefined;
+
+  /**
+   * Resolves direct or recursive subsidiary / child tenant IDs for a given holding tenant ID.
+   */
+  getSubsidiaryIds?: (
+    tenantId: TenantId,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => Promise<TenantId[]> | TenantId[];
+
+  /**
+   * Global default for whether child subsidiaries automatically inherit master data from parent tenants.
+   */
+  allowHoldingInheritance?: boolean;
+}
+
 export interface TenancyConfig<
   Env extends Record<string, unknown> = Record<string, unknown>,
   AppContext = any
@@ -240,6 +269,11 @@ export interface TenancyConfig<
    * Custom error message when tenant resolution fails.
    */
   errorMessage?: string;
+
+  /**
+   * Multi-company holding hierarchy and parent-subsidiary relationship resolver.
+   */
+  hierarchy?: TenancyHierarchyConfig<Env, AppContext>;
 }
 
 export interface ResourceTenancyConfig {
@@ -251,6 +285,19 @@ export interface ResourceTenancyConfig {
    * When true, skips tenancy enforcement and filtering for this resource (shared/global table).
    */
   skip?: boolean;
+  /**
+   * When true, queries by subsidiary tenants automatically include records from parent holding tenants.
+   * Perfect for central master catalogs (tax codes, units of measurement, product categories, brands).
+   */
+  inheritFromParent?: boolean;
+  /**
+   * Alias for inheritFromParent. Marks this resource as shared hierarchical master data.
+   */
+  masterData?: boolean;
+  /**
+   * Whether to allow parent tenants to push/sync records downstream to child subsidiaries.
+   */
+  allowDownstreamSync?: boolean;
 }
 
 
