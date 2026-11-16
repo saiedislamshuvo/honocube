@@ -5,6 +5,7 @@ import { ApiError, errorBody, ValidationError } from "../utils/errors.js";
 import { createMemoryIdempotencyStorage, computeFingerprint } from "../utils/idempotency.js";
 import { createMemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
 import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
+import { createEventBus } from "../realtime/event-bus.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -98,7 +99,14 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
     };
   }
 
+  // Setup default realtime event bus if none provided
+  if (appConfig.realtime !== false && !appConfig.eventBus) {
+    appConfig.eventBus = createEventBus();
+  }
+
   return {
+    eventBus: appConfig.eventBus!,
+
     defineResource: <
       TTable,
       TSelect = InferSelect<TTable>,
@@ -113,7 +121,17 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
     >(
       resources: TResources,
       versionOrOptions?: V
-    ) => defineApi<Env, TResources, V>(resources, versionOrOptions)
+    ) => {
+      let finalOpts = versionOrOptions;
+      if (typeof versionOrOptions === "object" && versionOrOptions !== null) {
+        if (!(versionOrOptions as any).eventBus && appConfig.eventBus) {
+          finalOpts = { ...(versionOrOptions as any), eventBus: appConfig.eventBus } as V;
+        }
+      } else if (!versionOrOptions && appConfig.eventBus) {
+        finalOpts = { eventBus: appConfig.eventBus } as any as V;
+      }
+      return defineApi<Env, TResources, V>(resources, finalOpts);
+    }
   };
 }
 
@@ -1595,6 +1613,18 @@ export function defineResource<
   };
 
   const emitEvent = async (appContext: any, type: any, data?: any, ids?: (string | number)[]) => {
+    if (globalConfig?.eventBus) {
+      globalConfig.eventBus.publish({
+        type,
+        resource: config.name,
+        data,
+        ids,
+        meta: {
+          appContext,
+        },
+      });
+    }
+
     if (globalConfig?.onEvent) {
       await globalConfig.onEvent({
         type,
@@ -3033,6 +3063,71 @@ function buildDateBucketSql(
     app.get("/stats", handleAggregate);
   }
 
+  // Realtime Resource Event Stream (SSE)
+  const isRealtimeEnabled =
+    config.realtime !== false &&
+    (typeof config.realtime === "object" ? config.realtime.enabled !== false : true) &&
+    globalConfig?.realtime !== false;
+
+  if (isRealtimeEnabled && globalConfig?.eventBus) {
+    app.get("/events", async (c) => {
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+      await checkRateLimit(c, appContext);
+      await checkAccess(appContext, "list");
+
+      const adapter = getAdapter(c);
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+      const tenantId = typeof tenancy.tenantVal === "string" ? tenancy.tenantVal : undefined;
+      const keepAliveMs =
+        (typeof globalConfig.realtime === "object" && globalConfig.realtime.keepAliveIntervalMs) || 15000;
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          const send = (data: string) => {
+            try {
+              controller.enqueue(encoder.encode(data));
+            } catch {
+              // client disconnected
+            }
+          };
+
+          send(": connected\n\n");
+
+          const unsubscribe = globalConfig.eventBus!.subscribe(
+            { resource: config.name, tenantId },
+            (event) => {
+              send(`data: ${JSON.stringify(event)}\n\n`);
+            }
+          );
+
+          const pingTimer = setInterval(() => {
+            send(": ping\n\n");
+          }, keepAliveMs);
+
+          if (c.req.raw?.signal) {
+            c.req.raw.signal.addEventListener("abort", () => {
+              clearInterval(pingTimer);
+              unsubscribe();
+              try {
+                controller.close();
+              } catch {
+                // stream already closed
+              }
+            });
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+        },
+      });
+    });
+  }
 
   if (methods.has("detail")) {
     app.get("/:id", async (c) => {
@@ -5082,12 +5177,78 @@ export function defineApi<
     });
   }
 
+  // Realtime Global Event Stream (SSE)
+  const eventBus: any = (versionOrOptions as any)?.eventBus;
+  if (eventBus) {
+    (api as any).eventBus = eventBus;
+    (api as any).broadcast = (event: any) => eventBus.publish(event);
+
+    api.get("/events", (c) => {
+      const resourcesQuery = c.req.query("resources") || c.req.query("resource");
+      const typesQuery = c.req.query("types") || c.req.query("type");
+      const tenantId = c.req.query("tenantId");
+
+      const resourcesFilter = resourcesQuery ? resourcesQuery.split(",").map((s: string) => s.trim()) : "*";
+      const typesFilter = typesQuery ? typesQuery.split(",").map((s: string) => s.trim()) : undefined;
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          const send = (data: string) => {
+            try {
+              controller.enqueue(encoder.encode(data));
+            } catch {
+              // stream closed
+            }
+          };
+
+          send(": connected\n\n");
+
+          const unsubscribe = eventBus.subscribe(
+            { resource: resourcesFilter, type: typesFilter, tenantId },
+            (event: any) => {
+              send(`data: ${JSON.stringify(event)}\n\n`);
+            }
+          );
+
+          const pingTimer = setInterval(() => {
+            send(": ping\n\n");
+          }, 15000);
+
+          if (c.req.raw?.signal) {
+            c.req.raw.signal.addEventListener("abort", () => {
+              clearInterval(pingTimer);
+              unsubscribe();
+              try {
+                controller.close();
+              } catch {
+                // stream already closed
+              }
+            });
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+        },
+      });
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
     const versionedApi = new Hono<{ Bindings: Env }>();
     versionedApi.route(`/${version}`, api);
     (versionedApi as any)[API_CONFIG] = apiConfig;
+    if (eventBus) {
+      (versionedApi as any).eventBus = eventBus;
+      (versionedApi as any).broadcast = (api as any).broadcast;
+    }
     return versionedApi as any;
   }
   
