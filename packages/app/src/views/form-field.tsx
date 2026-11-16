@@ -26,6 +26,7 @@ import { TagsInputField } from "./tags-input-field.js";
 import { SlugInputField } from "./slug-input-field.js";
 import { BarcodeField } from "./barcode-field.js";
 import { QRCodeField } from "./qr-code-field.js";
+import { SignaturePad } from "./signature-pad.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -450,6 +451,30 @@ export function FormField({
                 size={qrConfig.size}
                 level={qrConfig.level}
                 includeMargin={qrConfig.includeMargin}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "signature": {
+            const sigConfig = field as any;
+            const signerName = sigConfig.signerNameField && values ? values[sigConfig.signerNameField] : undefined;
+            const signedAt = sigConfig.signedAtField && values ? values[sigConfig.signedAtField] : undefined;
+            return (
+              <SignaturePad
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                penColor={sigConfig.penColor}
+                backgroundColor={sigConfig.backgroundColor}
+                penWidth={sigConfig.penWidth}
+                width={sigConfig.width}
+                height={sigConfig.height}
+                format={sigConfig.format}
+                signerName={signerName !== undefined ? String(signerName) : undefined}
+                signedAt={signedAt !== undefined ? String(signedAt) : undefined}
                 hasError={Boolean(errorMessage)}
               />
             );

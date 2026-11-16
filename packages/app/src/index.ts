@@ -49,6 +49,7 @@ export { TagsInputField } from "./views/tags-input-field.js";
 export { SlugInputField } from "./views/slug-input-field.js";
 export { BarcodeField } from "./views/barcode-field.js";
 export { QRCodeField } from "./views/qr-code-field.js";
+export { SignaturePad } from "./views/signature-pad.js";
 export { UnsavedChangesDialog } from "./views/unsaved-changes-dialog.js";
 export { ChildTable } from "./views/child-table.js";
 export { KanbanView } from "./views/kanban-view.js";
