@@ -328,6 +328,33 @@ export interface TagsInputFieldProps {
   className?: string;
 }
 
+export interface ColorPickerFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (color: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  presets?: string[];
+  format?: "hex" | "rgb" | "hsl";
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface IconPickerFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (icon: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  icons?: string[];
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

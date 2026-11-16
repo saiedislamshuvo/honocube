@@ -18,6 +18,14 @@ export { FormSheet } from "./views/form-sheet.js";
 export { FormPage } from "./views/form-page.js";
 export { FormField } from "./views/form-field.js";
 export { FloatingSaveBar } from "./views/floating-save-bar.js";
+export {
+  ColorPickerField,
+  DEFAULT_COLOR_PRESETS,
+} from "./views/color-picker-field.js";
+export {
+  IconPickerField,
+  DEFAULT_ICON_REGISTRY,
+} from "./views/icon-picker-field.js";
 export { TagsInputField } from "./views/tags-input-field.js";
 export { SlugInputField } from "./views/slug-input-field.js";
 export { UnsavedChangesDialog } from "./views/unsaved-changes-dialog.js";

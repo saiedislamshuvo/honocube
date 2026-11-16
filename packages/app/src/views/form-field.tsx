@@ -17,6 +17,8 @@ import {
 } from "@honocube/ui";
 import { toHumanLabel, type FormFieldProps } from "@honocube/core";
 import { ImagePickerField } from "../media/image-picker-field.js";
+import { ColorPickerField } from "./color-picker-field.js";
+import { IconPickerField } from "./icon-picker-field.js";
 import { TagsInputField } from "./tags-input-field.js";
 import { SlugInputField } from "./slug-input-field.js";
 
@@ -294,6 +296,38 @@ export function FormField({
                 hasError={Boolean(errorMessage)}
               />
             );
+
+          case "color": {
+            const colorConfig = field as any;
+            return (
+              <ColorPickerField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                presets={colorConfig.presets}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "icon": {
+            const iconConfig = field as any;
+            return (
+              <IconPickerField
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                icons={iconConfig.icons}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
 
           case "tags": {
             const tagsConfig = field as any;
