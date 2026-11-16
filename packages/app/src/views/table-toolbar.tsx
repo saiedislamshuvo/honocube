@@ -5,6 +5,7 @@ import {
   SlidersHorizontal,
   Plus,
   Trash2,
+  UploadCloud,
 } from "lucide-react";
 import {
   Button,
@@ -32,6 +33,7 @@ import {
   type CollectionListSelection,
   type CollectionListVisibility,
 } from "@honocube/core";
+import { ImportButton } from "./import-button.js";
 
 export interface TableToolbarProps<TCollection extends Collection<any>> {
   collection: TCollection;
@@ -43,6 +45,8 @@ export interface TableToolbarProps<TCollection extends Collection<any>> {
   showSearch?: boolean;
   showFilters?: boolean;
   showColumnSelector?: boolean;
+  showImport?: boolean;
+  onImport?: () => void;
   actions?: React.ReactNode;
 }
 
@@ -56,6 +60,8 @@ export function TableToolbar<TCollection extends Collection<any>>({
   showSearch = true,
   showFilters = true,
   showColumnSelector = true,
+  showImport = false,
+  onImport,
   actions,
 }: TableToolbarProps<TCollection>): React.JSX.Element {
   const [filterField, setFilterField] = useState<string>("");
@@ -190,8 +196,25 @@ export function TableToolbar<TCollection extends Collection<any>>({
           )}
         </div>
 
-        {/* Custom Actions (e.g. + New) */}
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {/* Custom Actions (e.g. + New, Import) */}
+        <div className="flex items-center gap-2">
+          {showImport && (
+            onImport ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 h-9"
+                onClick={onImport}
+              >
+                <UploadCloud className="h-4 w-4" />
+                <span>Import</span>
+              </Button>
+            ) : (
+              <ImportButton collection={collection} />
+            )
+          )}
+          {actions}
+        </div>
       </div>
 
       {/* 2. Active Filter Pills */}

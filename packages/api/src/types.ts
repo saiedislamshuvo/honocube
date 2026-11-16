@@ -577,8 +577,42 @@ export type MethodRoles = {
   "batch-delete"?: string[];
   "import-preview"?: string[];
   "import-execute"?: string[];
+  "import-template"?: string[];
   aggregate?: string[];
 };
+
+export interface ResourceImportForeignKeyConfig<TTable = any> {
+  table?: TTable;
+  lookupField?: string;
+  referenceKey?: string;
+  targetField?: string;
+}
+
+export interface ResourceImportConfig<TTable = any> {
+  lookupBy: string | string[] | string[][];
+  /**
+   * How many rows an import request may carry. Defaults to 100.
+   *
+   * A payload over the limit is refused with a 400 — it is not truncated.
+   * A partial import that reports success is much harder to notice than a
+   * rejected request, so the caller is told to chunk the payload instead.
+   */
+  maxRowsPerRequest?: number;
+  /**
+   * List of field names to expose in sample import templates.
+   * If omitted, writable columns from the table and relations are used.
+   */
+  fields?: string[];
+  /**
+   * Sample row values used when generating sample CSV/JSON import templates.
+   */
+  templateSample?: Record<string, any>;
+  /**
+   * Foreign key resolution mappings for resolving relation names/identifiers
+   * to primary keys in related tables during import.
+   */
+  foreignKeys?: Record<string, ResourceImportForeignKeyConfig<TTable>>;
+}
 
 export interface NamingSeriesCounter {
   getNext: (prefix: string, tenantId?: string, tx?: any) => Promise<number> | number;
@@ -1209,7 +1243,7 @@ export interface ResourceConfig<
   
   // Enterprise Features
   middleware?: MiddlewareHandler<{ Bindings: Env }>[];
-  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "aggregate")[];
+  methods?: ("list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "import-template" | "aggregate")[];
   softDelete?: string; 
   slugs?: string[];
   tenancy?: boolean | ResourceTenancyConfig;
@@ -1224,17 +1258,7 @@ export interface ResourceConfig<
   virtualFields?: Record<string, ComputedFieldDefinition<TSelect, AppContext>>;
   aggregate?: boolean | ResourceAggregateConfig; 
   
-  import?: {
-    lookupBy: string | string[] | string[][];
-    /**
-     * How many rows an import request may carry. Defaults to 100.
-     *
-     * A payload over the limit is refused with a 400 — it is not truncated.
-     * A partial import that reports success is much harder to notice than a
-     * rejected request, so the caller is told to chunk the payload instead.
-     */
-    maxRowsPerRequest?: number;
-  };
+  import?: ResourceImportConfig<TTable>;
   
   // Security
   permissions?: {
@@ -1247,9 +1271,10 @@ export interface ResourceConfig<
     "batch-delete"?: string;
     "import-preview"?: string;
     "import-execute"?: string;
+    "import-template"?: string;
     aggregate?: string;
   };
-  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "aggregate", record?: TSelect) => boolean | Promise<boolean>;
+  authorize?: (appContext: AppContext, action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "import-template" | "aggregate", record?: TSelect) => boolean | Promise<boolean>;
 
   // UI/API Hints
   hidden?: (keyof TSelect)[];

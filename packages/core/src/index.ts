@@ -393,3 +393,23 @@ export type {
   ColorPreset,
   ThemeConfig,
 } from "./types/app.js";
+
+export {
+  parseCsv,
+  escapeCsvCell,
+  serializeCsv,
+  generateCsvTemplate,
+  downloadCsvFile,
+  chunkArray,
+  importInChunks,
+} from "./import/csv.js";
+
+export type {
+  ParseCsvOptions,
+  ParsedCsvResult,
+  ImportChunkResult,
+  ImportInChunksProgress,
+  ImportInChunksOptions,
+  ImportInChunksSummary,
+} from "./import/csv.js";
+

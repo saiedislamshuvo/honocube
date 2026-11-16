@@ -1299,7 +1299,7 @@ export function defineResource<
   // Helper to check both permissions and authorize
   const checkAccess = async (
     appContext: any, 
-    action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "aggregate", 
+    action: "list" | "detail" | "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import-preview" | "import-execute" | "import-template" | "aggregate", 
     record?: any
   ) => {
     // 0. Check declarative roles (RBAC)
@@ -4291,7 +4291,7 @@ function buildDateBucketSql(
   }
 
   // Import Engine
-  if (config.import && (methods.has("import-preview") || methods.has("import-execute"))) {
+  if (config.import && (methods.has("import-preview") || methods.has("import-execute") || methods.has("import-template"))) {
     const handleImport = async (c: any, isPreview: boolean) => {
       const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
@@ -4331,6 +4331,123 @@ function buildDateBucketSql(
         }
 
         if (body.length === 0) return;
+
+        // 1.5 Declarative Foreign Key Resolution Engine
+        interface FKRule {
+          sourceField: string;
+          targetField: string;
+          table: any;
+          lookupField: string;
+          referenceKey: string;
+        }
+        const fkRules: FKRule[] = [];
+        if (config.import?.foreignKeys) {
+          for (const [srcKey, def] of Object.entries(config.import.foreignKeys)) {
+            if (def.table) {
+              const targetCols = adapter.getColumns(def.table as any) as Record<string, any>;
+              const lookupField = def.lookupField || (targetCols.name ? "name" : (targetCols.title ? "title" : (targetCols.slug ? "slug" : "id")));
+              fkRules.push({
+                sourceField: srcKey,
+                targetField: def.targetField || srcKey,
+                table: def.table,
+                lookupField,
+                referenceKey: def.referenceKey || "id",
+              });
+            }
+          }
+        }
+        if (config.relations?.one) {
+          for (const rel of config.relations.one) {
+            if (!fkRules.some(r => r.sourceField === rel.name || r.targetField === rel.foreignKey)) {
+              const targetCols = adapter.getColumns(rel.table as any) as Record<string, any>;
+              let lookupField = "name";
+              const searchFirst = rel.search?.[0];
+              if (!targetCols.name) {
+                if (searchFirst && targetCols[searchFirst]) {
+                  lookupField = searchFirst;
+                } else if (targetCols.title) {
+                  lookupField = "title";
+                } else if (targetCols.slug) {
+                  lookupField = "slug";
+                } else if (targetCols.email) {
+                  lookupField = "email";
+                } else {
+                  lookupField = Object.keys(targetCols).find(k => k !== "id" && !k.endsWith("At") && !k.endsWith("_at")) || "id";
+                }
+              }
+              fkRules.push({
+                sourceField: rel.name,
+                targetField: rel.foreignKey,
+                table: rel.table,
+                lookupField,
+                referenceKey: rel.referenceKey || "id",
+              });
+            }
+          }
+        }
+
+        const rowFkErrors = new Map<number, string>();
+        for (const rule of fkRules) {
+          const valuesToResolve = new Set<any>();
+          for (let i = 0; i < body.length; i++) {
+            const row = body[i];
+            const srcVal = row[rule.sourceField];
+            if (srcVal !== undefined && srcVal !== null && srcVal !== "") {
+              valuesToResolve.add(srcVal);
+            } else if (rule.sourceField !== rule.targetField) {
+              const tgtVal = row[rule.targetField];
+              if (typeof tgtVal === "string" && isNaN(Number(tgtVal)) && tgtVal.trim() !== "") {
+                valuesToResolve.add(tgtVal);
+              }
+            }
+          }
+
+          if (valuesToResolve.size > 0) {
+            const valArray = Array.from(valuesToResolve);
+            const targetCols = adapter.getColumns(rule.table as any) as any;
+            const lCol = targetCols[rule.lookupField];
+            if (lCol) {
+              const targetRecords = await adapter.findMany(rule.table, {
+                where: (tCols: any, ops: any) => {
+                  if (valArray.length === 1) {
+                    return ops.eq(tCols[rule.lookupField], valArray[0]);
+                  }
+                  return ops.or(...valArray.map((v) => ops.eq(tCols[rule.lookupField], v)));
+                },
+              });
+
+              const lookupMap = new Map<any, any>();
+              for (const tr of targetRecords) {
+                lookupMap.set(tr[rule.lookupField], tr[rule.referenceKey]);
+                lookupMap.set(String(tr[rule.lookupField]), tr[rule.referenceKey]);
+              }
+
+              for (let i = 0; i < body.length; i++) {
+                const row = body[i];
+                const srcVal = row[rule.sourceField];
+                const tgtVal = row[rule.targetField];
+
+                const valToLookup = (srcVal !== undefined && srcVal !== null && srcVal !== "")
+                  ? srcVal
+                  : (rule.sourceField !== rule.targetField && typeof tgtVal === "string" && isNaN(Number(tgtVal)) && tgtVal.trim() !== "")
+                    ? tgtVal
+                    : undefined;
+
+                if (valToLookup !== undefined) {
+                  const resolved = lookupMap.get(valToLookup) ?? lookupMap.get(String(valToLookup));
+                  if (resolved !== undefined) {
+                    row[rule.targetField] = resolved;
+                    if (rule.sourceField !== rule.targetField) {
+                      delete row[rule.sourceField];
+                    }
+                  } else {
+                    rowFkErrors.set(i, `Foreign key resolution failed: '${rule.sourceField}' with value '${valToLookup}' was not found.`);
+                  }
+                }
+              }
+            }
+          }
+        }
 
         // 2. Fetch Existing (The Batch Lookup)
         const cols = adapter.getColumns(config.table as any) as any;
@@ -4434,6 +4551,10 @@ function buildDateBucketSql(
         const importSeriesTracker = new Map<string, number>();
 
         for (let i = 0; i < body.length; i++) {
+           if (rowFkErrors.has(i)) {
+              results.errors.push({ index: i, error: rowFkErrors.get(i)! });
+              continue;
+           }
            const rawRow = body[i];
            const existing = findExisting(rawRow);
 
@@ -4700,6 +4821,118 @@ function buildDateBucketSql(
     }
     if (methods.has("import-execute")) {
        app.post("/import/execute", (c) => handleImport(c, false));
+    }
+    if (methods.has("import-preview") || methods.has("import-execute") || methods.has("import-template")) {
+      app.get("/import/template", async (c) => {
+        const adapter = getAdapter(c);
+        const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+        await checkRateLimit(c, appContext);
+
+        const hasTemplateConfig = (config.roles && typeof config.roles === "object" && (config.roles as any)["import-template"]) ||
+          config.permissions?.["import-template"];
+        if (hasTemplateConfig) {
+          await checkAccess(appContext, "import-template");
+        } else if (methods.has("import-preview")) {
+          await checkAccess(appContext, "import-preview");
+        } else if (methods.has("import-execute")) {
+          await checkAccess(appContext, "import-execute");
+        }
+
+        const format = c.req.query("format") || "csv";
+        const withSample = c.req.query("sample") !== "false";
+
+        let templateFields: string[] = [];
+        if (config.import?.fields && config.import.fields.length > 0) {
+          templateFields = [...config.import.fields];
+        } else {
+          const tableCols = adapter.getColumns(config.table as any) as Record<string, any>;
+          const ts = getTimestampFields();
+          const fkMap = new Map<string, string>();
+
+          if (config.relations?.one) {
+            for (const rel of config.relations.one) {
+              fkMap.set(rel.foreignKey, rel.name);
+            }
+          }
+          if (config.import?.foreignKeys) {
+            for (const [srcKey, def] of Object.entries(config.import.foreignKeys)) {
+              if (def.targetField) fkMap.set(def.targetField, srcKey);
+            }
+          }
+
+          const colKeys = Object.keys(tableCols);
+          for (const key of colKeys) {
+            if (key === "id") continue;
+            if (config.softDelete && key === config.softDelete) continue;
+            if (ts?.created && key === ts.created) continue;
+            if (ts?.updated && key === ts.updated) continue;
+            if (versionControl && key === versionControl.field) continue;
+            if (config.namingSeries && !config.namingSeries.allowManual && key === config.namingSeries.field) continue;
+            if (config.hidden && (config.hidden as string[]).includes(key)) continue;
+
+            if (fkMap.has(key)) {
+              templateFields.push(fkMap.get(key)!);
+            } else {
+              templateFields.push(key);
+            }
+          }
+        }
+
+        const sampleRow: Record<string, any> = {};
+        for (const field of templateFields) {
+          if (config.import?.templateSample && config.import.templateSample[field] !== undefined) {
+            sampleRow[field] = config.import.templateSample[field];
+          } else {
+            const lower = field.toLowerCase();
+            if (lower.includes("email")) {
+              sampleRow[field] = "user@example.com";
+            } else if (lower.includes("phone")) {
+              sampleRow[field] = "+1-555-0199";
+            } else if (lower.includes("price") || lower.includes("amount") || lower.includes("cost")) {
+              sampleRow[field] = 99.99;
+            } else if (lower.includes("qty") || lower.includes("quantity") || lower.includes("count")) {
+              sampleRow[field] = 10;
+            } else if (lower.includes("date")) {
+              sampleRow[field] = "2026-01-01";
+            } else if (lower.includes("status")) {
+              sampleRow[field] = "active";
+            } else if (lower.includes("is_") || lower.startsWith("is") || lower.startsWith("has")) {
+              sampleRow[field] = true;
+            } else {
+              sampleRow[field] = `Sample ${field}`;
+            }
+          }
+        }
+
+        if (format === "json") {
+          return c.json({
+            fields: templateFields,
+            sample: withSample ? sampleRow : undefined,
+          });
+        }
+
+        const escapeCell = (val: any): string => {
+          if (val === null || val === undefined) return "";
+          const str = String(val);
+          if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+
+        const headerLine = templateFields.map(escapeCell).join(",");
+        const lines = [headerLine];
+        if (withSample) {
+          const sampleLine = templateFields.map((f) => escapeCell(sampleRow[f] ?? "")).join(",");
+          lines.push(sampleLine);
+        }
+        const csvContent = lines.join("\r\n") + "\r\n";
+
+        return c.text(csvContent, 200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${config.name}-template.csv"`,
+        });
+      });
     }
   }
 

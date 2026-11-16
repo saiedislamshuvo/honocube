@@ -79,6 +79,15 @@ export {
 } from "./views/spreadsheet-view.js";
 export { PrintDocument } from "./views/print-document.js";
 export { PrintDocumentDialog } from "./views/print-document-dialog.js";
+export {
+  ImportDialog,
+  type ImportDialogProps,
+  type ImportStep,
+} from "./views/import-dialog.js";
+export {
+  ImportButton,
+  type ImportButtonProps,
+} from "./views/import-button.js";
 
 // Programmatic PDF Export Engine & UI Primitives (Issue #133)
 export {
