@@ -24,6 +24,7 @@ import type {
   Collection,
   WorkspaceSidebarProps,
 } from "@honocube/core";
+import { applyNavigationMenu } from "@honocube/core";
 import { TenantSwitcher } from "./tenant-switcher.js";
 import { UserProfileDropdown } from "./user-profile.js";
 
@@ -53,6 +54,7 @@ export function WorkspaceSidebar({
   userProfilePosition: propUserPos,
   headerSlot,
   footerSlot,
+  menuConfig,
   className = "",
 }: WorkspaceSidebarProps): React.JSX.Element {
   const { state } = useSidebar();
@@ -66,28 +68,42 @@ export function WorkspaceSidebar({
   // 1. Resolve Navigation Groups
   let groups: NavigationGroup[] = [];
 
-  const nav = app.getNavigation ? app.getNavigation() : app.navigation;
-  if (Array.isArray(nav) && nav.length > 0) {
-    groups = nav;
-  } else if (!app.navigation && !app.getNavigation) {
-    const collections = app.collections || [];
-    const groupMap = new Map<string, Collection<any>[]>();
+  if (menuConfig) {
+    groups = applyNavigationMenu(
+      app.collections || [],
+      menuConfig,
+      currentUser
+        ? { roles: (currentUser as any).roles, role: (currentUser as any).role }
+        : undefined,
+      activeTenantId
+    );
+  } else {
+    const nav = app.getNavigation ? app.getNavigation() : app.navigation;
+    if (Array.isArray(nav) && nav.length > 0) {
+      groups = nav;
+    } else if (!app.navigation && !app.getNavigation) {
+      const collections = app.collections || [];
+      const groupMap = new Map<string, Collection<any>[]>();
 
-    for (const col of collections) {
-      const gName = col.group || "Collections";
-      if (!groupMap.has(gName)) {
-        groupMap.set(gName, []);
+      for (const col of collections) {
+        const gName = col.group || "Collections";
+        if (!groupMap.has(gName)) {
+          groupMap.set(gName, []);
+        }
+        groupMap.get(gName)?.push(col);
       }
-      groupMap.get(gName)?.push(col);
-    }
 
-    groups = Array.from(groupMap.entries()).map(([group, items]) => ({
-      group,
-      items,
-    }));
+      groups = Array.from(groupMap.entries()).map(([group, items]) => ({
+        group,
+        items,
+      }));
+    }
   }
 
   const handleLinkClick = (href: string, e: React.MouseEvent) => {
+    if (href.startsWith("http")) {
+      return;
+    }
     if (onNavigate) {
       e.preventDefault();
       onNavigate(href);
@@ -163,6 +179,7 @@ export function WorkspaceSidebar({
                 const isActive =
                   pathname === href ||
                   (href !== "/" && pathname.startsWith(`${href}/`));
+                const isExternal = href.startsWith("http");
 
                 return (
                   <SidebarMenuItem key={itemIdx}>
@@ -174,6 +191,8 @@ export function WorkspaceSidebar({
                       <a
                         data-testid={`sidebar-link-${name}`}
                         href={href}
+                        target={isExternal ? "_blank" : undefined}
+                        rel={isExternal ? "noopener noreferrer" : undefined}
                         onClick={(e) => handleLinkClick(href, e)}
                         title={label}
                       >

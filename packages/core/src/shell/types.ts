@@ -1,6 +1,7 @@
 import type React from "react";
 import type { AppInstance, ShellElementPosition } from "../types/app.js";
 import type { HonoCubeTheme } from "../theme/theme-contract.js";
+import type { NavigationMenuConfig } from "../navigation/menu.js";
 
 export interface ShellTenant {
   id: string;
@@ -68,6 +69,7 @@ export interface SpotlightProps {
 export interface WorkspaceSidebarProps {
   app: AppInstance;
   pathname?: string;
+  menuConfig?: NavigationMenuConfig;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   onNavigate?: (href: string) => void;

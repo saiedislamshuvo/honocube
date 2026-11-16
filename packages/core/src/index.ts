@@ -278,6 +278,8 @@ export type {
   WebhookManagerDialogProps,
   WebhookDeliveriesViewProps,
   AuditTrailViewProps,
+  NavigationMenuBuilderDialogProps,
+  SidebarCustomizerProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -569,6 +571,19 @@ export type {
   AuditEntry,
   AuditAction,
 } from "./audit/index.js";
+
+// Visual Navigation Menu Builder and Sidebar Customizer (Issue #145)
+export {
+  buildDefaultNavigation,
+  applyNavigationMenu,
+} from "./navigation/menu.js";
+
+export type {
+  NavigationItemType,
+  NavigationMenuItemConfig,
+  NavigationMenuGroupConfig,
+  NavigationMenuConfig,
+} from "./navigation/menu.js";
 
 
 
