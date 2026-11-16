@@ -2,7 +2,7 @@ import type React from "react";
 import type { Collection, InferRecord, BulkAction } from "../types/collection.js";
 import type { CollectionListOptions } from "../table/types.js";
 import type { FormMode, FormFieldState, ChildCollectionHelper } from "../form/types.js";
-import type { FieldConfig, SubCollectionFieldConfig } from "../types/fields.js";
+import type { FieldConfig, SubCollectionFieldConfig, DateRangeValue } from "../types/fields.js";
 import type { ViewType } from "../types/views.js";
 import type { AvailableTransition } from "../workflow/types.js";
 
@@ -161,6 +161,12 @@ export interface FormViewProps<TCollection extends Collection<any>> {
    * Whether to display a contextual floating save bar when form values are dirty.
    */
   floatingSaveBar?: boolean;
+
+  /**
+   * Whether to guard against accidental navigation or tab closure when form has unsaved changes.
+   * Defaults to true.
+   */
+  unsavedChangesGuard?: boolean;
 }
 
 export interface FloatingSaveBarProps {
@@ -175,6 +181,16 @@ export interface FloatingSaveBarProps {
   visible?: boolean;
   actions?: React.ReactNode;
   className?: string;
+}
+
+export interface UnsavedChangesDialogProps {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export interface FormDialogProps<TCollection extends Collection<any>>
@@ -270,6 +286,102 @@ export interface FormFieldProps {
   /**
    * Custom CSS class name for the field container.
    */
+  className?: string;
+
+  /**
+   * Current snapshot of form record values, used by dependent fields like slugs.
+   */
+  values?: Record<string, any>;
+}
+
+export interface SlugInputFieldProps {
+  id?: string;
+  name: string;
+  value?: string | null;
+  onChange: (value: string) => void;
+  sourceValue?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  separator?: string;
+  lowercase?: boolean;
+  locked?: boolean;
+  onLockChange?: (locked: boolean) => void;
+  slugify?: (text: string) => string;
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface TagsInputFieldProps {
+  id?: string;
+  name?: string;
+  value?: string[] | string | null;
+  onChange: (tags: string[]) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  maxTags?: number;
+  suggestions?: string[];
+  delimiters?: string[];
+  allowDuplicates?: boolean;
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface ColorPickerFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (color: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  presets?: string[];
+  format?: "hex" | "rgb" | "hsl";
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface IconPickerFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (icon: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  icons?: string[];
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface PhoneInputFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (phone: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  defaultCountry?: string;
+  allowedCountries?: string[];
+  preferredCountries?: string[];
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface DateRangePickerProps {
+  id?: string;
+  name?: string;
+  value?: DateRangeValue | string | null;
+  onChange: (value: DateRangeValue) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  includeTime?: boolean;
+  format?: string;
+  presets?: boolean | string[];
+  hasError?: boolean;
   className?: string;
 }
 

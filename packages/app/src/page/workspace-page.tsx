@@ -13,6 +13,10 @@ import { CollectionMultiView } from "../views/multi-view.js";
 import { FormPage } from "../views/form-page.js";
 import { SettingsPanel } from "../views/settings-panel.js";
 import { useAppTheme } from "../theme/theme-provider.js";
+import {
+  NavigationGuardProvider,
+  useNavigationGuard,
+} from "../navigation/navigation-guard.js";
 
 function unwrapValue<T>(val: T | Promise<T> | undefined): T | undefined {
   if (!val) return undefined;
@@ -30,7 +34,15 @@ function unwrapValue<T>(val: T | Promise<T> | undefined): T | undefined {
  * Next.js catch-all route component for `app/(workspace)/[[...slug]]/page.tsx`
  * with automatic route resolution, SSR parameter hydration, and 404 fallbacks.
  */
-export function WorkspacePage({
+export function WorkspacePage(props: WorkspacePageProps & { config?: AppInstance }): React.JSX.Element {
+  return (
+    <NavigationGuardProvider onNavigate={props.onNavigate}>
+      <WorkspacePageInner {...props} />
+    </NavigationGuardProvider>
+  );
+}
+
+function WorkspacePageInner({
   app: propApp,
   config: aliasConfig,
   params: rawParams,
@@ -62,8 +74,11 @@ export function WorkspacePage({
   // 2. Resolve Active Route
   const route = resolveWorkspaceRoute(app, rawSlug);
 
+  const navGuard = useNavigationGuard();
   const handleNavigate = (href: string) => {
-    if (onNavigate) {
+    if (navGuard) {
+      navGuard.guardedNavigate(href);
+    } else if (onNavigate) {
       onNavigate(href);
     } else if (typeof window !== "undefined") {
       window.location.href = href;
@@ -165,7 +180,7 @@ export function WorkspacePage({
               <DetailPageComp
                 collection={route.collection}
                 recordId={route.recordId}
-                onNavigate={onNavigate}
+                onNavigate={handleNavigate}
                 onRecordSaved={() => {
                   // Stay on record or notify
                 }}

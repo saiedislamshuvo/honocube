@@ -25,7 +25,29 @@ export {
   type FormatNumericOptions,
   type ParseNumericOptions,
 } from "./views/masked-numeric-input.js";
+export {
+  DateRangePicker,
+  DATE_RANGE_PRESETS,
+  parseDateRange,
+  type DateRangePreset,
+} from "./views/date-range-picker.js";
 export { FloatingSaveBar } from "./views/floating-save-bar.js";
+export {
+  PhoneInputField,
+  COUNTRY_CALLING_CODES,
+  parsePhoneNumber,
+} from "./views/phone-input-field.js";
+export {
+  ColorPickerField,
+  DEFAULT_COLOR_PRESETS,
+} from "./views/color-picker-field.js";
+export {
+  IconPickerField,
+  DEFAULT_ICON_REGISTRY,
+} from "./views/icon-picker-field.js";
+export { TagsInputField } from "./views/tags-input-field.js";
+export { SlugInputField } from "./views/slug-input-field.js";
+export { UnsavedChangesDialog } from "./views/unsaved-changes-dialog.js";
 export { ChildTable } from "./views/child-table.js";
 export { KanbanView } from "./views/kanban-view.js";
 export { CalendarView } from "./views/calendar-view.js";
@@ -50,6 +72,16 @@ export {
   ImagePickerField,
   type ImagePickerFieldProps,
 } from "./media/image-picker-field.js";
+
+// Navigation Guards & Route Interception
+export {
+  NavigationGuardProvider,
+  useNavigationGuard,
+  useUnsavedChangesGuard,
+  type NavigationGuardContextValue,
+  type NavigationGuardProviderProps,
+  type UseUnsavedChangesGuardOptions,
+} from "./navigation/navigation-guard.js";
 
 // Workspace Shell Layout & Navigation
 export { WorkspaceShell } from "./shell/workspace-shell.js";
