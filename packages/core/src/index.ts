@@ -26,6 +26,7 @@ export {
   SeriesFieldBuilder,
   SubCollectionFieldBuilder,
   MediaFieldBuilder,
+  SlugFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -171,6 +172,7 @@ export type {
   FormPageProps,
   FormFieldProps,
   FloatingSaveBarProps,
+  SlugInputFieldProps,
   ChildTableProps,
   KanbanColumn,
   KanbanViewProps,
@@ -193,6 +195,7 @@ export type {
 
 // Utilities & Formatting
 export { toHumanLabel, formatCellValue, formatFileSize } from "./utils/format.js";
+export { slugify, type SlugifyOptions } from "./utils/slug.js";
 
 // Schema, Field, Collection & App Types
 export type {
@@ -231,6 +234,7 @@ export type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  ISlugFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -251,6 +255,7 @@ export type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  SlugFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";

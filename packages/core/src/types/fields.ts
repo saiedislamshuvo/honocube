@@ -15,7 +15,8 @@ export type BaseFieldType =
   | "computed"
   | "series"
   | "image"
-  | "media";
+  | "media"
+  | "slug";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -136,6 +137,31 @@ export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends Bas
   default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
 }
 
+export interface SlugFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "slug";
+  default?: string | (() => string);
+  /**
+   * Source field name to automatically derive the slug from (e.g. 'title' or 'name').
+   */
+  from?: keyof TRecord | string;
+  /**
+   * Character used to delimit slug segments. Defaults to '-'.
+   */
+  separator?: string;
+  /**
+   * Whether to transform the slug to lowercase. Defaults to true.
+   */
+  lowercase?: boolean;
+  /**
+   * Whether the slug should start locked against auto-updates from the source field.
+   */
+  locked?: boolean;
+  /**
+   * Custom slug transformation function.
+   */
+  slugify?: (text: string) => string;
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -147,11 +173,12 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | RelationFieldConfig<TRecord>
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>
-  | MediaFieldConfig<TRecord>;
+  | MediaFieldConfig<TRecord>
+  | SlugFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
-  : TField extends { type: "text" | "textarea" | "series" }
+  : TField extends { type: "text" | "textarea" | "series" | "slug" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number

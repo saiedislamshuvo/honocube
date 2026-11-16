@@ -271,6 +271,29 @@ export interface FormFieldProps {
    * Custom CSS class name for the field container.
    */
   className?: string;
+
+  /**
+   * Current snapshot of form record values, used by dependent fields like slugs.
+   */
+  values?: Record<string, any>;
+}
+
+export interface SlugInputFieldProps {
+  id?: string;
+  name: string;
+  value?: string | null;
+  onChange: (value: string) => void;
+  sourceValue?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  separator?: string;
+  lowercase?: boolean;
+  locked?: boolean;
+  onLockChange?: (locked: boolean) => void;
+  slugify?: (text: string) => string;
+  hasError?: boolean;
+  className?: string;
 }
 
 export interface ChildTableProps {

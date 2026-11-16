@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  SlugFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -151,4 +152,16 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
   accept(acceptTypes: string): this;
   maxSize(bytes: number): this;
   uploadEndpoint(endpoint: string): this;
+}
+
+/**
+ * Fluent builder for URL-friendly slug fields.
+ */
+export interface ISlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord> {
+  from(sourceField: keyof TRecord | string): this;
+  separator(sep: string): this;
+  lowercase(enable?: boolean): this;
+  locked(isLocked?: boolean): this;
+  slugify(fn: (text: string) => string): this;
 }
