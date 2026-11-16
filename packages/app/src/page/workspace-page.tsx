@@ -11,6 +11,8 @@ import { WorkspaceDashboard } from "./workspace-dashboard.js";
 import { CollectionDetailPage } from "./collection-detail-page.js";
 import { CollectionMultiView } from "../views/multi-view.js";
 import { FormPage } from "../views/form-page.js";
+import { SettingsPanel } from "../views/settings-panel.js";
+import { useAppTheme } from "../theme/theme-provider.js";
 
 function unwrapValue<T>(val: T | Promise<T> | undefined): T | undefined {
   if (!val) return undefined;
@@ -44,10 +46,13 @@ export function WorkspacePage({
     throw new Error("WorkspacePage requires an 'app' instance or 'config' prop.");
   }
 
+  const appTheme = useAppTheme();
   const activeTheme =
     propTheme ||
+    (appTheme && appTheme.name !== "default" ? appTheme : undefined) ||
     app.getTheme?.() ||
-    (isHonoCubeTheme(app.theme) ? app.theme : undefined);
+    (isHonoCubeTheme(app.theme) ? app.theme : undefined) ||
+    appTheme;
 
   // 1. Resolve Params and SearchParams (supports sync & Next.js 15 async)
   const resolvedParams = unwrapValue(rawParams);
@@ -170,7 +175,26 @@ export function WorkspacePage({
         </div>
       )}
 
-      {/* Route 5: Collection Not Found 404 */}
+      {/* Route 5: Singleton Settings Panel */}
+      {route.type === "singleton" && route.collection && (
+        <div data-testid="route-singleton" className="space-y-4 max-w-5xl mx-auto py-6 px-4 sm:px-6">
+          {(() => {
+            const SettingsComp =
+              activeTheme?.components?.views?.singleton ||
+              activeTheme?.components?.views?.settings ||
+              SettingsPanel;
+            return (
+              <SettingsComp
+                collection={route.collection}
+                activeTab={route.recordId ? String(route.recordId) : undefined}
+                onTabChange={(tabKey) => handleNavigate(`/${route.collection?.name}/${tabKey}`)}
+              />
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Route 6: Collection Not Found 404 */}
       {route.type === "not-found" && (
         <div data-testid="route-not-found">
           {notFoundSlot || (

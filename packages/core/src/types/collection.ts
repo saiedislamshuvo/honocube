@@ -84,6 +84,7 @@ export interface CollectionConfig<
   icon?: string;
   group?: string;
   hidden?: boolean;
+  singleton?: boolean;
   identifier?: CollectionIdentifier<Extract<keyof TFields, string>>;
   fields: TFields;
   form?: FormLayoutConfig<Extract<keyof TFields, string>>;
@@ -114,6 +115,7 @@ export interface BaseDerivedCollectionConfig<
   icon?: string;
   group?: string;
   hidden?: boolean;
+  singleton?: boolean;
   identifier?: CollectionIdentifier<string>;
   fields?: FieldOverrideMap | TFields;
   form?: FormLayoutConfig<string>;

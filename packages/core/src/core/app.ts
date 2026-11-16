@@ -78,7 +78,7 @@ export function defineApp(config: AppConfig): AppInstance {
     const groupMap = new Map<string, Collection<any>[]>();
     for (const col of config.collections) {
       if (col && col.name) {
-        const groupName = col.group || "Collections";
+        const groupName = col.group || (col.singleton ? "Settings" : "Collections");
         if (!groupMap.has(groupName)) {
           groupMap.set(groupName, []);
         }

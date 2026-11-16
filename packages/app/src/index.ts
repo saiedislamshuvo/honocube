@@ -23,6 +23,7 @@ export { CalendarView } from "./views/calendar-view.js";
 export { ListView } from "./views/list-view.js";
 export { GridView } from "./views/grid-view.js";
 export { TreeView } from "./views/tree-view.js";
+export { SettingsPanel } from "./views/settings-panel.js";
 export { ViewSwitcher } from "./views/view-switcher.js";
 export { CollectionMultiView } from "./views/multi-view.js";
 export { WorkflowActionBar } from "./views/workflow-action-bar.js";
