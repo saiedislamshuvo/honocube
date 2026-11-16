@@ -170,6 +170,7 @@ export type {
   FormSheetProps,
   FormPageProps,
   FormFieldProps,
+  FloatingSaveBarProps,
   ChildTableProps,
   KanbanColumn,
   KanbanViewProps,

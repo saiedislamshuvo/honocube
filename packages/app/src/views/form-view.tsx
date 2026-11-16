@@ -24,6 +24,7 @@ import {
 } from "@honocube/core";
 import { FormField } from "./form-field.js";
 import { ChildTable } from "./child-table.js";
+import { FloatingSaveBar } from "./floating-save-bar.js";
 
 export function FormView<TCollection extends Collection<any>>({
   collection,
@@ -43,6 +44,7 @@ export function FormView<TCollection extends Collection<any>>({
   showHeader = true,
   showFooter = true,
   submitLabel,
+  floatingSaveBar = true,
 }: FormViewProps<TCollection>): React.JSX.Element {
   // 1. Initialize Headless Collection Form Engine
   const formReturn = useCollectionForm(collection, {
@@ -62,6 +64,7 @@ export function FormView<TCollection extends Collection<any>>({
     reset,
     isSubmitting,
     isLoading,
+    isDirty,
     workflow,
     getFieldState,
     setFieldValue,
@@ -71,6 +74,21 @@ export function FormView<TCollection extends Collection<any>>({
 
   const isLocked = Boolean(workflow?.isLocked);
   const isFormDisabled = isLocked || resolvedMode === "view";
+
+  // Keyboard shortcut Ctrl+S / Cmd+S to submit form when dirty
+  React.useEffect(() => {
+    if (!floatingSaveBar || isFormDisabled || typeof window === "undefined") return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [floatingSaveBar, isFormDisabled, handleSubmit]);
 
   const resolvedTitle =
     title ||
@@ -265,6 +283,16 @@ export function FormView<TCollection extends Collection<any>>({
 
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
+      )}
+
+      {/* 5. Contextual Floating Save Bar when form is dirty */}
+      {floatingSaveBar && isDirty && !isFormDisabled && !isLoading && (
+        <FloatingSaveBar
+          isDirty={isDirty}
+          isSubmitting={isSubmitting}
+          saveLabel={submitLabel || (resolvedMode === "create" ? "Create" : "Save changes")}
+          onDiscard={reset}
+        />
       )}
     </form>
   );
