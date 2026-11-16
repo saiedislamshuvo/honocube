@@ -320,6 +320,10 @@ export function FormField({
                 filterParams={relConfig.filterParams}
                 clearable={relConfig.clearable ?? true}
                 searchable={relConfig.searchable ?? true}
+                createInline={relConfig.createInline}
+                createTitle={relConfig.createTitle}
+                createDescription={relConfig.createDescription}
+                createCollection={relConfig.createCollection}
                 disabled={isDisabled}
                 placeholder={field.placeholder || `Select ${relConfig.target || "option"}...`}
                 hasError={Boolean(errorMessage)}

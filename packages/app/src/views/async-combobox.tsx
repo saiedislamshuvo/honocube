@@ -1,7 +1,14 @@
 import * as React from "react";
-import { Check, ChevronsUpDown, Loader2, Search, X } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus, Search, X } from "lucide-react";
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -12,10 +19,12 @@ import {
   type AsyncComboboxProps,
   type ComboboxOption,
 } from "@honocube/core";
+import { FormDialog } from "./form-dialog.js";
 
 /**
  * Interactive async searchable combobox for selecting foreign keys and relations
- * from large enterprise datasets without loading all records upfront.
+ * from large enterprise datasets without loading all records upfront, with support
+ * for inline entity creation without abandoning the current form draft.
  */
 export function AsyncCombobox({
   id,
@@ -43,6 +52,11 @@ export function AsyncCombobox({
   resolveOption,
   className = "",
   hasError = false,
+  createInline = false,
+  createTitle,
+  createDescription,
+  createCollection,
+  onCreate,
 }: AsyncComboboxProps): React.JSX.Element {
   const appContext = React.useContext(AppContext);
   const [open, setOpen] = React.useState(false);
@@ -57,7 +71,25 @@ export function AsyncCombobox({
   const [resolvedOption, setResolvedOption] = React.useState<ComboboxOption | null>(null);
   const [focusedIndex, setFocusedIndex] = React.useState(-1);
 
+  // Inline entity creation dialog state
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
+  const [quickName, setQuickName] = React.useState("");
+  const [isSubmittingQuick, setIsSubmittingQuick] = React.useState(false);
+  const [quickError, setQuickError] = React.useState<string | null>(null);
+
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Resolve target collection if registered in app or passed explicitly
+  const resolvedTargetCollection = React.useMemo(() => {
+    if (createCollection) return createCollection;
+    if (target && appContext?.app?.getCollection) {
+      return appContext.app.getCollection(target);
+    }
+    if (target && appContext?.app?.collections) {
+      return appContext.app.collections.find((c) => c.name === target);
+    }
+    return undefined;
+  }, [createCollection, target, appContext?.app]);
 
   // Debounce search input
   React.useEffect(() => {
@@ -403,11 +435,119 @@ export function AsyncCombobox({
     }
   };
 
+  // Open inline entity creation modal
+  const handleOpenCreateDialog = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(false);
+    setQuickName(searchQuery.trim());
+    setQuickError(null);
+    setCreateDialogOpen(true);
+  };
+
+  // Handle successful creation of related entity
+  const handleRecordCreated = (createdRecord: any) => {
+    if (!createdRecord) {
+      setCreateDialogOpen(false);
+      return;
+    }
+
+    const newVal =
+      createdRecord[valueKey] ??
+      createdRecord.id ??
+      createdRecord._id ??
+      createdRecord.value;
+    const newLabel =
+      createdRecord[labelKey] ??
+      createdRecord.name ??
+      createdRecord.title ??
+      createdRecord.label ??
+      String(newVal);
+    const newSub = subtitleKey
+      ? String(createdRecord[subtitleKey] ?? "")
+      : createdRecord.description || createdRecord.code || createdRecord.email
+      ? String(createdRecord.description || createdRecord.code || createdRecord.email)
+      : undefined;
+
+    const newOption: ComboboxOption = {
+      value: newVal,
+      label: String(newLabel),
+      subtitle: newSub,
+      data: createdRecord,
+    };
+
+    setOptionsList((prev) => [newOption, ...prev.filter((o) => String(o.value) !== String(newVal))]);
+    setResolvedOption(newOption);
+    onChange(newVal, newOption);
+    setCreateDialogOpen(false);
+    setQuickName("");
+  };
+
+  // Quick create submit handler when no full FormView collection is provided
+  const handleQuickCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickName.trim() || isSubmittingQuick) return;
+
+    setIsSubmittingQuick(true);
+    setQuickError(null);
+
+    try {
+      if (onCreate) {
+        const res = await onCreate(quickName.trim());
+        if (res) {
+          handleRecordCreated(res);
+          return;
+        }
+      }
+
+      if (target || endpoint) {
+        const basePath = endpoint || `/api/${target}`;
+        const payload: Record<string, any> = {
+          [labelKey]: quickName.trim(),
+          ...filterParams,
+        };
+
+        let newRecord: any;
+        if (appContext?.client) {
+          const res = await appContext.client.post<any>(basePath, payload);
+          newRecord = res?.data ?? res;
+        } else if (typeof fetch !== "undefined") {
+          const res = await fetch(basePath, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            const json = await res.json();
+            newRecord = json?.data ?? json;
+          }
+        }
+
+        if (newRecord) {
+          handleRecordCreated(newRecord);
+          return;
+        }
+      }
+
+      // Fallback synthetic creation if no backend is reachable
+      const synthetic = {
+        [valueKey]: quickName.trim().toLowerCase().replace(/\s+/g, "-"),
+        [labelKey]: quickName.trim(),
+      };
+      handleRecordCreated(synthetic);
+    } catch (err: any) {
+      setQuickError(err?.message || "Failed to create record. Please try again.");
+    } finally {
+      setIsSubmittingQuick(false);
+    }
+  };
+
   const isDisabled = disabled || readOnly;
   const isSelected = value !== undefined && value !== null && value !== "";
+  const allowCreate = Boolean(createInline || onCreate);
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div className={cn("relative flex items-center gap-1.5 w-full", className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -587,8 +727,133 @@ export function AsyncCombobox({
               </div>
             )}
           </div>
+
+          {allowCreate && !isDisabled && (
+            <div className="p-1 border-t bg-muted/20">
+              <button
+                type="button"
+                data-testid="async-combobox-create-btn"
+                onClick={handleOpenCreateDialog}
+                className="w-full text-left px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-muted rounded-sm transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {searchQuery
+                    ? `Create "${searchQuery}"`
+                    : `Create new ${createTitle || target || "record"}`}
+                </span>
+              </button>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
+
+      {/* Companion Quick-Add + button next to combobox trigger */}
+      {allowCreate && !isDisabled && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          title={`Create new ${createTitle || target || "record"}`}
+          aria-label={`Create new ${createTitle || target || "record"}`}
+          data-testid="async-combobox-quick-add"
+          onClick={handleOpenCreateDialog}
+          className="h-10 w-10 shrink-0"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      )}
+
+      {/* Full collection FormDialog when collection schema is available */}
+      {resolvedTargetCollection && (
+        <FormDialog
+          collection={resolvedTargetCollection}
+          open={createDialogOpen}
+          onOpenChange={setCreateDialogOpen}
+          title={
+            createTitle ||
+            `New ${
+              resolvedTargetCollection.singular ||
+              resolvedTargetCollection.label ||
+              target ||
+              "Record"
+            }`
+          }
+          description={createDescription}
+          initialValues={{
+            [labelKey]: quickName || searchQuery,
+          }}
+          onSuccess={(newRecord) => {
+            handleRecordCreated(newRecord);
+          }}
+        />
+      )}
+
+      {/* Lightweight Quick-Create modal when no full FormDialog collection is registered */}
+      {!resolvedTargetCollection && allowCreate && (
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <DialogContent data-testid="async-combobox-quick-dialog" className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {createTitle || `New ${target || "Record"}`}
+              </DialogTitle>
+              {createDescription && (
+                <DialogDescription>{createDescription}</DialogDescription>
+              )}
+            </DialogHeader>
+
+            <form onSubmit={handleQuickCreateSubmit} className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor={`${id || name}-quick-create-input`}
+                  className="text-xs font-medium text-foreground"
+                >
+                  {labelKey === "name"
+                    ? "Name"
+                    : labelKey.charAt(0).toUpperCase() + labelKey.slice(1)}
+                </label>
+                <Input
+                  id={`${id || name}-quick-create-input`}
+                  data-testid="async-combobox-quick-input"
+                  value={quickName}
+                  onChange={(e) => setQuickName(e.target.value)}
+                  placeholder={`Enter ${labelKey}...`}
+                  autoFocus
+                  required
+                />
+                {quickError && (
+                  <p className="text-xs text-destructive">{quickError}</p>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateDialogOpen(false)}
+                  disabled={isSubmittingQuick}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  data-testid="async-combobox-quick-submit"
+                  disabled={!quickName.trim() || isSubmittingQuick}
+                >
+                  {isSubmittingQuick ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create & Select"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

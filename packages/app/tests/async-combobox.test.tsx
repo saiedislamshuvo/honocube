@@ -215,4 +215,82 @@ describe("Async Searchable Combobox for Large Relational Datasets (Issue #120)",
       expect(html).toContain("data-testid=\"async-combobox-clear\"");
     });
   });
+
+  describe("Inline Foreign Key Entity Creation (Issue #147)", () => {
+    it("renders companion quick-add + button when createInline is enabled", () => {
+      const html = renderToString(
+        <AsyncCombobox
+          name="supplierId"
+          target="suppliers"
+          value={null}
+          createInline={true}
+          createTitle="New Supplier"
+          onChange={vi.fn()}
+        />
+      );
+
+      expect(html).toContain("data-testid=\"async-combobox-quick-add\"");
+      expect(html).toContain("Create new New Supplier");
+    });
+
+    it("omits quick-add button when createInline is false or component is disabled", () => {
+      const disabledHtml = renderToString(
+        <AsyncCombobox
+          name="supplierId"
+          target="suppliers"
+          value={null}
+          createInline={true}
+          disabled={true}
+          onChange={vi.fn()}
+        />
+      );
+
+      expect(disabledHtml).not.toContain("data-testid=\"async-combobox-quick-add\"");
+
+      const defaultHtml = renderToString(
+        <AsyncCombobox
+          name="supplierId"
+          target="suppliers"
+          value={null}
+          createInline={false}
+          onChange={vi.fn()}
+        />
+      );
+
+      expect(defaultHtml).not.toContain("data-testid=\"async-combobox-quick-add\"");
+    });
+
+    it("configures relation builder with .createInline(true, { title, description })", () => {
+      const builder = f.relation("brands", "Brand")
+        .createInline(true, {
+          title: "Quick Create Brand",
+          description: "Add a brand without navigating away",
+        })
+        .build();
+
+      expect(builder.createInline).toBe(true);
+      expect(builder.createTitle).toBe("Quick Create Brand");
+      expect(builder.createDescription).toBe("Add a brand without navigating away");
+    });
+
+    it("integrates with FormField to render quick-add + button for relational inputs", () => {
+      const html = renderToString(
+        <FormField
+          name="brandId"
+          field={{
+            type: "relation",
+            target: "brands",
+            label: "Product Brand",
+            createInline: true,
+            createTitle: "New Brand",
+          }}
+          fieldState={{ value: null, errors: [] } as any}
+          onChange={vi.fn()}
+        />
+      );
+
+      expect(html).toContain("Product Brand");
+      expect(html).toContain("data-testid=\"async-combobox-quick-add\"");
+    });
+  });
 });
