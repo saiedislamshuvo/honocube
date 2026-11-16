@@ -171,6 +171,7 @@ export type {
   FormPageProps,
   FormFieldProps,
   FloatingSaveBarProps,
+  UnsavedChangesDialogProps,
   ChildTableProps,
   KanbanColumn,
   KanbanViewProps,
