@@ -12,6 +12,8 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  ColorFieldConfig,
+  IconFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -29,6 +31,8 @@ import type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  IColorFieldBuilder,
+  IIconFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -303,6 +307,32 @@ export class MediaFieldBuilder<TRecord = Record<string, unknown>>
 
   uploadEndpoint(endpoint: string): this {
     return this._set("uploadEndpoint" as any, endpoint as any);
+  }
+}
+
+/**
+ * Visual color picker field builder.
+ */
+export class ColorFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<ColorFieldConfig<TRecord>, string, TRecord>
+  implements IColorFieldBuilder<TRecord> {
+  presets(swatches: string[]): this {
+    return this._set("presets" as any, [...swatches] as any);
+  }
+
+  format(fmt: "hex" | "rgb" | "hsl"): this {
+    return this._set("format" as any, fmt as any);
+  }
+}
+
+/**
+ * Icon picker field builder.
+ */
+export class IconFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<IconFieldConfig<TRecord>, string, TRecord>
+  implements IIconFieldBuilder<TRecord> {
+  icons(iconList: string[]): this {
+    return this._set("icons" as any, [...iconList] as any);
   }
 }
 
@@ -615,6 +645,39 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new MediaFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for visual color picker fields.
+   */
+  color(labelOrConfig?: string | Partial<ColorFieldConfig>, label?: string): ColorFieldBuilder {
+    let cfg: ColorFieldConfig = {
+      type: "color",
+      format: "hex",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new ColorFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for icon picker fields.
+   */
+  icon(labelOrConfig?: string | Partial<IconFieldConfig>, label?: string): IconFieldBuilder {
+    let cfg: IconFieldConfig = {
+      type: "icon",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new IconFieldBuilder(cfg);
   },
 
   /**

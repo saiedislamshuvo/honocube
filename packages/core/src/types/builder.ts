@@ -12,6 +12,8 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  ColorFieldConfig,
+  IconFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -151,4 +153,21 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
   accept(acceptTypes: string): this;
   maxSize(bytes: number): this;
   uploadEndpoint(endpoint: string): this;
+}
+
+/**
+ * Fluent builder for visual color picker fields.
+ */
+export interface IColorFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<ColorFieldConfig<TRecord>, string, TRecord> {
+  presets(swatches: string[]): this;
+  format(fmt: "hex" | "rgb" | "hsl"): this;
+}
+
+/**
+ * Fluent builder for icon picker fields.
+ */
+export interface IIconFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<IconFieldConfig<TRecord>, string, TRecord> {
+  icons(iconList: string[]): this;
 }

@@ -15,7 +15,9 @@ export type BaseFieldType =
   | "computed"
   | "series"
   | "image"
-  | "media";
+  | "media"
+  | "color"
+  | "icon";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -136,6 +138,19 @@ export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends Bas
   default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
 }
 
+export interface ColorFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "color";
+  default?: string | (() => string);
+  presets?: string[];
+  format?: "hex" | "rgb" | "hsl";
+}
+
+export interface IconFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "icon";
+  default?: string | (() => string);
+  icons?: string[];
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -147,11 +162,13 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | RelationFieldConfig<TRecord>
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>
-  | MediaFieldConfig<TRecord>;
+  | MediaFieldConfig<TRecord>
+  | ColorFieldConfig<TRecord>
+  | IconFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
-  : TField extends { type: "text" | "textarea" | "series" }
+  : TField extends { type: "text" | "textarea" | "series" | "color" | "icon" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number
