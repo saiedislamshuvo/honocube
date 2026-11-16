@@ -355,6 +355,21 @@ export interface IconPickerFieldProps {
   className?: string;
 }
 
+export interface PhoneInputFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (phone: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  defaultCountry?: string;
+  allowedCountries?: string[];
+  preferredCountries?: string[];
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

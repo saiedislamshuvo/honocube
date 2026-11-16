@@ -16,6 +16,7 @@ export type BaseFieldType =
   | "series"
   | "image"
   | "media"
+  | "phone"
   | "color"
   | "icon"
   | "tags"
@@ -140,6 +141,14 @@ export interface MediaFieldConfig<TRecord = Record<string, unknown>> extends Bas
   default?: string | string[] | MediaAsset | MediaAsset[] | (() => any);
 }
 
+export interface PhoneFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "phone";
+  default?: string | (() => string);
+  defaultCountry?: string;
+  allowedCountries?: string[];
+  preferredCountries?: string[];
+}
+
 export interface ColorFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
   type: "color";
   default?: string | (() => string);
@@ -199,6 +208,7 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | SubCollectionFieldConfig<any, TRecord>
   | ComputedFieldConfig<any, TRecord>
   | MediaFieldConfig<TRecord>
+  | PhoneFieldConfig<TRecord>
   | ColorFieldConfig<TRecord>
   | IconFieldConfig<TRecord>
   | TagsFieldConfig<TRecord>
@@ -208,7 +218,7 @@ export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
   : TField extends { type: "tags" }
   ? string[]
-  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" }
+  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number

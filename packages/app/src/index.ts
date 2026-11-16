@@ -19,6 +19,11 @@ export { FormPage } from "./views/form-page.js";
 export { FormField } from "./views/form-field.js";
 export { FloatingSaveBar } from "./views/floating-save-bar.js";
 export {
+  PhoneInputField,
+  COUNTRY_CALLING_CODES,
+  parsePhoneNumber,
+} from "./views/phone-input-field.js";
+export {
   ColorPickerField,
   DEFAULT_COLOR_PRESETS,
 } from "./views/color-picker-field.js";

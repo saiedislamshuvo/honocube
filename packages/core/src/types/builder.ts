@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  PhoneFieldConfig,
   ColorFieldConfig,
   IconFieldConfig,
   TagsFieldConfig,
@@ -158,6 +159,16 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
 }
 
 /**
+/**
+ * Fluent builder for international phone input fields.
+ */
+export interface IPhoneFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<PhoneFieldConfig<TRecord>, string, TRecord> {
+  defaultCountry(isoCode: string): this;
+  allowedCountries(isoCodes: string[]): this;
+  preferredCountries(isoCodes: string[]): this;
+}
+
 /**
  * Fluent builder for visual color picker fields.
  */
