@@ -101,6 +101,8 @@ export { NotificationBell } from "./views/notification-bell.js";
 export { NotificationRuleDialog } from "./views/notification-rule-dialog.js";
 export { CustomFieldsManagerDialog } from "./views/custom-fields-manager-dialog.js";
 export { CustomFieldsFormSection } from "./views/custom-fields-form-section.js";
+export { AutomationRuleDialog } from "./views/automation-rule-dialog.js";
+export { AutomationHistoryView } from "./views/automation-history-view.js";
 
 
 

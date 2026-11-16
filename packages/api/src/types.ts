@@ -1312,6 +1312,12 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
     store?: any;
   };
   customFieldsStore?: any;
+  automation?: {
+    enabled?: boolean;
+    rules?: any[];
+    actionHandlers?: Record<string, any>;
+  };
+  automationEngine?: any;
 }
 
 export interface ResourceConfig<

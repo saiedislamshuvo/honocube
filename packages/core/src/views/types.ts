@@ -7,6 +7,7 @@ import type { ViewType } from "../types/views.js";
 import type { AvailableTransition } from "../workflow/types.js";
 import type { InAppNotification, NotificationRule } from "../notifications/rules.js";
 import type { CustomFieldDefinition } from "../custom-fields/runtime.js";
+import type { AutomationRule, AutomationExecutionResult } from "../automation/index.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1286,6 +1287,23 @@ export interface CustomFieldsFormSectionProps {
   disabled?: boolean;
   className?: string;
 }
+
+export interface AutomationRuleDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  rule?: Partial<AutomationRule>;
+  availableResources?: string[];
+  onSaveRule?: (rule: AutomationRule) => void | Promise<void>;
+  isSaving?: boolean;
+}
+
+export interface AutomationHistoryViewProps {
+  logs?: AutomationExecutionResult[];
+  onClearLogs?: () => void;
+  isLoading?: boolean;
+  className?: string;
+}
+
 
 
 

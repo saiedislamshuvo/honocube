@@ -273,6 +273,8 @@ export type {
   NotificationRuleDialogProps,
   CustomFieldsManagerDialogProps,
   CustomFieldsFormSectionProps,
+  AutomationRuleDialogProps,
+  AutomationHistoryViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -516,6 +518,25 @@ export type {
   CustomFieldDefinition,
   CustomFieldsStore,
 } from "./custom-fields/runtime.js";
+
+// Low-Code Workflow Automation Engine (Issue #142)
+export {
+  createAutomationEngine,
+} from "./automation/index.js";
+
+export type {
+  AutomationTriggerEvent,
+  AutomationActionType,
+  AutomationCondition,
+  AutomationActionConfig,
+  AutomationRule,
+  AutomationActionResult,
+  AutomationExecutionResult,
+  ActionHandler,
+  AutomationEngineOptions,
+  AutomationEngine,
+} from "./automation/index.js";
+
 
 
 

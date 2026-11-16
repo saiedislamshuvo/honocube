@@ -8,6 +8,7 @@ import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
 import { createEventBus } from "../realtime/event-bus.js";
 import { createNotificationEngine } from "../notifications/engine.js";
 import { createCustomFieldsStore, validateCustomFields } from "../custom-fields/store.js";
+import { createAutomationEngine } from "../automation/engine.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -5643,6 +5644,99 @@ export function defineApi<
     });
   }
 
+  // Low-Code Workflow Automation Engine (Issue #142)
+  const automationEngineOpt = (versionOrOptions as any)?.automationEngine;
+  const automationConfig = (versionOrOptions as any)?.automation;
+  const shouldEnableAutomation = Boolean(
+    automationEngineOpt || automationConfig?.enabled || automationConfig?.rules
+  );
+
+  let automationEngine: any = automationEngineOpt;
+  if (!automationEngine && shouldEnableAutomation) {
+    automationEngine = createAutomationEngine({
+      eventBus,
+      notificationEngine,
+      initialRules: automationConfig?.rules,
+      actionHandlers: automationConfig?.actionHandlers,
+    });
+  } else if (automationEngine && eventBus && !automationEngine._eventBusAttached) {
+    automationEngine._eventBusAttached = true;
+    eventBus.subscribe("*", (event: any) => {
+      if (event.resource === "notifications" || event.resource === "automations") return;
+      automationEngine.processEvent(event);
+    });
+  }
+
+  if (automationEngine) {
+    (api as any).automationEngine = automationEngine;
+
+    // GET /automations
+    api.get("/automations", (c) => {
+      const resource = c.req.query("resource");
+      const rules = automationEngine.getRules(resource);
+      return c.json({ data: rules });
+    });
+
+    // POST /automations
+    api.post("/automations", async (c) => {
+      const body = await c.req.json();
+      if (!body.name || !body.resource || !body.actions) {
+        return c.json({ error: "name, resource, and actions are required" }, 400);
+      }
+      if (!body.id) {
+        body.id = `auto_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      }
+      const created = automationEngine.addRule(body);
+      return c.json({ data: created }, 201);
+    });
+
+    // GET /automations/logs
+    api.get("/automations/logs", (c) => {
+      const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 50;
+      const logs = automationEngine.getExecutionLogs(limit);
+      return c.json({ data: logs });
+    });
+
+    // GET /automations/:id
+    api.get("/automations/:id", (c) => {
+      const id = c.req.param("id");
+      const rule = automationEngine.getRule(id);
+      if (!rule) {
+        return c.json({ error: "Automation rule not found" }, 404);
+      }
+      return c.json({ data: rule });
+    });
+
+    // PUT /automations/:id
+    api.put("/automations/:id", async (c) => {
+      const id = c.req.param("id");
+      const body = await c.req.json();
+      const updated = automationEngine.updateRule(id, body);
+      if (!updated) {
+        return c.json({ error: "Automation rule not found" }, 404);
+      }
+      return c.json({ data: updated });
+    });
+
+    // DELETE /automations/:id
+    api.delete("/automations/:id", (c) => {
+      const id = c.req.param("id");
+      const success = automationEngine.removeRule(id);
+      return c.json({ success });
+    });
+
+    // POST /automations/test
+    api.post("/automations/test", async (c) => {
+      const body = await c.req.json();
+      const { rule, mockPayload } = body;
+      if (!rule) {
+        return c.json({ error: "rule definition required" }, 400);
+      }
+      const result = automationEngine.testRule(rule, mockPayload || {});
+      return c.json(result);
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -5658,6 +5752,9 @@ export function defineApi<
     }
     if (customFieldsStore) {
       (versionedApi as any).customFieldsStore = customFieldsStore;
+    }
+    if (automationEngine) {
+      (versionedApi as any).automationEngine = automationEngine;
     }
     return versionedApi as any;
   }
