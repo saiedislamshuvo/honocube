@@ -53,8 +53,14 @@ export interface NumberFieldConfig<TRecord = Record<string, unknown>> extends Ba
   min?: number;
   max?: number;
   step?: number;
-  format?: "currency" | "percent" | "number";
+  format?: "currency" | "percent" | "number" | string;
   currencyCode?: string;
+  prefix?: string;
+  suffix?: string;
+  precision?: number;
+  thousandSeparator?: boolean | string;
+  allowNegative?: boolean;
+  padDecimals?: boolean;
 }
 
 export interface DateFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
