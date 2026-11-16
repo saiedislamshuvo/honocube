@@ -22,6 +22,8 @@ import type {
   BarcodeFieldConfig,
   QRCodeFieldConfig,
   SignatureFieldConfig,
+  RichTextFieldConfig,
+  RichTextToolbarTool,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -48,6 +50,7 @@ import type {
   IBarcodeFieldBuilder,
   IQRCodeFieldBuilder,
   ISignatureFieldBuilder,
+  IRichTextFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -546,6 +549,29 @@ export class SignatureFieldBuilder<TRecord = Record<string, unknown>>
 
   signedAtField(fieldName: string): this {
     return this._set("signedAtField" as any, fieldName as any);
+  }
+}
+
+/**
+ * Rich text WYSIWYG formatted content field builder.
+ */
+export class RichTextFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<RichTextFieldConfig<TRecord>, string, TRecord>
+  implements IRichTextFieldBuilder<TRecord> {
+  toolbar(tools: RichTextToolbarTool[]): this {
+    return this._set("toolbar" as any, [...tools] as any);
+  }
+
+  minHeight(pixels: number): this {
+    return this._set("minHeight" as any, pixels as any);
+  }
+
+  maxHeight(pixels: number): this {
+    return this._set("maxHeight" as any, pixels as any);
+  }
+
+  format(fmt: "html" | "markdown" | "json"): this {
+    return this._set("format" as any, fmt as any);
   }
 }
 
@@ -1058,6 +1084,37 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new SignatureFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for rich text WYSIWYG formatted content fields.
+   */
+  richText(
+    labelOrConfig?: string | Partial<RichTextFieldConfig>,
+    label?: string
+  ): RichTextFieldBuilder {
+    let cfg: RichTextFieldConfig = {
+      type: "richtext",
+      minHeight: 180,
+      format: "html",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new RichTextFieldBuilder(cfg);
+  },
+
+  /**
+   * Alias for `richText`.
+   */
+  richtext(
+    labelOrConfig?: string | Partial<RichTextFieldConfig>,
+    label?: string
+  ): RichTextFieldBuilder {
+    return (this as any).richText(labelOrConfig, label);
   },
 
   /**

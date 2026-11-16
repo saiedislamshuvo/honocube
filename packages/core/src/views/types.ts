@@ -458,6 +458,22 @@ export interface SignaturePadProps {
   className?: string;
 }
 
+export interface RichTextEditorProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  toolbar?: Array<"headings" | "bold" | "italic" | "underline" | "strike" | "bulletList" | "orderedList" | "blockquote" | "codeBlock" | "link" | "clear">;
+  minHeight?: number;
+  maxHeight?: number;
+  format?: "html" | "markdown" | "json";
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

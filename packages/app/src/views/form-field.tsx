@@ -27,6 +27,7 @@ import { SlugInputField } from "./slug-input-field.js";
 import { BarcodeField } from "./barcode-field.js";
 import { QRCodeField } from "./qr-code-field.js";
 import { SignaturePad } from "./signature-pad.js";
+import { RichTextEditor } from "./rich-text-editor.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -475,6 +476,25 @@ export function FormField({
                 format={sigConfig.format}
                 signerName={signerName !== undefined ? String(signerName) : undefined}
                 signedAt={signedAt !== undefined ? String(signedAt) : undefined}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "richtext": {
+            const rtConfig = field as any;
+            return (
+              <RichTextEditor
+                id={name}
+                name={name}
+                value={fieldState.value}
+                onChange={onChange}
+                disabled={isDisabled}
+                placeholder={field.placeholder}
+                toolbar={rtConfig.toolbar}
+                minHeight={rtConfig.minHeight}
+                maxHeight={rtConfig.maxHeight}
+                format={rtConfig.format}
                 hasError={Boolean(errorMessage)}
               />
             );

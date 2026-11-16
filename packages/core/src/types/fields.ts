@@ -24,7 +24,8 @@ export type BaseFieldType =
   | "slug"
   | "barcode"
   | "qrcode"
-  | "signature";
+  | "signature"
+  | "richtext";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -249,6 +250,28 @@ export interface SignatureFieldConfig<TRecord = Record<string, unknown>> extends
   signedAtField?: string;
 }
 
+export type RichTextToolbarTool =
+  | "headings"
+  | "bold"
+  | "italic"
+  | "underline"
+  | "strike"
+  | "bulletList"
+  | "orderedList"
+  | "blockquote"
+  | "codeBlock"
+  | "link"
+  | "clear";
+
+export interface RichTextFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "richtext";
+  default?: string | (() => string);
+  toolbar?: RichTextToolbarTool[];
+  minHeight?: number;
+  maxHeight?: number;
+  format?: "html" | "markdown" | "json";
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -269,7 +292,8 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | SlugFieldConfig<TRecord>
   | BarcodeFieldConfig<TRecord>
   | QRCodeFieldConfig<TRecord>
-  | SignatureFieldConfig<TRecord>;
+  | SignatureFieldConfig<TRecord>
+  | RichTextFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
@@ -277,7 +301,7 @@ export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? DateRangeValue
   : TField extends { type: "tags" }
   ? string[]
-  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" | "barcode" | "qrcode" | "signature" }
+  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" | "barcode" | "qrcode" | "signature" | "richtext" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number

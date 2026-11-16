@@ -22,6 +22,8 @@ import type {
   BarcodeFieldConfig,
   QRCodeFieldConfig,
   SignatureFieldConfig,
+  RichTextFieldConfig,
+  RichTextToolbarTool,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -263,4 +265,15 @@ export interface ISignatureFieldBuilder<TRecord = Record<string, unknown>>
   format(fmt: "image/png" | "image/svg+xml" | "image/jpeg"): this;
   signerNameField(fieldName: string): this;
   signedAtField(fieldName: string): this;
+}
+
+/**
+ * Fluent builder for rich text WYSIWYG formatted content fields.
+ */
+export interface IRichTextFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<RichTextFieldConfig<TRecord>, string, TRecord> {
+  toolbar(tools: RichTextToolbarTool[]): this;
+  minHeight(pixels: number): this;
+  maxHeight(pixels: number): this;
+  format(fmt: "html" | "markdown" | "json"): this;
 }
