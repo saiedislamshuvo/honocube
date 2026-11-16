@@ -2,7 +2,7 @@ import type React from "react";
 import type { Collection, InferRecord, BulkAction } from "../types/collection.js";
 import type { CollectionListOptions } from "../table/types.js";
 import type { FormMode, FormFieldState, ChildCollectionHelper } from "../form/types.js";
-import type { FieldConfig, SubCollectionFieldConfig } from "../types/fields.js";
+import type { FieldConfig, SubCollectionFieldConfig, DateRangeValue } from "../types/fields.js";
 import type { ViewType } from "../types/views.js";
 import type { AvailableTransition } from "../workflow/types.js";
 
@@ -366,6 +366,21 @@ export interface PhoneInputFieldProps {
   defaultCountry?: string;
   allowedCountries?: string[];
   preferredCountries?: string[];
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface DateRangePickerProps {
+  id?: string;
+  name?: string;
+  value?: DateRangeValue | string | null;
+  onChange: (value: DateRangeValue) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  includeTime?: boolean;
+  format?: string;
+  presets?: boolean | string[];
   hasError?: boolean;
   className?: string;
 }

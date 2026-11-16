@@ -17,6 +17,12 @@ export { FormDialog } from "./views/form-dialog.js";
 export { FormSheet } from "./views/form-sheet.js";
 export { FormPage } from "./views/form-page.js";
 export { FormField } from "./views/form-field.js";
+export {
+  DateRangePicker,
+  DATE_RANGE_PRESETS,
+  parseDateRange,
+  type DateRangePreset,
+} from "./views/date-range-picker.js";
 export { FloatingSaveBar } from "./views/floating-save-bar.js";
 export {
   PhoneInputField,

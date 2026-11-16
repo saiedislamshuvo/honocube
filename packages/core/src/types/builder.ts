@@ -12,6 +12,8 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  DateRangeFieldConfig,
+  DateRangeValue,
   PhoneFieldConfig,
   ColorFieldConfig,
   IconFieldConfig,
@@ -159,6 +161,15 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
 }
 
 /**
+ * Fluent builder for date range and datetime range fields.
+ */
+export interface IDateRangeFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<DateRangeFieldConfig<TRecord>, DateRangeValue, TRecord> {
+  includeTime(include?: boolean): this;
+  format(formatString: string): this;
+  presets(presetList: boolean | string[]): this;
+}
+
 /**
  * Fluent builder for international phone input fields.
  */

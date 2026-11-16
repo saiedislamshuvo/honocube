@@ -12,6 +12,8 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  DateRangeFieldConfig,
+  DateRangeValue,
   PhoneFieldConfig,
   ColorFieldConfig,
   IconFieldConfig,
@@ -34,6 +36,7 @@ import type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  IDateRangeFieldBuilder,
   IPhoneFieldBuilder,
   IColorFieldBuilder,
   IIconFieldBuilder,
@@ -313,6 +316,25 @@ export class MediaFieldBuilder<TRecord = Record<string, unknown>>
 
   uploadEndpoint(endpoint: string): this {
     return this._set("uploadEndpoint" as any, endpoint as any);
+  }
+}
+
+/**
+ * Date range and datetime range field builder.
+ */
+export class DateRangeFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<DateRangeFieldConfig<TRecord>, DateRangeValue, TRecord>
+  implements IDateRangeFieldBuilder<TRecord> {
+  includeTime(include: boolean = true): this {
+    return this._set("includeTime" as any, include as any);
+  }
+
+  format(formatString: string): this {
+    return this._set("format" as any, formatString as any);
+  }
+
+  presets(presetList: boolean | string[]): this {
+    return this._set("presets" as any, presetList as any);
   }
 }
 
@@ -720,6 +742,26 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new MediaFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for date range and datetime range fields.
+   */
+  dateRange(
+    labelOrConfig?: string | Partial<DateRangeFieldConfig>,
+    label?: string
+  ): DateRangeFieldBuilder {
+    let cfg: DateRangeFieldConfig = {
+      type: "daterange",
+      presets: true,
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new DateRangeFieldBuilder(cfg);
   },
 
   /**
