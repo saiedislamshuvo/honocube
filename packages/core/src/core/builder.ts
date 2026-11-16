@@ -13,6 +13,10 @@ import type {
   ComputedFieldConfig,
   MediaFieldConfig,
   PhoneFieldConfig,
+  ColorFieldConfig,
+  IconFieldConfig,
+  TagsFieldConfig,
+  SlugFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -31,6 +35,10 @@ import type {
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
   IPhoneFieldBuilder,
+  IColorFieldBuilder,
+  IIconFieldBuilder,
+  ITagsFieldBuilder,
+  ISlugFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -324,6 +332,82 @@ export class PhoneFieldBuilder<TRecord = Record<string, unknown>>
 
   preferredCountries(isoCodes: string[]): this {
     return this._set("preferredCountries" as any, [...isoCodes] as any);
+  }
+}
+
+/**
+ * Visual color picker field builder.
+ */
+export class ColorFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<ColorFieldConfig<TRecord>, string, TRecord>
+  implements IColorFieldBuilder<TRecord> {
+  presets(swatches: string[]): this {
+    return this._set("presets" as any, [...swatches] as any);
+  }
+
+  format(fmt: "hex" | "rgb" | "hsl"): this {
+    return this._set("format" as any, fmt as any);
+  }
+}
+
+/**
+ * Icon picker field builder.
+ */
+export class IconFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<IconFieldConfig<TRecord>, string, TRecord>
+  implements IIconFieldBuilder<TRecord> {
+  icons(iconList: string[]): this {
+    return this._set("icons" as any, [...iconList] as any);
+  }
+}
+
+/**
+ * Tags and chip multi-select field builder.
+ */
+export class TagsFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<TagsFieldConfig<TRecord>, string[], TRecord>
+  implements ITagsFieldBuilder<TRecord> {
+  maxTags(count: number): this {
+    return this._set("maxTags" as any, count as any);
+  }
+
+  suggestions(items: string[]): this {
+    return this._set("suggestions" as any, [...items] as any);
+  }
+
+  delimiters(delims: string[]): this {
+    return this._set("delimiters" as any, [...delims] as any);
+  }
+
+  allowDuplicates(allow: boolean = true): this {
+    return this._set("allowDuplicates" as any, allow as any);
+  }
+}
+
+/**
+ * URL-friendly slug field builder.
+ */
+export class SlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord>
+  implements ISlugFieldBuilder<TRecord> {
+  from(sourceField: keyof TRecord | string): this {
+    return this._set("from" as any, sourceField as any);
+  }
+
+  separator(sep: string): this {
+    return this._set("separator" as any, sep as any);
+  }
+
+  lowercase(enable: boolean = true): this {
+    return this._set("lowercase" as any, enable as any);
+  }
+
+  locked(isLocked: boolean = true): this {
+    return this._set("locked" as any, isLocked as any);
+  }
+
+  slugify(fn: (text: string) => string): this {
+    return this._set("slugify" as any, fn as any);
   }
 }
 
@@ -653,6 +737,73 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new PhoneFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for visual color picker fields.
+   */
+  color(labelOrConfig?: string | Partial<ColorFieldConfig>, label?: string): ColorFieldBuilder {
+    let cfg: ColorFieldConfig = {
+      type: "color",
+      format: "hex",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new ColorFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for icon picker fields.
+   */
+  icon(labelOrConfig?: string | Partial<IconFieldConfig>, label?: string): IconFieldBuilder {
+    let cfg: IconFieldConfig = {
+      type: "icon",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new IconFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for tags and multi-chip input fields.
+   */
+  tags(labelOrConfig?: string | Partial<TagsFieldConfig>, label?: string): TagsFieldBuilder {
+    let cfg: TagsFieldConfig = {
+      type: "tags",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new TagsFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for URL-friendly slug fields.
+   */
+  slug(labelOrConfig?: string | Partial<SlugFieldConfig>, label?: string): SlugFieldBuilder {
+    let cfg: SlugFieldConfig = {
+      type: "slug",
+      separator: "-",
+      lowercase: true,
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new SlugFieldBuilder(cfg);
   },
 
   /**

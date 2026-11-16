@@ -13,6 +13,10 @@ import type {
   ComputedFieldConfig,
   MediaFieldConfig,
   PhoneFieldConfig,
+  ColorFieldConfig,
+  IconFieldConfig,
+  TagsFieldConfig,
+  SlugFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -155,6 +159,7 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
 }
 
 /**
+/**
  * Fluent builder for international phone input fields.
  */
 export interface IPhoneFieldBuilder<TRecord = Record<string, unknown>>
@@ -162,4 +167,45 @@ export interface IPhoneFieldBuilder<TRecord = Record<string, unknown>>
   defaultCountry(isoCode: string): this;
   allowedCountries(isoCodes: string[]): this;
   preferredCountries(isoCodes: string[]): this;
+}
+
+/**
+ * Fluent builder for visual color picker fields.
+ */
+export interface IColorFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<ColorFieldConfig<TRecord>, string, TRecord> {
+  presets(swatches: string[]): this;
+  format(fmt: "hex" | "rgb" | "hsl"): this;
+}
+
+/**
+ * Fluent builder for icon picker fields.
+ */
+export interface IIconFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<IconFieldConfig<TRecord>, string, TRecord> {
+  icons(iconList: string[]): this;
+}
+
+/**
+ * Fluent builder for tags and multi-chip input fields.
+ */
+export interface ITagsFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<TagsFieldConfig<TRecord>, string[], TRecord> {
+  maxTags(count: number): this;
+  suggestions(suggestions: string[]): this;
+  delimiters(delimiters: string[]): this;
+  allowDuplicates(allow?: boolean): this;
+}
+
+/**
+ * Fluent builder for URL-friendly slug fields.
+ */
+export interface ISlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord> {
+  from(sourceField: keyof TRecord | string): this;
+  separator(sep: string): this;
+  lowercase(enable?: boolean): this;
+  locked(isLocked?: boolean): this;
+  slugify(fn: (text: string) => string): this;
+}
 }
