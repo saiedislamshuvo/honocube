@@ -74,6 +74,7 @@ export interface CollectionListOptions<TCollection extends Collection<any>> {
   onUrlChange?: (newUrl: string) => void;
   columns?: ColumnDef<InferRecord<TCollection>, any>[];
   enableRowSelection?: boolean;
+  initialRowSelection?: Record<string, boolean>;
   getRowId?: (row: InferRecord<TCollection>, index: number) => string;
 }
 

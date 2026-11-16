@@ -2312,6 +2312,68 @@ export function defineResource<
     });
   }
 
+  if (methods.has("batch-update") || methods.has("update")) {
+    app.post("/batch-toggle", async (c) => {
+      const adapter = getAdapter(c);
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+      await checkRateLimit(c, appContext);
+      await checkAccess(appContext, "update");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+      const body = await c.req.json();
+      const ids: Array<string | number> = Array.isArray(body?.ids) ? body.ids : [];
+      const field = typeof body?.field === "string" ? body.field : "";
+      const explicitValue: boolean | undefined = typeof body?.value === "boolean" ? body.value : undefined;
+
+      if (ids.length === 0) {
+        throw new ApiError(400, "MISSING_IDS", "Batch toggle requires an array of record 'ids'.");
+      }
+      if (!field) {
+        throw new ApiError(400, "MISSING_FIELD", "Batch toggle requires a target 'field' name.");
+      }
+
+      const updatedRecords: any[] = [];
+      await runTransaction(c, async (tx) => {
+        for (const targetId of ids) {
+          const recordPredicate = buildRecordPredicate(targetId, appContext, adapter, tenancy.tenantCondition);
+          const existing = await adapter.findFirst(config.table, {
+            where: recordPredicate,
+          });
+          if (!existing) continue;
+
+          await checkAccess(appContext, "update", existing);
+          await checkWorkflowParentLock(adapter, existing);
+
+          const nextVal = explicitValue !== undefined ? explicitValue : !existing[field];
+          const sanitized = await sanitizeWritePayload({ [field]: nextVal }, appContext, existing);
+
+          const ts = getTimestampFields();
+          const payload: Record<string, any> = { ...sanitized };
+          if (ts && ts.updated) {
+            payload[ts.updated] = new Date().toISOString();
+          }
+
+          let query: any = tx.updateStmt(config.table, targetId, payload as any);
+          if (recordPredicate) {
+            query = query.where(recordPredicate);
+          }
+          const results = await query;
+          const updated = Array.isArray(results) ? results[0] : results;
+          updatedRecords.push(updated);
+        }
+      });
+
+      await invalidateCache();
+
+      return c.json({
+        success: true,
+        count: updatedRecords.length,
+        field,
+        data: updatedRecords,
+      });
+    });
+  }
+
   if (methods.has("batch-delete")) {
     app.post("/batch-delete", async (c) => {
       // Resolve the adapter early, so a missing one is reported before any
@@ -3947,6 +4009,67 @@ function buildDateBucketSql(
       return c.json({
         success: true,
         data: await finalize(finalRecord as TSelect, appContext, config, c, "detail")
+      });
+    });
+
+    app.post("/:id/toggle/:field", async (c) => {
+      const adapter = getAdapter(c);
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+      await checkRateLimit(c, appContext);
+      const id = c.req.param("id");
+      const field = c.req.param("field");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.tenantCondition);
+
+      const existingRecord = await adapter.findFirst(config.table, {
+        where: recordPredicate,
+      });
+
+      if (!existingRecord) throw ApiError.notFound();
+
+      await checkAccess(appContext, "update", existingRecord);
+      await checkWorkflowParentLock(adapter, existingRecord);
+
+      if (!(field in existingRecord)) {
+        throw new ApiError(400, "INVALID_FIELD", `Field '${field}' does not exist on resource '${config.name}'.`);
+      }
+
+      let targetValue: boolean;
+      try {
+        const body = await c.req.json();
+        if (body && typeof body.value === "boolean") {
+          targetValue = body.value;
+        } else {
+          targetValue = !existingRecord[field];
+        }
+      } catch {
+        targetValue = !existingRecord[field];
+      }
+
+      const sanitized = await sanitizeWritePayload({ [field]: targetValue }, appContext, existingRecord);
+
+      const updated = await runTransaction(c, async (tx) => {
+        const ts = getTimestampFields();
+        const payload: Record<string, any> = { ...sanitized };
+        if (ts && ts.updated) {
+          payload[ts.updated] = new Date().toISOString();
+        }
+        let query: any = tx.updateStmt(config.table, id, payload as any);
+        if (recordPredicate) {
+          query = query.where(recordPredicate);
+        }
+        const results = await query;
+        return Array.isArray(results) ? results[0] : results;
+      });
+
+      await invalidateCache();
+
+      return c.json({
+        success: true,
+        field,
+        value: targetValue,
+        data: await finalize(updated as TSelect, appContext, config, c, "detail"),
       });
     });
   }

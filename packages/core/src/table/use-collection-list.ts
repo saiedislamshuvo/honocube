@@ -56,7 +56,9 @@ export function useCollectionList<TCollection extends Collection<any>>(
     urlState.filters || initialFilters
   );
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>(
+    options.initialRowSelection || {}
+  );
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
   // 2. Parse Sort String ("-field", "field:desc", "field")

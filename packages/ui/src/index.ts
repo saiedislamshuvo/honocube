@@ -50,6 +50,7 @@ export { Toaster, toast, type ToasterProps } from "./components/sonner.js";
 // Form Controls
 export { Calendar, type CalendarProps } from "./components/calendar.js";
 export { Checkbox } from "./components/checkbox.js";
+export { Switch, type SwitchProps } from "./components/switch.js";
 export { Input, type InputProps } from "./components/input.js";
 export { Textarea, type TextareaProps } from "./components/textarea.js";
 export {

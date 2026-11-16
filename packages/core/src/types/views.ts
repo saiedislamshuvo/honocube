@@ -14,6 +14,7 @@ export interface TableViewConfig<TFieldKeys extends string = string> {
   search?: TFieldKeys[];
   filters?: TFieldKeys[];
   pageSize?: number;
+  inlineToggle?: boolean | TFieldKeys[];
 }
 
 export interface ListViewConfig<TFieldKeys extends string = string> {
