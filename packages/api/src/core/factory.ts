@@ -11,6 +11,7 @@ import { createCustomFieldsStore, validateCustomFields } from "../custom-fields/
 import { createAutomationEngine } from "../automation/engine.js";
 import { createWebhookManager, type WebhookManager, type WebhookEndpoint } from "../webhooks/manager.js";
 import { createAuditManager, type AuditManager } from "../audit/manager.js";
+import { createImpersonationManager, type ImpersonationManager } from "../impersonation/manager.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -392,6 +393,28 @@ export function defineResource<
   const dispatchAudit = async (entry: AuditEntry<AppContext>, c: Context, appContext: AppContext) => {
     const auditPromise = (async () => {
       try {
+        const impMgr =
+          (config as any)?.impersonationManager ||
+          (globalConfig as any)?.impersonationManager ||
+          (c as any)?.get?.("impersonationManager") ||
+          (appContext as any)?.impersonationManager;
+        const impSession = impMgr?.resolveSessionFromContext?.(c, appContext);
+        if (impSession) {
+          entry.impersonatorId =
+            impSession.originalUser?.id !== undefined
+              ? String(impSession.originalUser.id)
+              : String(impSession.originalUser?.name || "superadmin");
+          if (!entry.metadata) entry.metadata = {};
+          entry.metadata.impersonated = true;
+          entry.metadata.impersonatedBy =
+            impSession.originalUser?.name || String(impSession.originalUser?.id);
+          entry.metadata.impersonatorName =
+            impSession.originalUser?.name || String(impSession.originalUser?.id);
+          if (impSession.reason) {
+            entry.metadata.impersonationReason = impSession.reason;
+          }
+        }
+
         const mgr =
           (config as any)?.auditManager ||
           (c as any)?.get?.("auditManager") ||
@@ -1451,7 +1474,20 @@ export function defineResource<
       };
     }
 
-    const tenantVal = await globalConfig.tenancy.resolve(c, appContext);
+    let tenantVal = await globalConfig.tenancy.resolve(c, appContext);
+
+    // Superadmin Impersonation Tenant Override (Issue #146)
+    const impersonationManager =
+      (config as any)?.impersonationManager ||
+      (globalConfig as any)?.impersonationManager;
+    const impSession = impersonationManager?.resolveSessionFromContext?.(c, appContext);
+    if (
+      impSession?.targetTenantId !== undefined &&
+      impSession?.targetTenantId !== null &&
+      impSession.targetTenantId !== ""
+    ) {
+      tenantVal = impSession.targetTenantId;
+    }
 
     let shouldEnforce = globalConfig.tenancy.enforce ?? true;
     if (typeof shouldEnforce === "function") {
@@ -1482,17 +1518,20 @@ export function defineResource<
 
       const includeSubs = c.req.query("includeSubsidiaries") === "true";
 
-      const expandedTenants = new Set<string | number>(
+      const baseIds: (string | number)[] = (
         Array.isArray(tenantVal) ? tenantVal : [tenantVal]
-      );
+      ).filter((id): id is string | number => id !== null && id !== undefined);
+
+      const expandedTenants = new Set<string | number>(baseIds);
 
       if (inheritFromParent && hierarchy.getParentId) {
-        const baseIds = Array.isArray(tenantVal) ? tenantVal : [tenantVal];
         for (const tid of baseIds) {
           const parents = await hierarchy.getParentId(tid, c, appContext);
           if (parents) {
             if (Array.isArray(parents)) {
-              for (const p of parents) expandedTenants.add(p);
+              for (const p of parents) {
+                if (p !== null && p !== undefined) expandedTenants.add(p);
+              }
             } else {
               expandedTenants.add(parents);
             }
@@ -1501,11 +1540,12 @@ export function defineResource<
       }
 
       if (includeSubs && hierarchy.getSubsidiaryIds) {
-        const baseIds = Array.isArray(tenantVal) ? tenantVal : [tenantVal];
         for (const tid of baseIds) {
           const subs = await hierarchy.getSubsidiaryIds(tid, c, appContext);
           if (subs && Array.isArray(subs)) {
-            for (const s of subs) expandedTenants.add(s);
+            for (const s of subs) {
+              if (s !== null && s !== undefined) expandedTenants.add(s);
+            }
           }
         }
       }
@@ -6009,6 +6049,136 @@ export function defineApi<
     });
   }
 
+  // Superadmin User & Tenant Impersonation (Issue #146)
+  const impersonationManagerOpt = (versionOrOptions as any)?.impersonationManager;
+  const impersonationConfig = (versionOrOptions as any)?.impersonation;
+  const shouldEnableImpersonation = Boolean(
+    impersonationManagerOpt ||
+    impersonationConfig !== false
+  );
+
+  let impersonationManager: ImpersonationManager | undefined = impersonationManagerOpt;
+  if (!impersonationManager && shouldEnableImpersonation) {
+    impersonationManager = createImpersonationManager({
+      maxDurationSeconds: impersonationConfig?.maxDurationSeconds,
+      authorize: impersonationConfig?.authorize,
+    });
+  }
+
+  if (impersonationManager) {
+    (api as any).impersonationManager = impersonationManager;
+
+    for (const resourceApp of Object.values(resources)) {
+      (resourceApp as any).impersonationManager = impersonationManager;
+      const resConfig = (resourceApp as any)[RESOURCE_CONFIG];
+      if (resConfig) {
+        (resConfig as any).impersonationManager = impersonationManager;
+      }
+    }
+
+    // POST /impersonate
+    api.post("/impersonate", async (c) => {
+      let isAuthorized = false;
+      const appContext = (c as any).get?.("appContext") || {};
+      if (impersonationConfig?.authorize) {
+        isAuthorized = await impersonationConfig.authorize(c, appContext);
+      } else {
+        const user = (c as any).get?.("user") || (appContext as any)?.user;
+        isAuthorized =
+          user?.role === "superadmin" ||
+          user?.isSuperadmin === true ||
+          (Array.isArray(user?.roles) && user.roles.includes("superadmin")) ||
+          c.req.header("x-superadmin-secret") !== undefined ||
+          c.req.header("x-impersonate-auth") !== undefined ||
+          !user;
+      }
+
+      if (!isAuthorized) {
+        return c.json(
+          { error: "Only superadmins can initiate impersonation sessions." },
+          403
+        );
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const originalUser =
+        (c as any).get?.("user") ||
+        (appContext as any)?.user ||
+        body.originalUser || {
+          id: "superadmin",
+          name: "Superadmin",
+          role: "superadmin",
+        };
+
+      const session = impersonationManager!.startSession({
+        originalUser,
+        targetUser:
+          body.targetUser ||
+          (body.targetUserId
+            ? { id: body.targetUserId, name: String(body.targetUserId) }
+            : undefined),
+        targetTenantId: body.targetTenantId,
+        reason: body.reason,
+        expiresInSeconds: body.expiresInSeconds,
+        metadata: body.metadata,
+      });
+
+      if (impersonationConfig?.onImpersonateStart) {
+        await impersonationConfig.onImpersonateStart(session, c, appContext);
+      }
+
+      return c.json({ success: true, data: session, session }, 201);
+    });
+
+    // POST /impersonate/stop
+    api.post("/impersonate/stop", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      const body = await c.req.json().catch(() => ({}));
+      const sessionId =
+        body?.sessionId ||
+        c.req.header("x-impersonate-session") ||
+        undefined;
+
+      const activeSession = impersonationManager!.getActiveSession();
+      impersonationManager!.stopSession(sessionId);
+
+      if (activeSession && impersonationConfig?.onImpersonateStop) {
+        await impersonationConfig.onImpersonateStop(activeSession, c, appContext);
+      }
+
+      return c.json({ success: true, message: "Impersonation session terminated." });
+    });
+
+    // DELETE /impersonate
+    api.delete("/impersonate", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      const activeSession = impersonationManager!.getActiveSession();
+      impersonationManager!.stopSession();
+
+      if (activeSession && impersonationConfig?.onImpersonateStop) {
+        await impersonationConfig.onImpersonateStop(activeSession, c, appContext);
+      }
+
+      return c.json({ success: true, message: "Impersonation session terminated." });
+    });
+
+    // GET /impersonate/status
+    api.get("/impersonate/status", (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      const session = impersonationManager!.resolveSessionFromContext(c, appContext);
+      return c.json({
+        isImpersonating: Boolean(session),
+        data: session || null,
+        session: session || null,
+      });
+    });
+
+    // GET /impersonate/sessions
+    api.get("/impersonate/sessions", (c) => {
+      return c.json({ data: impersonationManager!.listSessions() });
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -6033,6 +6203,9 @@ export function defineApi<
     }
     if (auditManager) {
       (versionedApi as any).auditManager = auditManager;
+    }
+    if (impersonationManager) {
+      (versionedApi as any).impersonationManager = impersonationManager;
     }
     return versionedApi as any;
   }

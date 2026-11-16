@@ -3,6 +3,7 @@ import { SidebarInset, SidebarProvider, Toaster, cn } from "@honocube/ui";
 import { WorkspaceSidebar } from "./sidebar.js";
 import { WorkspaceTopbar } from "./topbar.js";
 import { Spotlight } from "./spotlight.js";
+import { ImpersonationBanner } from "./impersonation-banner.js";
 import { isHonoCubeTheme, type WorkspaceShellProps } from "@honocube/core";
 
 /**
@@ -33,6 +34,8 @@ export function WorkspaceShell({
   onCollapseChange: controlledOnCollapseChange,
   onNavigate,
   breadcrumbs,
+  impersonation,
+  onStopImpersonation,
   className = "",
 }: WorkspaceShellProps): React.JSX.Element {
   const tenantSwitcherPosition =
@@ -100,6 +103,12 @@ export function WorkspaceShell({
 
         {/* 2. Main Viewport (SidebarInset + Topbar + Page View) */}
         <SidebarInset className="flex flex-1 flex-col overflow-hidden">
+          {impersonation && (
+            <ImpersonationBanner
+              session={impersonation}
+              onStopImpersonation={onStopImpersonation}
+            />
+          )}
           <TopbarComponent
             app={app}
             pathname={pathname}

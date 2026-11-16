@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler, Hono } from "hono";
 import type { MergeSchemaPath, Schema } from "hono/types";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
+import type { ImpersonationManager, ImpersonationSession } from "./impersonation/manager.js";
 
 export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 412 | 422 | 429 | 500;
 
@@ -966,6 +967,7 @@ export interface AuditEntry<_AppContext = any> {
   recordId: string | number;
   action: AuditAction;
   actorId?: string | number | null;
+  impersonatorId?: string | number | null;
   tenantId?: string | number | null;
   diff?: AuditFieldDiff[];
   oldData?: Record<string, unknown> | null;
@@ -1318,6 +1320,30 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
     actionHandlers?: Record<string, any>;
   };
   automationEngine?: any;
+  impersonation?: AppImpersonationConfig<Env, AppContext>;
+  impersonationManager?: ImpersonationManager;
+}
+
+export interface AppImpersonationConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  enabled?: boolean;
+  authorize?: (
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => boolean | Promise<boolean>;
+  maxDurationSeconds?: number;
+  onImpersonateStart?: (
+    session: ImpersonationSession,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => void | Promise<void>;
+  onImpersonateStop?: (
+    session: ImpersonationSession,
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => void | Promise<void>;
 }
 
 export interface ResourceConfig<
