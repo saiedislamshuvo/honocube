@@ -26,6 +26,7 @@ export {
   SeriesFieldBuilder,
   SubCollectionFieldBuilder,
   MediaFieldBuilder,
+  TagsFieldBuilder,
   SlugFieldBuilder,
 } from "./core/builder.js";
 export {
@@ -172,6 +173,7 @@ export type {
   FormPageProps,
   FormFieldProps,
   FloatingSaveBarProps,
+  TagsInputFieldProps,
   SlugInputFieldProps,
   UnsavedChangesDialogProps,
   ChildTableProps,
@@ -235,6 +237,7 @@ export type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  ITagsFieldBuilder,
   ISlugFieldBuilder,
 } from "./types/builder.js";
 
@@ -256,6 +259,7 @@ export type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  TagsFieldConfig,
   SlugFieldConfig,
   FieldConfig,
   InferFieldValue,

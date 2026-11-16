@@ -312,6 +312,22 @@ export interface SlugInputFieldProps {
   className?: string;
 }
 
+export interface TagsInputFieldProps {
+  id?: string;
+  name?: string;
+  value?: string[] | string | null;
+  onChange: (tags: string[]) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  maxTags?: number;
+  suggestions?: string[];
+  delimiters?: string[];
+  allowDuplicates?: boolean;
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

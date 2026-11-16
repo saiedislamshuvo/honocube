@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  TagsFieldConfig,
   SlugFieldConfig,
   DynamicRule,
 } from "./fields.js";
@@ -152,6 +153,17 @@ export interface IMediaFieldBuilder<TRecord = Record<string, unknown>>
   accept(acceptTypes: string): this;
   maxSize(bytes: number): this;
   uploadEndpoint(endpoint: string): this;
+}
+
+/**
+ * Fluent builder for tags and multi-chip input fields.
+ */
+export interface ITagsFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<TagsFieldConfig<TRecord>, string[], TRecord> {
+  maxTags(count: number): this;
+  suggestions(suggestions: string[]): this;
+  delimiters(delimiters: string[]): this;
+  allowDuplicates(allow?: boolean): this;
 }
 
 /**
