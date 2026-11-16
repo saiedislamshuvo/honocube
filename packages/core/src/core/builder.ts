@@ -12,6 +12,7 @@ import type {
   SubCollectionFieldConfig,
   ComputedFieldConfig,
   MediaFieldConfig,
+  SlugFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -29,6 +30,7 @@ import type {
   ISeriesFieldBuilder,
   ISubCollectionFieldBuilder,
   IMediaFieldBuilder,
+  ISlugFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -303,6 +305,33 @@ export class MediaFieldBuilder<TRecord = Record<string, unknown>>
 
   uploadEndpoint(endpoint: string): this {
     return this._set("uploadEndpoint" as any, endpoint as any);
+  }
+}
+
+/**
+ * URL-friendly slug field builder.
+ */
+export class SlugFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<SlugFieldConfig<TRecord>, string, TRecord>
+  implements ISlugFieldBuilder<TRecord> {
+  from(sourceField: keyof TRecord | string): this {
+    return this._set("from" as any, sourceField as any);
+  }
+
+  separator(sep: string): this {
+    return this._set("separator" as any, sep as any);
+  }
+
+  lowercase(enable: boolean = true): this {
+    return this._set("lowercase" as any, enable as any);
+  }
+
+  locked(isLocked: boolean = true): this {
+    return this._set("locked" as any, isLocked as any);
+  }
+
+  slugify(fn: (text: string) => string): this {
+    return this._set("slugify" as any, fn as any);
   }
 }
 
@@ -615,6 +644,24 @@ export const f = Object.assign(createFieldBuilder, {
     }
     if (label) cfg.label = label;
     return new MediaFieldBuilder(cfg);
+  },
+
+  /**
+   * Fluent builder for URL-friendly slug fields.
+   */
+  slug(labelOrConfig?: string | Partial<SlugFieldConfig>, label?: string): SlugFieldBuilder {
+    let cfg: SlugFieldConfig = {
+      type: "slug",
+      separator: "-",
+      lowercase: true,
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new SlugFieldBuilder(cfg);
   },
 
   /**

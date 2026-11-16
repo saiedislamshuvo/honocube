@@ -130,6 +130,7 @@ export function FormView<TCollection extends Collection<any>>({
         fieldState={getFieldState(fieldKey as any)}
         onChange={(val) => setFieldValue(fieldKey as any, val)}
         disabled={isFormDisabled}
+        values={formReturn.values}
       />
     );
   };
