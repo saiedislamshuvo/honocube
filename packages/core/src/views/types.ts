@@ -8,7 +8,7 @@ import type { AvailableTransition } from "../workflow/types.js";
 import type { InAppNotification, NotificationRule } from "../notifications/rules.js";
 import type { CustomFieldDefinition } from "../custom-fields/runtime.js";
 import type { AutomationRule, AutomationExecutionResult } from "../automation/index.js";
-import type { WebhookEndpoint, WebhookDeliveryRecord } from "@honocube/api";
+import type { WebhookEndpoint, WebhookDeliveryRecord, AuditEntry } from "@honocube/api";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1320,6 +1320,15 @@ export interface WebhookDeliveriesViewProps {
   endpoints?: WebhookEndpoint[];
   onRetryDelivery?: (deliveryId: string) => void | Promise<void>;
   onClearDeliveries?: () => void | Promise<void>;
+  isLoading?: boolean;
+  className?: string;
+}
+
+export interface AuditTrailViewProps {
+  entries?: AuditEntry[];
+  resource?: string;
+  recordId?: string | number;
+  onClearAudit?: () => void;
   isLoading?: boolean;
   className?: string;
 }

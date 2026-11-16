@@ -277,6 +277,7 @@ export type {
   AutomationHistoryViewProps,
   WebhookManagerDialogProps,
   WebhookDeliveriesViewProps,
+  AuditTrailViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -555,6 +556,19 @@ export type {
   WebhookManagerOptions,
   WebhookManager,
 } from "./webhooks/index.js";
+
+// Comprehensive Activity Logging & Mutation Audit Trail (Issue #144)
+export {
+  createAuditManager,
+} from "./audit/index.js";
+
+export type {
+  AuditManager,
+  AuditManagerOptions,
+  AuditQueryFilter,
+  AuditEntry,
+  AuditAction,
+} from "./audit/index.js";
 
 
 
