@@ -25,6 +25,7 @@ import {
 import { FormField } from "./form-field.js";
 import { ChildTable } from "./child-table.js";
 import { FloatingSaveBar } from "./floating-save-bar.js";
+import { RevisionConflictDialog } from "./revision-conflict-dialog.js";
 import { useUnsavedChangesGuard } from "../navigation/navigation-guard.js";
 
 export function FormView<TCollection extends Collection<any>>({
@@ -34,6 +35,7 @@ export function FormView<TCollection extends Collection<any>>({
   mode,
   onSuccess,
   onError,
+  onConflict,
   onCancel,
   onSubmit,
   user,
@@ -47,6 +49,7 @@ export function FormView<TCollection extends Collection<any>>({
   submitLabel,
   floatingSaveBar = true,
   unsavedChangesGuard = true,
+  revisionConflictDialog = true,
 }: FormViewProps<TCollection>): React.JSX.Element {
   // 1. Initialize Headless Collection Form Engine
   const formReturn = useCollectionForm(collection, {
@@ -55,6 +58,7 @@ export function FormView<TCollection extends Collection<any>>({
     mode,
     onSuccess,
     onError,
+    onConflict,
     onSubmit,
     user,
     parentRecord,
@@ -72,6 +76,8 @@ export function FormView<TCollection extends Collection<any>>({
     setFieldValue,
     child,
     mode: resolvedMode,
+    conflict,
+    resolveConflict,
   } = formReturn;
 
   const isLocked = Boolean(workflow?.isLocked);
@@ -307,6 +313,16 @@ export function FormView<TCollection extends Collection<any>>({
 
       {/* 6. Unsaved changes confirmation dialog if not wrapped in NavigationGuardProvider */}
       {renderDialog()}
+
+      {/* 7. Revision conflict resolution dialog when OCC collision is detected */}
+      {revisionConflictDialog !== false && conflict && (
+        <RevisionConflictDialog
+          conflict={conflict as any}
+          open={Boolean(conflict)}
+          onResolve={(action, merged) => resolveConflict(action, merged as any)}
+          onCancel={() => resolveConflict("cancel")}
+        />
+      )}
     </form>
   );
 }

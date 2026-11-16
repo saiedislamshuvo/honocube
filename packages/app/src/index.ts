@@ -54,6 +54,7 @@ export { RichTextEditor } from "./views/rich-text-editor.js";
 export { AsyncCombobox } from "./views/async-combobox.js";
 export { RepeaterField } from "./views/repeater-field.js";
 export { UnsavedChangesDialog } from "./views/unsaved-changes-dialog.js";
+export { RevisionConflictDialog, type RevisionConflictDialogProps } from "./views/revision-conflict-dialog.js";
 export { ChildTable } from "./views/child-table.js";
 export { KanbanView } from "./views/kanban-view.js";
 export { CalendarView } from "./views/calendar-view.js";

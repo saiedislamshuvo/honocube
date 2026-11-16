@@ -121,7 +121,17 @@ export type {
   FormMode,
   ChildCollectionHelper,
   FormNotifier,
+  RevisionConflict,
+  ConflictResolutionAction,
 } from "./form/types.js";
+
+// Optimistic Concurrency Control (OCC) Primitives
+export {
+  generateETag,
+  parseETag,
+  isRevisionConflict,
+  extractConflictDetails,
+} from "./concurrency/etag.js";
 
 // Headless Workflow State Machine Engine
 export { useCollectionWorkflow } from "./workflow/use-workflow.js";

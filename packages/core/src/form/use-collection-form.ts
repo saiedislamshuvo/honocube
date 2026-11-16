@@ -10,6 +10,8 @@ import { evaluateFieldCapability } from "./capabilities.js";
 import { validateField, validateRecord } from "./validation.js";
 import { createChildCollectionHelper } from "./child.js";
 import { useCollectionWorkflow } from "../workflow/use-workflow.js";
+import { extractConflictDetails } from "../concurrency/etag.js";
+import type { RevisionConflict, ConflictResolutionAction } from "../concurrency/types.js";
 import type {
   CollectionFormOptions,
   CollectionFormReturn,
@@ -87,6 +89,40 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     errorsRef.current = nextErrors;
     setErrorsState(nextErrors);
   }, []);
+
+  // Track optimistic concurrency control (OCC) revision conflict state
+  const [conflict, setConflictState] = useState<RevisionConflict<InferRecord<TCollection>> | null>(null);
+  const conflictRef = useRef<RevisionConflict<InferRecord<TCollection>> | null>(null);
+
+  const setConflict = useCallback((val: RevisionConflict<InferRecord<TCollection>> | null) => {
+    conflictRef.current = val;
+    setConflictState(val);
+  }, []);
+
+  const versionField = useMemo(() => {
+    if (typeof collection.versionControl === "object" && collection.versionControl?.field) {
+      return collection.versionControl.field;
+    }
+    return "version";
+  }, [collection.versionControl]);
+
+  const recordVersionRef = useRef<string | number | undefined>(undefined);
+
+  useEffect(() => {
+    if (serverRecord) {
+      const v = (serverRecord as any)?.[versionField] ?? (serverRecord as any)?._version;
+      if (v !== undefined) {
+        recordVersionRef.current = v;
+      }
+    }
+  }, [serverRecord, versionField]);
+
+  useEffect(() => {
+    const initialV = (initialValues as any)?.[versionField] ?? (initialValues as any)?._version;
+    if (initialV !== undefined && recordVersionRef.current === undefined) {
+      recordVersionRef.current = initialV;
+    }
+  }, [initialValues, versionField]);
 
   // Reset form when server record arrives for the specific ID
   const lastLoadedIdRef = useRef<string | number | undefined>(undefined);
@@ -265,10 +301,23 @@ export function useCollectionForm<TCollection extends Collection<any>>(
           await onSubmit(currentValues, { id, api: client });
         } else {
           if (isEdit && id !== undefined) {
+            const isOCC = Boolean(collection.versionControl || recordVersionRef.current !== undefined);
+            const updatePayload: any = { ...currentValues };
+            if (isOCC && recordVersionRef.current !== undefined && updatePayload[versionField] === undefined) {
+              updatePayload[versionField] = recordVersionRef.current;
+            }
+
             const res = await mutation.update.mutateAsync({
               id,
-              data: currentValues,
+              data: updatePayload,
+              ifMatch: isOCC ? recordVersionRef.current : undefined,
             });
+
+            const newVersion = (res.data as any)?.[versionField] ?? (res.data as any)?._version;
+            if (newVersion !== undefined) {
+              recordVersionRef.current = newVersion;
+            }
+            setConflict(null);
             notify?.success?.(
               `Updated ${collection.singular || collection.label || collection.name} successfully`
             );
@@ -283,6 +332,24 @@ export function useCollectionForm<TCollection extends Collection<any>>(
         }
       } catch (err: any) {
         const errorObj = err instanceof Error ? err : new Error(String(err));
+        const conflictDetails = extractConflictDetails<InferRecord<TCollection>>(
+          err,
+          id,
+          form.state.values
+        );
+
+        if (conflictDetails) {
+          setConflict(conflictDetails);
+          if (options.onConflict) {
+            await options.onConflict(conflictDetails);
+          }
+          notify?.error?.(
+            "Revision conflict: This record was modified by another transaction."
+          );
+          onError?.(errorObj);
+          return;
+        }
+
         notify?.error?.(
           errorObj.message ||
             `Failed to save ${collection.singular || collection.label || collection.name}`
@@ -295,6 +362,10 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     },
     [
       collection.fields,
+      collection.versionControl,
+      collection.singular,
+      collection.label,
+      collection.name,
       form,
       user,
       validator,
@@ -308,7 +379,89 @@ export function useCollectionForm<TCollection extends Collection<any>>(
       mutation.create,
       onSuccess,
       onError,
+      versionField,
+      options,
     ]
+  );
+
+  const resolveConflict = useCallback(
+    async (
+      action: ConflictResolutionAction,
+      mergedValues?: Partial<InferRecord<TCollection>>
+    ) => {
+      const activeConflict = conflictRef.current || conflict;
+      if (!activeConflict) return;
+
+      if (action === "cancel") {
+        setConflict(null);
+        return;
+      }
+
+      if (action === "reload") {
+        setConflict(null);
+        if (activeConflict.serverRecord) {
+          form.reset(activeConflict.serverRecord as InferRecord<TCollection>);
+          const serverV = (activeConflict.serverRecord as any)?.[versionField];
+          if (serverV !== undefined) recordVersionRef.current = serverV;
+        } else {
+          await query.refetch();
+        }
+        return;
+      }
+
+      if (action === "overwrite") {
+        setConflict(null);
+        const latestVersion = activeConflict.currentVersion ?? recordVersionRef.current;
+        if (latestVersion !== undefined) {
+          recordVersionRef.current = latestVersion;
+        }
+        const currentVals: any = { ...form.state.values };
+        if (latestVersion !== undefined) {
+          currentVals[versionField] = latestVersion;
+        }
+        await mutation.update.mutateAsync({
+          id: id!,
+          data: currentVals,
+          ifMatch: latestVersion,
+        });
+        const res = await query.refetch();
+        if (res.data?.data) {
+          const newV = (res.data.data as any)?.[versionField];
+          if (newV !== undefined) recordVersionRef.current = newV;
+        }
+        notify?.success?.(
+          `Overwritten ${collection.singular || collection.label || collection.name} successfully`
+        );
+        onSuccess?.(form.state.values);
+        return;
+      }
+
+      if (action === "merge") {
+        setConflict(null);
+        const latestVersion = activeConflict.currentVersion ?? recordVersionRef.current;
+        const combined: any = { ...form.state.values, ...(mergedValues || {}) };
+        if (latestVersion !== undefined) {
+          recordVersionRef.current = latestVersion;
+          combined[versionField] = latestVersion;
+        }
+        form.reset(combined as InferRecord<TCollection>);
+        await mutation.update.mutateAsync({
+          id: id!,
+          data: combined,
+          ifMatch: latestVersion,
+        });
+        const res = await query.refetch();
+        if (res.data?.data) {
+          const newV = (res.data.data as any)?.[versionField];
+          if (newV !== undefined) recordVersionRef.current = newV;
+        }
+        notify?.success?.(
+          `Merged & updated ${collection.singular || collection.label || collection.name} successfully`
+        );
+        onSuccess?.(combined as InferRecord<TCollection>);
+      }
+    },
+    [conflict, form, versionField, query, mutation.update, id, notify, collection, onSuccess, setConflict]
   );
 
   return {
@@ -338,5 +491,9 @@ export function useCollectionForm<TCollection extends Collection<any>>(
     workflow: collection.workflow ? workflowHelper : undefined,
     handleSubmit,
     reset,
+    get conflict() {
+      return conflictRef.current;
+    },
+    resolveConflict,
   };
 }

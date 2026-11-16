@@ -145,6 +145,10 @@ export function defineCollection(config: any): Collection<any> {
     identifier = { field: "id", ...(titleField ? { titleField } : {}) };
   }
 
+  const versionControl =
+    anyConfig.versionControl ??
+    (anyConfig.resource ? unwrapResourceConfig(anyConfig.resource).versionControl : undefined);
+
   const fieldKeys = Object.keys(derivedFields);
 
   const collection: Collection<any> = {
@@ -156,6 +160,7 @@ export function defineCollection(config: any): Collection<any> {
     table: tableViewConfig,
     defaultView,
     identifier,
+    versionControl,
     _isCollection: true,
     getField: (key: string) => (derivedFields as any)[key],
     getFieldKeys: () => fieldKeys,

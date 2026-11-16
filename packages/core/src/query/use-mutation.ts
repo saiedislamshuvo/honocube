@@ -4,14 +4,26 @@ import type { ApiResponse } from "../client/api-client.js";
 import { useApiClient } from "./provider.js";
 import { queryKeys } from "./keys.js";
 
+export interface UpdateMutationVariables<TData> {
+  id: string | number;
+  data: Partial<TData>;
+  headers?: Record<string, string>;
+  ifMatch?: string | number;
+}
+
+export type RemoveMutationVariables =
+  | string
+  | number
+  | { id: string | number; headers?: Record<string, string>; ifMatch?: string | number };
+
 export interface UseCollectionMutationResult<TCollection extends Collection<any>> {
   create: UseMutationResult<ApiResponse<InferRecord<TCollection>>, Error, Partial<InferRecord<TCollection>>>;
   update: UseMutationResult<
     ApiResponse<InferRecord<TCollection>>,
     Error,
-    { id: string | number; data: Partial<InferRecord<TCollection>> }
+    UpdateMutationVariables<InferRecord<TCollection>>
   >;
-  remove: UseMutationResult<ApiResponse<unknown>, Error, string | number>;
+  remove: UseMutationResult<ApiResponse<unknown>, Error, RemoveMutationVariables>;
 }
 
 export function useCollectionMutation<TCollection extends Collection<any>>(
@@ -33,13 +45,37 @@ export function useCollectionMutation<TCollection extends Collection<any>>(
   });
 
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: string | number; data: Partial<InferRecord<TCollection>> }) =>
-      client.patch<InferRecord<TCollection>>(`${endpoint}/${id}`, data),
+    mutationFn: ({ id, data, headers, ifMatch }: UpdateMutationVariables<InferRecord<TCollection>>) => {
+      const customHeaders: Record<string, string> = { ...(headers || {}) };
+      if (ifMatch !== undefined && ifMatch !== null) {
+        customHeaders["If-Match"] =
+          typeof ifMatch === "string" && (ifMatch.startsWith("W/") || ifMatch.startsWith('"'))
+            ? ifMatch
+            : `W/"${ifMatch}"`;
+      }
+      return Object.keys(customHeaders).length > 0
+        ? client.patch<InferRecord<TCollection>>(`${endpoint}/${id}`, data, { headers: customHeaders })
+        : client.patch<InferRecord<TCollection>>(`${endpoint}/${id}`, data);
+    },
     onSuccess: invalidate,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string | number) => client.delete(`${endpoint}/${id}`),
+    mutationFn: (param: RemoveMutationVariables) => {
+      const id = typeof param === "object" ? param.id : param;
+      const headers = typeof param === "object" ? param.headers : undefined;
+      const ifMatch = typeof param === "object" ? param.ifMatch : undefined;
+      const customHeaders: Record<string, string> = { ...(headers || {}) };
+      if (ifMatch !== undefined && ifMatch !== null) {
+        customHeaders["If-Match"] =
+          typeof ifMatch === "string" && (ifMatch.startsWith("W/") || ifMatch.startsWith('"'))
+            ? ifMatch
+            : `W/"${ifMatch}"`;
+      }
+      return Object.keys(customHeaders).length > 0
+        ? client.delete(`${endpoint}/${id}`, { headers: customHeaders })
+        : client.delete(`${endpoint}/${id}`);
+    },
     onSuccess: invalidate,
   });
 
