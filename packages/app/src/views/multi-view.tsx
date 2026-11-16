@@ -10,6 +10,7 @@ import { KanbanView } from "./kanban-view.js";
 import { CalendarView } from "./calendar-view.js";
 import { ListView } from "./list-view.js";
 import { GridView } from "./grid-view.js";
+import { TreeView } from "./tree-view.js";
 import { useAppTheme } from "../theme/theme-provider.js";
 
 export function CollectionMultiView<TCollection extends Collection<any>>({
@@ -31,6 +32,7 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
     if (collection.calendar) views.push("calendar");
     if (collection.list) views.push("list");
     if (collection.grid) views.push("grid");
+    if (collection.tree) views.push("tree");
 
     return views;
   }, [collection, propAvailableViews]);
@@ -49,6 +51,7 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
   const CalendarComponent = appTheme?.components?.views?.calendar || CalendarView;
   const ListComponent = appTheme?.components?.views?.list || ListView;
   const GridComponent = appTheme?.components?.views?.grid || GridView;
+  const TreeComponent = appTheme?.components?.views?.tree || TreeView;
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -106,6 +109,14 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
               <GridComponent
                 collection={collection}
                 onCardClick={handleRecordClick}
+              />
+            );
+
+          case "tree":
+            return (
+              <TreeComponent
+                collection={collection}
+                onNodeClick={handleRecordClick ? (rec) => handleRecordClick(rec) : undefined}
               />
             );
 

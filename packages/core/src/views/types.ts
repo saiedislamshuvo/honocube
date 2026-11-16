@@ -334,6 +334,44 @@ export interface GridViewProps<TCollection extends Collection<any>> {
   emptyText?: string;
 }
 
+export interface TreeNode<TRecord = Record<string, unknown>> {
+  id: string | number;
+  label: string;
+  title?: string;
+  record: TRecord;
+  parentId?: string | number | null;
+  children: TreeNode<TRecord>[];
+  depth: number;
+  hasChildren: boolean;
+  description?: string;
+  icon?: string;
+  badge?: string;
+  order?: number;
+}
+
+export interface TreeViewProps<TCollection extends Collection<any> = Collection<any>> {
+  collection: TCollection;
+  data?: Array<InferRecord<TCollection>>;
+  parentField?: string;
+  labelField?: string;
+  titleField?: string;
+  descriptionField?: string;
+  iconField?: string;
+  badgeField?: string;
+  orderField?: string;
+  initialExpandedDepth?: number;
+  defaultExpandedKeys?: Array<string | number>;
+  onNodeClick?: (record: InferRecord<TCollection>, node?: TreeNode<InferRecord<TCollection>>) => void;
+  onNodeExpand?: (node: TreeNode<InferRecord<TCollection>>, expanded: boolean) => void;
+  onAddChild?: (parentRecord: InferRecord<TCollection>, parentNode?: TreeNode<InferRecord<TCollection>>) => void;
+  onReparent?: (record: InferRecord<TCollection>, newParentId: string | number | null) => Promise<void> | void;
+  searchable?: boolean;
+  actions?: React.ReactNode;
+  allowDragAndDrop?: boolean;
+  className?: string;
+  emptyText?: string;
+}
+
 export interface ViewSwitcherProps {
   activeView: ViewType;
   onViewChange: (view: ViewType) => void;

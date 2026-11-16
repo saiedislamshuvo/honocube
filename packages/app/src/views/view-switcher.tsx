@@ -1,5 +1,5 @@
 import React from "react";
-import { Table2, Columns3, Calendar, List, LayoutGrid } from "lucide-react";
+import { Table2, Columns3, Calendar, List, LayoutGrid, FolderTree } from "lucide-react";
 import { Button } from "@honocube/ui";
 import { type ViewType, type ViewSwitcherProps } from "@honocube/core";
 
@@ -10,7 +10,7 @@ const VIEW_CONFIGS: Record<ViewType, { label: string; icon: React.ComponentType<
   list: { label: "List", icon: List },
   grid: { label: "Grid", icon: LayoutGrid },
   gantt: { label: "Gantt", icon: Calendar },
-  tree: { label: "Tree", icon: List },
+  tree: { label: "Tree", icon: FolderTree },
 };
 
 export function ViewSwitcher({

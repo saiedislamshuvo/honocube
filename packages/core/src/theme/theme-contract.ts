@@ -21,6 +21,7 @@ import type {
   CalendarViewProps,
   ListViewProps,
   GridViewProps,
+  TreeViewProps,
   ChildTableProps,
   SidePanelProps,
   DocumentHeaderProps,
@@ -72,6 +73,7 @@ export interface ThemeComponents {
     calendar?: React.ComponentType<CalendarViewProps<any>>;
     list?: React.ComponentType<ListViewProps<any>>;
     grid?: React.ComponentType<GridViewProps<any>>;
+    tree?: React.ComponentType<TreeViewProps<any>>;
     childTable?: React.ComponentType<ChildTableProps>;
     sidePanel?: React.ComponentType<SidePanelProps<any>>;
     documentHeader?: React.ComponentType<DocumentHeaderProps<any>>;

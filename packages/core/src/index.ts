@@ -176,6 +176,8 @@ export type {
   CalendarViewProps,
   ListViewProps,
   GridViewProps,
+  TreeViewProps,
+  TreeNode,
   ViewSwitcherProps,
   CollectionMultiViewProps,
   WorkflowActionBarProps,
