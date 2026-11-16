@@ -939,7 +939,7 @@ export interface SpreadsheetColumn {
   defaultValue?: unknown;
 }
 
-export interface SpreadsheetViewProps<TCollection extends Collection<any> = Collection<any>> {
+export interface SpreadsheetViewProps<TCollection extends Collection<any>> {
   collection?: TCollection;
   data?: Array<InferRecord<TCollection>>;
   initialData?: Array<Record<string, unknown>>;
@@ -954,4 +954,84 @@ export interface SpreadsheetViewProps<TCollection extends Collection<any> = Coll
   showToolbar?: boolean;
   className?: string;
   emptyText?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Print-Optimized Document Layout Types (Issue #122)
+// ---------------------------------------------------------------------------
+
+export type PaperSize = "a4" | "letter" | "legal" | "receipt80mm";
+export type PrintOrientation = "portrait" | "landscape";
+export type PrintDocumentLayout = "invoice" | "packing-slip" | "receipt" | "general";
+
+export interface PrintCompanyInfo {
+  name: string;
+  logo?: string;
+  address?: string | string[];
+  email?: string;
+  phone?: string;
+  website?: string;
+  taxId?: string;
+}
+
+export interface PrintCustomerInfo {
+  name: string;
+  company?: string;
+  address?: string | string[];
+  email?: string;
+  phone?: string;
+  taxId?: string;
+}
+
+export interface PrintDocumentItem {
+  id?: string | number;
+  sku?: string;
+  description: string;
+  quantity: number;
+  unitPrice?: number;
+  discount?: number | string;
+  taxRate?: number;
+  amount?: number;
+  notes?: string;
+  shipped?: boolean | number;
+}
+
+export interface PrintDocumentTotal {
+  label: string;
+  value: number | string;
+  isGrandTotal?: boolean;
+}
+
+export interface PrintDocumentProps {
+  layout?: PrintDocumentLayout;
+  paperSize?: PaperSize;
+  orientation?: PrintOrientation;
+  title?: string;
+  documentNumber?: string;
+  date?: string | Date;
+  dueDate?: string | Date;
+  status?: string;
+  company: PrintCompanyInfo;
+  customer?: PrintCustomerInfo;
+  shippingAddress?: PrintCustomerInfo;
+  items: PrintDocumentItem[];
+  totals?: PrintDocumentTotal[];
+  notes?: string;
+  terms?: string;
+  barcodeOrQrValue?: string;
+  signature?: {
+    label?: string;
+    signatureUrl?: string;
+    date?: string | Date;
+    signerName?: string;
+  };
+  className?: string;
+  showPrintButton?: boolean;
+  onPrint?: () => void;
+}
+
+export interface PrintDocumentDialogProps extends PrintDocumentProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  trigger?: React.ReactNode;
 }
