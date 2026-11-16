@@ -215,6 +215,17 @@ export type {
   AuditActivity,
   DocumentComment,
   DocumentAttachment,
+  ChartSeries,
+  ChartDataPoint,
+  BaseChartProps,
+  LineChartProps,
+  AreaChartProps,
+  BarChartProps,
+  PieChartItem,
+  DonutChartProps,
+  SparklineProps,
+  MetricCardProps,
+  AnalyticsChartCardProps,
 } from "./views/types.js";
 
 // Utilities & Formatting

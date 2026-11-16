@@ -21,6 +21,26 @@ export {
 export { encodeBarcode, type EncodedBarcode } from "./lib/barcode-encoder.js";
 export { encodeQRCode, type QrMatrix } from "./lib/qrcode-encoder.js";
 
+// Interactive Analytics & Chart Primitives
+export {
+  LineChart,
+  AreaChart,
+  BarChart,
+  DonutChart,
+  Sparkline,
+  ChartLegend,
+  DEFAULT_CHART_COLORS,
+  type ChartSeries,
+  type ChartDataPoint,
+  type BaseChartProps,
+  type LineChartProps,
+  type AreaChartProps,
+  type BarChartProps,
+  type PieChartItem,
+  type DonutChartProps,
+  type SparklineProps,
+} from "./components/charts.js";
+
 // Action & Feedback Components
 export { Button, buttonVariants, type ButtonProps } from "./components/button.js";
 export { Badge, badgeVariants, type BadgeProps } from "./components/badge.js";
