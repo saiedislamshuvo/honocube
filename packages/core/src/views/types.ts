@@ -445,6 +445,7 @@ export interface BarcodeFieldProps {
   height?: number;
   hasError?: boolean;
   className?: string;
+  showScanner?: boolean;
 }
 
 export interface QRCodeFieldProps {
@@ -460,6 +461,7 @@ export interface QRCodeFieldProps {
   includeMargin?: boolean;
   hasError?: boolean;
   className?: string;
+  showScanner?: boolean;
 }
 
 export interface SignaturePadProps {
@@ -1118,4 +1120,55 @@ export interface PdfPreviewDialogProps {
   title?: string;
   trigger?: React.ReactNode;
   onDownload?: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Barcode & QR Code Hardware/Camera Scanner Types (Issue #123)
+// ---------------------------------------------------------------------------
+
+export interface BarcodeScannerOptions {
+  onScan: (barcode: string) => void;
+  enabled?: boolean;
+  minLength?: number;
+  maxIntervalMs?: number;
+  preventDefault?: boolean;
+  sound?: boolean;
+}
+
+export interface BarcodeCameraScannerProps {
+  onScan: (barcode: string) => void;
+  onError?: (error: Error) => void;
+  facingMode?: "environment" | "user";
+  torch?: boolean;
+  aspectRatio?: number;
+  className?: string;
+}
+
+export interface BarcodeScannerDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onScan: (barcode: string) => void;
+  title?: string;
+  description?: string;
+  trigger?: React.ReactNode;
+  formats?: string[];
+}
+
+export interface VerificationItem {
+  id: string | number;
+  barcode: string;
+  name: string;
+  expectedQuantity: number;
+  verifiedQuantity: number;
+  sku?: string;
+  status?: "pending" | "verified" | "over";
+}
+
+export interface ScanVerificationWidgetProps {
+  items: VerificationItem[];
+  onItemVerified?: (item: VerificationItem, remaining: number) => void;
+  onComplete?: () => void;
+  title?: string;
+  autoFocus?: boolean;
+  className?: string;
 }

@@ -1,6 +1,8 @@
 import * as React from "react";
+import { ScanBarcode } from "lucide-react";
 import { Input, Barcode, Button, type BarcodeFormat } from "@honocube/ui";
 import type { BarcodeFieldProps } from "@honocube/core";
+import { BarcodeScannerDialog } from "./barcode-scanner-dialog.js";
 
 export const BarcodeField: React.FC<BarcodeFieldProps> = ({
   id,
@@ -16,8 +18,10 @@ export const BarcodeField: React.FC<BarcodeFieldProps> = ({
   height = 64,
   hasError = false,
   className = "",
+  showScanner = false,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [scannerOpen, setScannerOpen] = React.useState(false);
   const currentVal = value ?? "";
 
   const handleCopy = () => {
@@ -42,6 +46,23 @@ export const BarcodeField: React.FC<BarcodeFieldProps> = ({
           placeholder={placeholder}
           className={hasError ? "border-destructive focus-visible:ring-destructive" : ""}
         />
+
+        {showScanner && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setScannerOpen(true)}
+            disabled={disabled || readOnly}
+            data-testid="barcode-scan-button"
+            className="shrink-0 text-xs px-2.5 h-9 gap-1"
+            title="Scan barcode with camera or HID scanner"
+          >
+            <ScanBarcode className="h-4 w-4" />
+            <span>Scan</span>
+          </Button>
+        )}
+
         {currentVal && (
           <Button
             type="button"
@@ -72,6 +93,13 @@ export const BarcodeField: React.FC<BarcodeFieldProps> = ({
           Enter a code above to preview the scannable barcode
         </div>
       )}
+
+      <BarcodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScan={(scanned) => onChange(scanned)}
+        title="Scan Barcode"
+      />
     </div>
   );
 };

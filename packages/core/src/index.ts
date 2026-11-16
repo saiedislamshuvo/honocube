@@ -248,6 +248,11 @@ export type {
   PdfDocumentOptions,
   ExportPdfButtonProps,
   PdfPreviewDialogProps,
+  BarcodeScannerOptions,
+  BarcodeCameraScannerProps,
+  BarcodeScannerDialogProps,
+  VerificationItem,
+  ScanVerificationWidgetProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
