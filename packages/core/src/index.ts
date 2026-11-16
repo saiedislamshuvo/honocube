@@ -238,6 +238,16 @@ export type {
   PrintDocumentTotal,
   PrintDocumentProps,
   PrintDocumentDialogProps,
+  PdfPaperSize,
+  PdfOrientation,
+  PdfFont,
+  PdfRgbColor,
+  PdfMargin,
+  PdfTableColumn,
+  PdfTableOptions,
+  PdfDocumentOptions,
+  ExportPdfButtonProps,
+  PdfPreviewDialogProps,
 } from "./views/types.js";
 
 // Utilities & Formatting

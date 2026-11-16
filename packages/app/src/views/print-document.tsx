@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import {
   Printer,
+  FileDown,
   Building2,
   FileText,
   Package,
@@ -12,6 +13,7 @@ import type {
   PaperSize,
   PrintDocumentProps,
 } from "@honocube/core";
+import { exportDocumentToPdf, downloadPdf } from "../pdf/pdf-engine.js";
 
 // ---------------------------------------------------------------------------
 // Helpers: Print Styles Generator
@@ -77,27 +79,30 @@ function getPaperSizeStyles(size: PaperSize = "a4"): string {
 // Component: PrintDocument
 // ---------------------------------------------------------------------------
 
-export function PrintDocument({
-  layout = "invoice",
-  paperSize = "a4",
-  title,
-  documentNumber,
-  date,
-  dueDate,
-  status = "PAID",
-  company,
-  customer,
-  shippingAddress,
-  items = [],
-  totals = [],
-  notes,
-  terms,
-  barcodeOrQrValue,
-  signature,
-  className = "",
-  showPrintButton = true,
-  onPrint,
-}: PrintDocumentProps): React.JSX.Element {
+export function PrintDocument(props: PrintDocumentProps): React.JSX.Element {
+  const {
+    layout = "invoice",
+    paperSize = "a4",
+    title,
+    documentNumber,
+    date,
+    dueDate,
+    status = "PAID",
+    company,
+    customer,
+    shippingAddress,
+    items = [],
+    totals = [],
+    notes,
+    terms,
+    barcodeOrQrValue,
+    signature,
+    className = "",
+    showPrintButton = true,
+    onPrint,
+    showPdfExport = true,
+    onExportPdf,
+  } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const formattedDate = date
@@ -117,6 +122,16 @@ export function PrintDocument({
       onPrint();
     } else if (typeof window !== "undefined") {
       window.print();
+    }
+  };
+
+  const handleExportPdf = () => {
+    if (onExportPdf) {
+      onExportPdf();
+    } else {
+      const pdfBytes = exportDocumentToPdf(props);
+      const fname = `${(documentTitle || "document").toLowerCase().replace(/\s+/g, "-")}-${documentNumber || "export"}.pdf`;
+      downloadPdf(pdfBytes, fname);
     }
   };
 
@@ -216,16 +231,32 @@ export function PrintDocument({
             </Badge>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={handlePrint}
-            data-testid="print-button"
-            className="gap-1.5 h-8 px-3 text-xs shadow-sm"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            <span>Print Document</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            {showPdfExport && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+                data-testid="export-pdf-button"
+                className="gap-1.5 h-8 px-3 text-xs shadow-sm"
+              >
+                <FileDown className="h-3.5 w-3.5" />
+                <span>Export PDF</span>
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              size="sm"
+              onClick={handlePrint}
+              data-testid="print-button"
+              className="gap-1.5 h-8 px-3 text-xs shadow-sm"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              <span>Print Document</span>
+            </Button>
+          </div>
         </div>
       )}
 
@@ -243,30 +274,30 @@ export function PrintDocument({
            * 80mm THERMAL RECEIPT LAYOUT
            * ========================================================================= */
           <div className="space-y-3 text-center">
-            {company.logo && (
+            {company?.logo && (
               <div className="flex justify-center mb-1">
                 <img
                   src={company.logo}
-                  alt={company.name}
+                  alt={company.name || "Company"}
                   className="max-h-10 object-contain"
                 />
               </div>
             )}
             <div>
-              <h2 className="text-sm font-bold tracking-tight">{company.name}</h2>
-              {company.address && (
+              <h2 className="text-sm font-bold tracking-tight">{company?.name || "Company"}</h2>
+              {company?.address && (
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   {Array.isArray(company.address)
                     ? company.address.join(", ")
                     : company.address}
                 </p>
               )}
-              {company.taxId && (
+              {company?.taxId && (
                 <p className="text-[10px] text-muted-foreground">
                   Tax ID: {company.taxId}
                 </p>
               )}
-              {company.phone && (
+              {company?.phone && (
                 <p className="text-[10px] text-muted-foreground">
                   Tel: {company.phone}
                 </p>
@@ -361,27 +392,27 @@ export function PrintDocument({
             <div className="flex flex-wrap items-start justify-between gap-6 pb-6 border-b">
               {/* Company Profile */}
               <div className="space-y-2 max-w-sm">
-                {company.logo ? (
+                {company?.logo ? (
                   <img
                     src={company.logo}
-                    alt={company.name}
+                    alt={company.name || "Company"}
                     className="max-h-12 object-contain"
                   />
                 ) : (
                   <div className="flex items-center gap-2">
                     <Building2 className="h-6 w-6 text-primary" />
                     <span className="text-xl font-bold tracking-tight">
-                      {company.name}
+                      {company?.name || "Company"}
                     </span>
                   </div>
                 )}
 
-                {company.logo && (
+                {company?.logo && company.name && (
                   <div className="text-lg font-bold">{company.name}</div>
                 )}
 
                 <div className="text-xs text-muted-foreground space-y-0.5 leading-relaxed">
-                  {company.address && (
+                  {company?.address && (
                     <div>
                       {Array.isArray(company.address)
                         ? company.address.map((line, idx) => (
@@ -390,10 +421,10 @@ export function PrintDocument({
                         : company.address}
                     </div>
                   )}
-                  {company.taxId && <div>Tax ID / VAT: {company.taxId}</div>}
-                  {company.email && <div>Email: {company.email}</div>}
-                  {company.phone && <div>Tel: {company.phone}</div>}
-                  {company.website && <div>Web: {company.website}</div>}
+                  {company?.taxId && <div>Tax ID / VAT: {company.taxId}</div>}
+                  {company?.email && <div>Email: {company.email}</div>}
+                  {company?.phone && <div>Tel: {company.phone}</div>}
+                  {company?.website && <div>Web: {company.website}</div>}
                 </div>
               </div>
 
