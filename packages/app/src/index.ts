@@ -97,6 +97,9 @@ export {
   type BulkMediaStep,
 } from "./views/bulk-media-ingest-dialog.js";
 export { BulkMediaIngestButton } from "./views/bulk-media-ingest-button.js";
+export { NotificationBell } from "./views/notification-bell.js";
+export { NotificationRuleDialog } from "./views/notification-rule-dialog.js";
+
 
 
 // Programmatic PDF Export Engine & UI Primitives (Issue #133)

@@ -9,4 +9,6 @@ export * from "./utils/idempotency.js";
 export * from "./utils/rate-limit.js";
 export * from "./utils/openapi.js";
 export * from "./realtime/event-bus.js";
+export * from "./notifications/rules.js";
+export * from "./notifications/engine.js";
 export * from "./testing/index.js";

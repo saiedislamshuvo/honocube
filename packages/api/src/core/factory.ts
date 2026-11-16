@@ -6,6 +6,7 @@ import { createMemoryIdempotencyStorage, computeFingerprint } from "../utils/ide
 import { createMemoryRateLimitStore, parseWindow } from "../utils/rate-limit.js";
 import { generateOpenApiSpec, renderScalarDocsHtml } from "../utils/openapi.js";
 import { createEventBus } from "../realtime/event-bus.js";
+import { createNotificationEngine } from "../notifications/engine.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -5443,6 +5444,127 @@ export function defineApi<
     });
   }
 
+  // Event-Driven Notification Engine & Endpoints (Issue #140)
+  const notificationEngineOpt = (versionOrOptions as any)?.notificationEngine;
+  const notificationsConfig = (versionOrOptions as any)?.notifications;
+  const shouldEnableNotifications = Boolean(
+    notificationEngineOpt || notificationsConfig?.enabled || notificationsConfig?.rules
+  );
+
+  let notificationEngine: any = notificationEngineOpt;
+  if (!notificationEngine && shouldEnableNotifications) {
+    notificationEngine = createNotificationEngine({
+      eventBus,
+      store: notificationsConfig?.store,
+      initialRules: notificationsConfig?.rules,
+      channelHandlers: notificationsConfig?.channelHandlers,
+    });
+  } else if (notificationEngine && eventBus && !notificationEngine._eventBusAttached) {
+    notificationEngine._eventBusAttached = true;
+    eventBus.subscribe("*", (event: any) => {
+      if (event.resource === "notifications") return;
+      notificationEngine.processEvent(event);
+    });
+  }
+
+  if (notificationEngine) {
+    (api as any).notificationEngine = notificationEngine;
+
+    // GET /notifications
+    api.get("/notifications", (c) => {
+      const readParam = c.req.query("read");
+      const read = readParam !== undefined ? readParam === "true" : undefined;
+      const tenantId = c.req.query("tenantId");
+      const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 50;
+
+      const items = notificationEngine.store.list({ read, tenantId, limit });
+      const unreadCount = notificationEngine.store.list({ read: false, tenantId }).length;
+      return c.json({
+        data: items,
+        meta: {
+          total: items.length,
+          unreadCount,
+        },
+      });
+    });
+
+    // PATCH /notifications/:id/read
+    api.patch("/notifications/:id/read", (c) => {
+      const id = c.req.param("id");
+      const success = notificationEngine.store.markAsRead(id);
+      if (!success) {
+        return c.json({ error: "Notification not found" }, 404);
+      }
+      return c.json({ success: true, id });
+    });
+
+    // POST /notifications/mark-all-read
+    api.post("/notifications/mark-all-read", async (c) => {
+      let body: any = {};
+      try {
+        body = await c.req.json();
+      } catch {
+        // empty body allowed
+      }
+      const tenantId = body.tenantId || c.req.query("tenantId");
+      const count = notificationEngine.store.markAllAsRead(tenantId);
+      return c.json({ success: true, updatedCount: count });
+    });
+
+    // DELETE /notifications/:id
+    api.delete("/notifications/:id", (c) => {
+      const id = c.req.param("id");
+      const success = notificationEngine.store.delete(id);
+      return c.json({ success });
+    });
+
+    // GET /notification-rules
+    api.get("/notification-rules", (c) => {
+      const resource = c.req.query("resource");
+      const rules = notificationEngine.getRules(resource);
+      return c.json({ data: rules });
+    });
+
+    // POST /notification-rules
+    api.post("/notification-rules", async (c) => {
+      const body = await c.req.json();
+      if (!body.id) {
+        body.id = `rule_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      }
+      const created = notificationEngine.addRule(body);
+      return c.json({ data: created }, 201);
+    });
+
+    // PUT /notification-rules/:id
+    api.put("/notification-rules/:id", async (c) => {
+      const id = c.req.param("id");
+      const body = await c.req.json();
+      const updated = notificationEngine.updateRule(id, body);
+      if (!updated) {
+        return c.json({ error: "Rule not found" }, 404);
+      }
+      return c.json({ data: updated });
+    });
+
+    // DELETE /notification-rules/:id
+    api.delete("/notification-rules/:id", (c) => {
+      const id = c.req.param("id");
+      const success = notificationEngine.removeRule(id);
+      return c.json({ success });
+    });
+
+    // POST /notification-rules/test
+    api.post("/notification-rules/test", async (c) => {
+      const body = await c.req.json();
+      const { rule, mockEvent } = body;
+      if (!rule) {
+        return c.json({ error: "rule definition required" }, 400);
+      }
+      const result = notificationEngine.testRule(rule, mockEvent || {});
+      return c.json(result);
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -5452,6 +5574,9 @@ export function defineApi<
     if (eventBus) {
       (versionedApi as any).eventBus = eventBus;
       (versionedApi as any).broadcast = (api as any).broadcast;
+    }
+    if (notificationEngine) {
+      (versionedApi as any).notificationEngine = notificationEngine;
     }
     return versionedApi as any;
   }
