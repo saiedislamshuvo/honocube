@@ -13,6 +13,7 @@ import { KanbanView } from "../views/kanban-view.js";
 import { CalendarView } from "../views/calendar-view.js";
 import { ListView } from "../views/list-view.js";
 import { GridView } from "../views/grid-view.js";
+import { TreeView } from "../views/tree-view.js";
 import { ChildTable } from "../views/child-table.js";
 import { SidePanel } from "../views/side-panel.js";
 import { DocumentHeader } from "../views/document-header.js";
@@ -48,6 +49,7 @@ export const defaultTheme: HonoCubeTheme = {
       calendar: CalendarView,
       list: ListView,
       grid: GridView,
+      tree: TreeView,
       childTable: ChildTable,
       sidePanel: SidePanel,
       documentHeader: DocumentHeader,

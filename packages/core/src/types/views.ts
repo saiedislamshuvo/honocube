@@ -73,6 +73,13 @@ export interface GanttViewConfig<
 export interface TreeViewConfig<TFieldKeys extends string = string> {
   parentField: TFieldKeys;
   labelField?: TFieldKeys;
+  titleField?: TFieldKeys;
+  descriptionField?: TFieldKeys;
+  iconField?: TFieldKeys;
+  badgeField?: TFieldKeys;
+  orderField?: TFieldKeys;
+  initialExpandedDepth?: number;
+  allowDragAndDrop?: boolean;
 }
 
 /**
