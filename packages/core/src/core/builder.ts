@@ -21,6 +21,7 @@ import type {
   SlugFieldConfig,
   BarcodeFieldConfig,
   QRCodeFieldConfig,
+  SignatureFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -46,6 +47,7 @@ import type {
   ISlugFieldBuilder,
   IBarcodeFieldBuilder,
   IQRCodeFieldBuilder,
+  ISignatureFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -508,6 +510,42 @@ export class QRCodeFieldBuilder<TRecord = Record<string, unknown>>
 
   includeMargin(margin: boolean = true): this {
     return this._set("includeMargin" as any, margin as any);
+  }
+}
+
+/**
+ * Handwritten digital signature capture field builder.
+ */
+export class SignatureFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<SignatureFieldConfig<TRecord>, string, TRecord>
+  implements ISignatureFieldBuilder<TRecord> {
+  penColor(color: string): this {
+    return this._set("penColor" as any, color as any);
+  }
+
+  backgroundColor(color: string): this {
+    return this._set("backgroundColor" as any, color as any);
+  }
+
+  penWidth(width: number): this {
+    return this._set("penWidth" as any, width as any);
+  }
+
+  dimensions(width: number, height: number): this {
+    this._set("width" as any, width as any);
+    return this._set("height" as any, height as any);
+  }
+
+  format(fmt: "image/png" | "image/svg+xml" | "image/jpeg"): this {
+    return this._set("format" as any, fmt as any);
+  }
+
+  signerNameField(fieldName: string): this {
+    return this._set("signerNameField" as any, fieldName as any);
+  }
+
+  signedAtField(fieldName: string): this {
+    return this._set("signedAtField" as any, fieldName as any);
   }
 }
 
@@ -995,6 +1033,31 @@ export const f = Object.assign(createFieldBuilder, {
     label?: string
   ): QRCodeFieldBuilder {
     return (this as any).qrCode(labelOrConfig, label);
+  },
+
+  /**
+   * Fluent builder for handwritten digital signature capture fields.
+   */
+  signature(
+    labelOrConfig?: string | Partial<SignatureFieldConfig>,
+    label?: string
+  ): SignatureFieldBuilder {
+    let cfg: SignatureFieldConfig = {
+      type: "signature",
+      penColor: "#000000",
+      backgroundColor: "transparent",
+      penWidth: 2,
+      width: 400,
+      height: 160,
+      format: "image/png",
+    };
+    if (typeof labelOrConfig === "string") {
+      cfg.label = labelOrConfig;
+    } else if (labelOrConfig && typeof labelOrConfig === "object") {
+      cfg = { ...cfg, ...labelOrConfig };
+    }
+    if (label) cfg.label = label;
+    return new SignatureFieldBuilder(cfg);
   },
 
   /**

@@ -34,6 +34,7 @@ export {
   SlugFieldBuilder,
   BarcodeFieldBuilder,
   QRCodeFieldBuilder,
+  SignatureFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -181,6 +182,7 @@ export type {
   MaskedNumericInputProps,
   BarcodeFieldProps,
   QRCodeFieldProps,
+  SignaturePadProps,
   DateRangePickerProps,
   FloatingSaveBarProps,
   PhoneInputFieldProps,
@@ -258,6 +260,7 @@ export type {
   ISlugFieldBuilder,
   IBarcodeFieldBuilder,
   IQRCodeFieldBuilder,
+  ISignatureFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -287,6 +290,7 @@ export type {
   SlugFieldConfig,
   BarcodeFieldConfig,
   QRCodeFieldConfig,
+  SignatureFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";

@@ -439,6 +439,25 @@ export interface QRCodeFieldProps {
   className?: string;
 }
 
+export interface SignaturePadProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (value: string | null) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  penColor?: string;
+  backgroundColor?: string;
+  penWidth?: number;
+  width?: number;
+  height?: number;
+  format?: "image/png" | "image/svg+xml" | "image/jpeg";
+  signerName?: string;
+  signedAt?: string;
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

@@ -21,6 +21,7 @@ import type {
   SlugFieldConfig,
   BarcodeFieldConfig,
   QRCodeFieldConfig,
+  SignatureFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -248,4 +249,18 @@ export interface IQRCodeFieldBuilder<TRecord = Record<string, unknown>>
   size(pixelSize: number): this;
   level(ecl: "L" | "M" | "Q" | "H"): this;
   includeMargin(margin?: boolean): this;
+}
+
+/**
+ * Fluent builder for handwritten digital signature capture fields.
+ */
+export interface ISignatureFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<SignatureFieldConfig<TRecord>, string, TRecord> {
+  penColor(color: string): this;
+  backgroundColor(color: string): this;
+  penWidth(width: number): this;
+  dimensions(width: number, height: number): this;
+  format(fmt: "image/png" | "image/svg+xml" | "image/jpeg"): this;
+  signerNameField(fieldName: string): this;
+  signedAtField(fieldName: string): this;
 }

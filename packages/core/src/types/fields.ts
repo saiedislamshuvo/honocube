@@ -23,7 +23,8 @@ export type BaseFieldType =
   | "tags"
   | "slug"
   | "barcode"
-  | "qrcode";
+  | "qrcode"
+  | "signature";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -235,6 +236,19 @@ export interface QRCodeFieldConfig<TRecord = Record<string, unknown>> extends Ba
   includeMargin?: boolean;
 }
 
+export interface SignatureFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "signature";
+  default?: string | (() => string);
+  penColor?: string;
+  backgroundColor?: string;
+  penWidth?: number;
+  width?: number;
+  height?: number;
+  format?: "image/png" | "image/svg+xml" | "image/jpeg";
+  signerNameField?: string;
+  signedAtField?: string;
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -254,7 +268,8 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | TagsFieldConfig<TRecord>
   | SlugFieldConfig<TRecord>
   | BarcodeFieldConfig<TRecord>
-  | QRCodeFieldConfig<TRecord>;
+  | QRCodeFieldConfig<TRecord>
+  | SignatureFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
@@ -262,7 +277,7 @@ export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? DateRangeValue
   : TField extends { type: "tags" }
   ? string[]
-  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" | "barcode" | "qrcode" }
+  : TField extends { type: "text" | "textarea" | "series" | "slug" | "color" | "icon" | "phone" | "barcode" | "qrcode" | "signature" }
   ? string
   : TField extends { type: "number" | "currency" }
   ? number
