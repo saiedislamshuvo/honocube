@@ -102,9 +102,14 @@ export function createDrizzleAdapter(
       if (options.orderBy) {
         const orderList = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
         relOptions.orderBy = (cols: any) => 
-          orderList.map(({ field, direction }) =>
-            direction === "desc" ? desc(cols[field]) : asc(cols[field])
-          );
+          orderList.map((item: any) => {
+            if (item?.raw || item?.sql) {
+              const expr = item.raw || item.sql;
+              return item.direction === "desc" ? desc(expr) : asc(expr);
+            }
+            const { field, direction } = item;
+            return direction === "desc" ? desc(cols[field]) : asc(cols[field]);
+          }).filter(Boolean);
       }
 
       return await dbInstance.query[options.queryKey].findMany(relOptions);
@@ -125,7 +130,12 @@ export function createDrizzleAdapter(
     if (options.orderBy) {
       const orderList = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
       const clauses = orderList
-        .map(({ field, direction }) => {
+        .map((item: any) => {
+          if (item?.raw || item?.sql) {
+            const expr = item.raw || item.sql;
+            return item.direction === "desc" ? desc(expr) : asc(expr);
+          }
+          const { field, direction } = item;
           const column = table[field];
           return column ? (direction === "desc" ? desc(column) : asc(column)) : undefined;
         })
@@ -152,9 +162,14 @@ export function createDrizzleAdapter(
       if (options.orderBy) {
         const orderList = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
         relOptions.orderBy = (cols: any) => 
-          orderList.map(({ field, direction }) =>
-            direction === "desc" ? desc(cols[field]) : asc(cols[field])
-          );
+          orderList.map((item: any) => {
+            if (item?.raw || item?.sql) {
+              const expr = item.raw || item.sql;
+              return item.direction === "desc" ? desc(expr) : asc(expr);
+            }
+            const { field, direction } = item;
+            return direction === "desc" ? desc(cols[field]) : asc(cols[field]);
+          }).filter(Boolean);
       }
       return await dbInstance.query[options.queryKey].findFirst(relOptions);
     }
@@ -292,6 +307,16 @@ export function createDrizzleAdapter(
 
   const getDialect = (): DrizzleDialect => resolveDialect();
 
+  const execute = async (query: any): Promise<any> => {
+    if (typeof db.run === "function") {
+      return await db.run(query);
+    }
+    if (typeof db.execute === "function") {
+      return await db.execute(query);
+    }
+    throw new Error("Underlying database does not support execute or run");
+  };
+
   return {
     getOperators,
     getColumns,
@@ -313,5 +338,6 @@ export function createDrizzleAdapter(
     getDb,
     getSql,
     getDialect,
+    execute,
   };
 }

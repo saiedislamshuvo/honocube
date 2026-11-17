@@ -19,4 +19,5 @@ export * from "./impersonation/manager.js";
 export * from "./domains/manager.js";
 export * from "./backup/manager.js";
 export * from "./currency/manager.js";
+export * from "./search/engine.js";
 export * from "./testing/index.js";

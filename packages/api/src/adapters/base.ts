@@ -23,11 +23,18 @@ export interface DatabaseOperators {
   isNotNull: (...args: any[]) => any;
 }
 
+export interface OrderByItem {
+  field?: string;
+  direction?: "asc" | "desc";
+  raw?: unknown;
+  sql?: unknown;
+}
+
 export interface FindManyOptions {
   where?: unknown;
   limit?: number;
   offset?: number;
-  orderBy?: { field: string; direction: "asc" | "desc" };
+  orderBy?: OrderByItem | OrderByItem[];
   with?: unknown;
   queryKey?: string;
 }
@@ -36,7 +43,7 @@ export interface FindFirstOptions {
   where: unknown;
   with?: unknown;
   queryKey?: string;
-  orderBy?: { field: string; direction: "asc" | "desc" };
+  orderBy?: OrderByItem | OrderByItem[];
 }
 
 export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = unknown> {
@@ -68,6 +75,11 @@ export interface DatabaseAdapter<TTable = unknown, TSelect = unknown, TInsert = 
   
   // Batch support for D1 and other performance-sensitive environments
   batch<T = any>(stmts: any[]): Promise<T[]>;
+
+  /**
+   * Executes a raw SQL query or tagged template.
+   */
+  execute?(query: unknown): Promise<any>;
 
   /**
    * Whether the underlying driver exposes `db.batch()`.
