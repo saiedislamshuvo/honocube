@@ -24,6 +24,11 @@ import type {
   BackupType,
   RestoreOptions,
 } from "../backup/types.js";
+import type {
+  CurrencyDefinition,
+  ExchangeRate,
+  ConversionResult,
+} from "../currency/types.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1500,6 +1505,41 @@ export interface BackupManagerViewProps {
   isLoading?: boolean;
   className?: string;
 }
+
+export interface CurrencyConverterWidgetProps {
+  currencies?: CurrencyDefinition[];
+  rates?: ExchangeRate[];
+  baseCurrency?: string;
+  initialAmount?: number;
+  initialFrom?: string;
+  initialTo?: string;
+  onConvert?: (result: ConversionResult) => void;
+  className?: string;
+}
+
+export interface ExchangeRateDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currencies?: CurrencyDefinition[];
+  baseCurrency?: string;
+  existingRate?: ExchangeRate;
+  onSave?: (rate: { from: string; to: string; rate: number; source?: string }) => void | Promise<void>;
+  isSaving?: boolean;
+  className?: string;
+}
+
+export interface CurrencySettingsViewProps {
+  currencies?: CurrencyDefinition[];
+  rates?: ExchangeRate[];
+  baseCurrency?: string;
+  onSetBaseCurrency?: (code: string) => void | Promise<void>;
+  onAddCurrency?: (currency: CurrencyDefinition) => void | Promise<void>;
+  onToggleCurrency?: (code: string, enabled: boolean) => void | Promise<void>;
+  onSaveRate?: (rate: { from: string; to: string; rate: number; source?: string }) => void | Promise<void>;
+  onDeleteRate?: (from: string, to: string) => void | Promise<void>;
+  className?: string;
+}
+
 
 
 

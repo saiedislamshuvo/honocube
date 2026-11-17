@@ -14,6 +14,7 @@ import { createAuditManager, type AuditManager } from "../audit/manager.js";
 import { createImpersonationManager, type ImpersonationManager } from "../impersonation/manager.js";
 import { createDomainManager, type DomainManager } from "../domains/manager.js";
 import { createBackupManager, type BackupManager } from "../backup/manager.js";
+import { createCurrencyManager, type CurrencyManager } from "../currency/manager.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -136,10 +137,21 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
     }
   }
 
+  // Setup currency manager if currency config or currencyManager provided
+  const currencyOpt = appConfig.currency || appConfig.currencyManager;
+  if (currencyOpt && !appConfig.currencyManager) {
+    if (typeof currencyOpt === "object" && "convert" in currencyOpt) {
+      appConfig.currencyManager = currencyOpt as CurrencyManager;
+    } else {
+      appConfig.currencyManager = createCurrencyManager(currencyOpt as any);
+    }
+  }
+
   return {
     eventBus: appConfig.eventBus!,
     domainManager: appConfig.domainManager,
     backupManager: appConfig.backupManager,
+    currencyManager: appConfig.currencyManager,
 
     defineResource: <
       TTable,
@@ -168,11 +180,15 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
         if (!(finalOpts as any).backupManager && appConfig.backupManager) {
           (finalOpts as any).backupManager = appConfig.backupManager;
         }
+        if (!(finalOpts as any).currencyManager && appConfig.currencyManager) {
+          (finalOpts as any).currencyManager = appConfig.currencyManager;
+        }
       } else if (!versionOrOptions) {
         finalOpts = {
           eventBus: appConfig.eventBus,
           domainManager: appConfig.domainManager,
           backupManager: appConfig.backupManager,
+          currencyManager: appConfig.currencyManager,
         } as any as V;
       }
       return defineApi<Env, TResources, V>(resources, finalOpts);
@@ -6520,6 +6536,150 @@ export function defineApi<
     });
   }
 
+  // Multi-Currency & Foreign Exchange Rate Management (Issue #152)
+  const currencyManagerOpt = (versionOrOptions as any)?.currencyManager;
+  const currencyConfig = (versionOrOptions as any)?.currency;
+
+  const shouldEnableCurrency = Boolean(
+    currencyManagerOpt ||
+    (currencyConfig && currencyConfig !== false)
+  );
+
+  let currencyManager: CurrencyManager | undefined =
+    currencyManagerOpt ||
+    (typeof currencyConfig === "object" && "convert" in currencyConfig
+      ? (currencyConfig as CurrencyManager)
+      : undefined);
+
+  if (!currencyManager && shouldEnableCurrency) {
+    currencyManager = createCurrencyManager(
+      typeof currencyConfig === "object" ? currencyConfig : {}
+    );
+  }
+
+  if (currencyManager) {
+    (api as any).currencyManager = currencyManager;
+
+    // GET /currencies
+    api.get("/currencies", (c) => {
+      const enabledOnly = c.req.query("enabled") === "true";
+      const list = currencyManager!.listCurrencies(enabledOnly ? { enabled: true } : undefined);
+      return c.json({
+        baseCurrency: currencyManager!.getBaseCurrency(),
+        data: list,
+        total: list.length,
+      });
+    });
+
+    // POST /currencies
+    api.post("/currencies", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      if (currencyConfig?.authorize) {
+        const ok = await currencyConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to manage currencies." }, 403);
+        }
+      }
+      const body = await c.req.json().catch(() => ({}));
+      if (!body.code) {
+        return c.json({ error: "Currency code is required." }, 400);
+      }
+      try {
+        const created = currencyManager!.addCurrency(body);
+        return c.json({ data: created }, 201);
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to add currency." }, 400);
+      }
+    });
+
+    // PUT /currencies/base
+    api.put("/currencies/base", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      if (currencyConfig?.authorize) {
+        const ok = await currencyConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to update base currency." }, 403);
+        }
+      }
+      const body = await c.req.json().catch(() => ({}));
+      if (!body.code) {
+        return c.json({ error: "Currency code is required." }, 400);
+      }
+      try {
+        const newBase = await currencyManager!.setBaseCurrency(body.code);
+        return c.json({ baseCurrency: newBase });
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to set base currency." }, 400);
+      }
+    });
+
+    // GET /currencies/rates
+    api.get("/currencies/rates", (c) => {
+      const rates = currencyManager!.listRates();
+      return c.json({ data: rates, total: rates.length });
+    });
+
+    // POST /currencies/rates
+    api.post("/currencies/rates", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      if (currencyConfig?.authorize) {
+        const ok = await currencyConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to update exchange rates." }, 403);
+        }
+      }
+      const body = await c.req.json().catch(() => ({}));
+      if (!body.from || !body.to || !body.rate) {
+        return c.json({ error: "Fields 'from', 'to', and positive 'rate' are required." }, 400);
+      }
+      try {
+        const rate = await currencyManager!.setRate(body.from, body.to, Number(body.rate), body.source);
+        return c.json({ data: rate }, 200);
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to set exchange rate." }, 400);
+      }
+    });
+
+    // POST /currencies/convert
+    api.post("/currencies/convert", async (c) => {
+      const body = await c.req.json().catch(() => ({}));
+      const amount = Number(body.amount);
+      const from = body.from || currencyManager!.getBaseCurrency();
+      const to = body.to || currencyManager!.getBaseCurrency();
+
+      if (Number.isNaN(amount)) {
+        return c.json({ error: "Valid numeric 'amount' is required." }, 400);
+      }
+      try {
+        const result = currencyManager!.convert(amount, from, to);
+        return c.json({ data: result });
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Currency conversion failed." }, 400);
+      }
+    });
+
+    // DELETE /currencies/:code
+    api.delete("/currencies/:code", async (c) => {
+      const code = c.req.param("code");
+      const appContext = (c as any).get?.("appContext") || {};
+      if (currencyConfig?.authorize) {
+        const ok = await currencyConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to delete currency." }, 403);
+        }
+      }
+      try {
+        const deleted = currencyManager!.removeCurrency(code);
+        if (!deleted) {
+          return c.json({ error: `Currency ${code} not found.` }, 404);
+        }
+        return c.json({ success: true });
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to delete currency." }, 400);
+      }
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -6553,6 +6713,9 @@ export function defineApi<
     }
     if (backupManager) {
       (versionedApi as any).backupManager = backupManager;
+    }
+    if (currencyManager) {
+      (versionedApi as any).currencyManager = currencyManager;
     }
     return versionedApi as any;
   }

@@ -4,6 +4,7 @@ import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 import type { ImpersonationManager, ImpersonationSession } from "./impersonation/manager.js";
 import type { DomainManager, DomainMapping, DomainType } from "./domains/manager.js";
 import type { BackupManager, BackupManagerConfig } from "./backup/manager.js";
+import type { CurrencyManager, CurrencyManagerConfig } from "./currency/manager.js";
 
 export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 412 | 422 | 429 | 500;
 
@@ -283,15 +284,6 @@ export interface TenancyConfig<
    */
   domains?: AppDomainConfig<Env, AppContext> | DomainManager;
   domainManager?: DomainManager;
-  backups?: AppBackupConfig<Env, AppContext> | BackupManager;
-  backupManager?: BackupManager;
-}
-
-export interface AppBackupConfig<
-  _Env extends Record<string, unknown> = Record<string, unknown>,
-  _AppContext = any
-> extends BackupManagerConfig {
-  enabled?: boolean;
 }
 
 export interface ResourceTenancyConfig {
@@ -1343,12 +1335,21 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   domainManager?: DomainManager;
   backups?: AppBackupConfig<Env, AppContext> | BackupManager;
   backupManager?: BackupManager;
+  currency?: AppCurrencyConfig<Env, AppContext> | CurrencyManager;
+  currencyManager?: CurrencyManager;
 }
 
 export interface AppBackupConfig<
   _Env extends Record<string, unknown> = Record<string, unknown>,
   _AppContext = any
 > extends BackupManagerConfig {
+  enabled?: boolean;
+}
+
+export interface AppCurrencyConfig<
+  _Env extends Record<string, unknown> = Record<string, unknown>,
+  _AppContext = any
+> extends CurrencyManagerConfig {
   enabled?: boolean;
 }
 
