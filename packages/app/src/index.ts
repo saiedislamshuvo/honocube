@@ -66,6 +66,18 @@ export { CollectionMultiView } from "./views/multi-view.js";
 export { WorkflowActionBar } from "./views/workflow-action-bar.js";
 export { DocumentHeader } from "./views/document-header.js";
 export { SidePanel } from "./views/side-panel.js";
+export { MetricCard, AnalyticsChartCard } from "./views/analytics-cards.js";
+
+// Interactive Analytics & Chart Primitives
+export {
+  LineChart,
+  AreaChart,
+  BarChart,
+  DonutChart,
+  Sparkline,
+  ChartLegend,
+  DEFAULT_CHART_COLORS,
+} from "@honocube/ui";
 
 // Media Library & Asset Management
 export {

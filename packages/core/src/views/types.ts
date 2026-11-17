@@ -790,3 +790,103 @@ export interface SidePanelProps<TCollection extends Collection<any> = Collection
   onClose?: () => void;
   className?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Interactive Analytics & Chart Types
+// ---------------------------------------------------------------------------
+
+export interface ChartSeries {
+  key: string;
+  label?: string;
+  color?: string;
+  strokeWidth?: number;
+}
+
+export type ChartDataPoint = Record<string, unknown>;
+
+export interface BaseChartProps {
+  data: ChartDataPoint[];
+  indexKey: string;
+  series: ChartSeries[];
+  width?: number | string;
+  height?: number;
+  showGrid?: boolean;
+  showLegend?: boolean;
+  showTooltip?: boolean;
+  valueFormatter?: (value: number) => string;
+  className?: string;
+}
+
+export interface LineChartProps extends BaseChartProps {
+  curve?: "linear" | "smooth";
+  showDots?: boolean;
+}
+
+export interface AreaChartProps extends BaseChartProps {
+  curve?: "linear" | "smooth";
+  showDots?: boolean;
+  gradientOpacity?: number;
+  stacked?: boolean;
+}
+
+export interface BarChartProps extends BaseChartProps {
+  layout?: "vertical" | "horizontal";
+  stacked?: boolean;
+  radius?: number;
+}
+
+export interface PieChartItem {
+  label: string;
+  value: number;
+  color?: string;
+}
+
+export interface DonutChartProps {
+  data: PieChartItem[];
+  innerRadiusRatio?: number;
+  width?: number;
+  height?: number;
+  centerLabel?: string;
+  centerValue?: string | number;
+  showLegend?: boolean;
+  showTooltip?: boolean;
+  valueFormatter?: (value: number) => string;
+  className?: string;
+}
+
+export interface SparklineProps {
+  data: number[];
+  width?: number | string;
+  height?: number;
+  color?: string;
+  type?: "line" | "area";
+  strokeWidth?: number;
+  showGradient?: boolean;
+  className?: string;
+}
+
+export interface MetricCardProps {
+  title: string;
+  value: string | number;
+  subtitle?: string;
+  trend?: {
+    value: number | string;
+    direction: "up" | "down" | "neutral";
+    label?: string;
+  };
+  sparklineData?: number[];
+  sparklineColor?: string;
+  icon?: React.ReactNode;
+  className?: string;
+}
+
+export interface AnalyticsChartCardProps {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+  timeRange?: string;
+  onTimeRangeChange?: (range: string) => void;
+  timeRangeOptions?: Array<{ label: string; value: string }>;
+  className?: string;
+}
