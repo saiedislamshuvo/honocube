@@ -98,6 +98,12 @@ export {
 export { ExportPdfButton } from "./views/export-pdf-button.js";
 export { PdfPreviewDialog } from "./views/pdf-preview-dialog.js";
 
+// Hardware & Camera Barcode/QR Code Scanner Integration (Issue #123)
+export { useBarcodeScanner, playScanBeep } from "./scanner/use-barcode-scanner.js";
+export { BarcodeCameraScanner } from "./scanner/barcode-camera-scanner.js";
+export { BarcodeScannerDialog } from "./views/barcode-scanner-dialog.js";
+export { ScanVerificationWidget } from "./views/scan-verification-widget.js";
+
 // Interactive Analytics & Chart Primitives
 export {
   LineChart,

@@ -1,6 +1,8 @@
 import * as React from "react";
+import { QrCode } from "lucide-react";
 import { Input, QRCode, Button, type QrErrorCorrectionLevel } from "@honocube/ui";
 import type { QRCodeFieldProps } from "@honocube/core";
+import { BarcodeScannerDialog } from "./barcode-scanner-dialog.js";
 
 export const QRCodeField: React.FC<QRCodeFieldProps> = ({
   id,
@@ -15,8 +17,10 @@ export const QRCodeField: React.FC<QRCodeFieldProps> = ({
   includeMargin = true,
   hasError = false,
   className = "",
+  showScanner = false,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [scannerOpen, setScannerOpen] = React.useState(false);
   const currentVal = value ?? "";
 
   const handleCopy = () => {
@@ -41,6 +45,23 @@ export const QRCodeField: React.FC<QRCodeFieldProps> = ({
           placeholder={placeholder}
           className={hasError ? "border-destructive focus-visible:ring-destructive" : ""}
         />
+
+        {showScanner && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setScannerOpen(true)}
+            disabled={disabled || readOnly}
+            data-testid="qrcode-scan-button"
+            className="shrink-0 text-xs px-2.5 h-9 gap-1"
+            title="Scan QR code with camera"
+          >
+            <QrCode className="h-4 w-4" />
+            <span>Scan</span>
+          </Button>
+        )}
+
         {currentVal && (
           <Button
             type="button"
@@ -70,6 +91,13 @@ export const QRCodeField: React.FC<QRCodeFieldProps> = ({
           Enter text or a URL above to preview the scannable QR code
         </div>
       )}
+
+      <BarcodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onScan={(scanned) => onChange(scanned)}
+        title="Scan QR Code"
+      />
     </div>
   );
 };
