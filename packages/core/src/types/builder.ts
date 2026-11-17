@@ -121,7 +121,13 @@ export interface IRelationFieldBuilder<TRecord = Record<string, unknown>>
   target(target: string): this;
   valueKey(valueKey: string): this;
   labelKey(labelKey: string): this;
+  subtitleKey(subtitleKey: string): this;
   searchable(searchable?: boolean): this;
+  pageSize(pageSize: number): this;
+  debounceMs(ms: number): this;
+  endpoint(url: string): this;
+  filter(params: Record<string, unknown>): this;
+  clearable(clearable?: boolean): this;
   getTarget(): string;
 }
 

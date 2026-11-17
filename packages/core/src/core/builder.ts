@@ -286,6 +286,30 @@ export class RelationFieldBuilder<TRecord = Record<string, unknown>>
     return this._set("searchable" as any, searchable as any);
   }
 
+  subtitleKey(subtitleKey: string): this {
+    return this._set("subtitleKey" as any, subtitleKey as any);
+  }
+
+  pageSize(pageSize: number): this {
+    return this._set("pageSize" as any, pageSize as any);
+  }
+
+  debounceMs(ms: number): this {
+    return this._set("debounceMs" as any, ms as any);
+  }
+
+  endpoint(url: string): this {
+    return this._set("endpoint" as any, url as any);
+  }
+
+  filter(params: Record<string, unknown>): this {
+    return this._set("filterParams" as any, params as any);
+  }
+
+  clearable(clearable: boolean = true): this {
+    return this._set("clearable" as any, clearable as any);
+  }
+
   getTarget(): string {
     return this._config.target;
   }

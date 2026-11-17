@@ -105,7 +105,13 @@ export interface RelationFieldConfig<TRecord = Record<string, unknown>> extends 
   target: string;
   valueKey?: string;
   labelKey?: string;
+  subtitleKey?: string;
   searchable?: boolean;
+  pageSize?: number;
+  debounceMs?: number;
+  endpoint?: string;
+  filterParams?: Record<string, unknown>;
+  clearable?: boolean;
 }
 
 export interface SubCollectionFieldConfig<
