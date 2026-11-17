@@ -8,7 +8,7 @@ import type { AvailableTransition } from "../workflow/types.js";
 import type { InAppNotification, NotificationRule } from "../notifications/rules.js";
 import type { CustomFieldDefinition } from "../custom-fields/runtime.js";
 import type { AutomationRule, AutomationExecutionResult } from "../automation/index.js";
-import type { WebhookEndpoint, WebhookDeliveryRecord, AuditEntry } from "@honocube/api";
+import type { WebhookEndpoint, WebhookDeliveryRecord, AuditEntry, DomainMapping } from "@honocube/api";
 import type { NavigationMenuConfig } from "../navigation/menu.js";
 import type { ImpersonationSession } from "../impersonation/types.js";
 import type { ShellTenant } from "../shell/types.js";
@@ -1431,6 +1431,30 @@ export interface TokenPickerProps {
   onSelectToken: (token: string) => void;
   className?: string;
   buttonLabel?: string;
+}
+
+export interface CustomDomainDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tenantId: string | number;
+  existingDomain?: DomainMapping;
+  onSave?: (domain: string, isPrimary?: boolean) => void | Promise<void>;
+  onVerify?: (domainId: string) => void | Promise<void>;
+  isSubmitting?: boolean;
+  className?: string;
+}
+
+export interface DomainSettingsViewProps {
+  tenantId: string | number;
+  tenantName?: string;
+  subdomain?: string;
+  rootDomain?: string;
+  domains?: DomainMapping[];
+  onAddDomain?: (domain: string, isPrimary?: boolean) => void | Promise<void>;
+  onVerifyDomain?: (domainId: string) => void | Promise<void>;
+  onSetPrimary?: (domainId: string) => void | Promise<void>;
+  onRemoveDomain?: (domainId: string) => void | Promise<void>;
+  className?: string;
 }
 
 

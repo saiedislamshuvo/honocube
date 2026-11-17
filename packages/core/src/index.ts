@@ -287,6 +287,8 @@ export type {
   EmailTemplateEditorDialogProps,
   EmailTemplatesManagerProps,
   TokenPickerProps,
+  CustomDomainDialogProps,
+  DomainSettingsViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -626,6 +628,24 @@ export type {
   RenderedEmail,
   EmailRenderOptions,
 } from "./email/templates.js";
+
+// Custom Domain & Subdomain Routing (Issue #150)
+export {
+  isValidDomain,
+  formatDomainUrl,
+} from "./domains/types.js";
+
+export type {
+  DomainType,
+  DomainStatus,
+  SslStatus,
+  DnsRecordInstruction,
+  DomainMapping,
+  DomainManagerOptions,
+  DomainResolution,
+  DomainManager,
+} from "./domains/types.js";
+
 
 
 

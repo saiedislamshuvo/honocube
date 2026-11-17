@@ -115,6 +115,8 @@ export { ForeignKeySelector } from "./views/foreign-key-selector.js";
 export { TokenPicker } from "./views/token-picker.js";
 export { EmailTemplateEditorDialog } from "./views/email-template-editor-dialog.js";
 export { EmailTemplatesManager } from "./views/email-templates-manager.js";
+export { CustomDomainDialog } from "./views/custom-domain-dialog.js";
+export { DomainSettingsView } from "./views/domain-settings-view.js";
 
 
 
