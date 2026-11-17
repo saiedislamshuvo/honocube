@@ -310,6 +310,23 @@ export class RelationFieldBuilder<TRecord = Record<string, unknown>>
     return this._set("clearable" as any, clearable as any);
   }
 
+  createInline(
+    enabled: boolean = true,
+    options?: { title?: string; description?: string; collection?: any }
+  ): this {
+    this._set("createInline" as any, enabled as any);
+    if (options?.title) {
+      this._set("createTitle" as any, options.title as any);
+    }
+    if (options?.description) {
+      this._set("createDescription" as any, options.description as any);
+    }
+    if (options?.collection) {
+      this._set("createCollection" as any, options.collection as any);
+    }
+    return this;
+  }
+
   getTarget(): string {
     return this._config.target;
   }

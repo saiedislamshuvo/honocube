@@ -515,6 +515,11 @@ export interface AsyncComboboxProps {
   ) => Promise<ComboboxOption | null>;
   className?: string;
   hasError?: boolean;
+  createInline?: boolean;
+  createTitle?: string;
+  createDescription?: string;
+  createCollection?: any;
+  onCreate?: (nameOrQuery: string) => Promise<ComboboxOption | Record<string, unknown> | null | void>;
 }
 
 export interface ChildTableProps {

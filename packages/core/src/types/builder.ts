@@ -128,6 +128,7 @@ export interface IRelationFieldBuilder<TRecord = Record<string, unknown>>
   endpoint(url: string): this;
   filter(params: Record<string, unknown>): this;
   clearable(clearable?: boolean): this;
+  createInline(enabled?: boolean, options?: { title?: string; description?: string; collection?: any }): this;
   getTarget(): string;
 }
 

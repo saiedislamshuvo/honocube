@@ -112,6 +112,10 @@ export interface RelationFieldConfig<TRecord = Record<string, unknown>> extends 
   endpoint?: string;
   filterParams?: Record<string, unknown>;
   clearable?: boolean;
+  createInline?: boolean;
+  createTitle?: string;
+  createDescription?: string;
+  createCollection?: any;
 }
 
 export interface SubCollectionFieldConfig<
