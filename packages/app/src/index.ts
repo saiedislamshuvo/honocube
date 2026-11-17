@@ -76,6 +76,8 @@ export {
   cellRefToCoord,
   evaluateFormula,
 } from "./views/spreadsheet-view.js";
+export { PrintDocument } from "./views/print-document.js";
+export { PrintDocumentDialog } from "./views/print-document-dialog.js";
 
 // Interactive Analytics & Chart Primitives
 export {

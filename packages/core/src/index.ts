@@ -229,6 +229,15 @@ export type {
   SpreadsheetCellChange,
   SpreadsheetColumn,
   SpreadsheetViewProps,
+  PaperSize,
+  PrintOrientation,
+  PrintDocumentLayout,
+  PrintCompanyInfo,
+  PrintCustomerInfo,
+  PrintDocumentItem,
+  PrintDocumentTotal,
+  PrintDocumentProps,
+  PrintDocumentDialogProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
