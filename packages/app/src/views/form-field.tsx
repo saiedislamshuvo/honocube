@@ -259,6 +259,38 @@ export function FormField({
             );
 
           case "select": {
+            const selectConfig = field as any;
+            if (selectConfig.createInline || selectConfig.target) {
+              return (
+                <AsyncCombobox
+                  id={name}
+                  name={name}
+                  value={fieldState.value}
+                  onChange={(val) => onChange(val)}
+                  target={selectConfig.target}
+                  endpoint={selectConfig.endpoint}
+                  options={selectConfig.options?.map((opt: any) =>
+                    typeof opt === "object" && opt !== null
+                      ? { value: String(opt.value), label: String(opt.label ?? opt.value) }
+                      : { value: String(opt), label: String(opt) }
+                  )}
+                  clearable={selectConfig.clearable ?? true}
+                  searchable={selectConfig.searchable ?? true}
+                  createInline={selectConfig.createInline ?? true}
+                  createTitle={selectConfig.createTitle}
+                  createDescription={selectConfig.createDescription}
+                  createCollection={selectConfig.createCollection}
+                  disabled={isDisabled}
+                  placeholder={
+                    field.placeholder ||
+                    (selectConfig.target
+                      ? `Select ${selectConfig.target}...`
+                      : "Select an option...")
+                  }
+                  hasError={Boolean(errorMessage)}
+                />
+              );
+            }
             const currentValue =
               fieldState.value !== undefined && fieldState.value !== null && fieldState.value !== ""
                 ? String(fieldState.value)
@@ -321,7 +353,7 @@ export function FormField({
                 filterParams={relConfig.filterParams}
                 clearable={relConfig.clearable ?? true}
                 searchable={relConfig.searchable ?? true}
-                createInline={relConfig.createInline}
+                createInline={relConfig.createInline ?? true}
                 createTitle={relConfig.createTitle}
                 createDescription={relConfig.createDescription}
                 createCollection={relConfig.createCollection}

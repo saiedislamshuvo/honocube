@@ -242,6 +242,27 @@ export class SelectFieldBuilder<TValue = string, TRecord = Record<string, unknow
   getOptions(): Array<TValue | SelectOption<TValue>> {
     return [...(this._config.options || [])];
   }
+
+  createInline(
+    enabled: boolean = true,
+    options?: { title?: string; description?: string; collection?: any }
+  ): this {
+    this._set("createInline" as any, enabled as any);
+    if (options?.title) {
+      this._set("createTitle" as any, options.title as any);
+    }
+    if (options?.description) {
+      this._set("createDescription" as any, options.description as any);
+    }
+    if (options?.collection) {
+      this._set("createCollection" as any, options.collection as any);
+    }
+    return this;
+  }
+
+  target(target: string): this {
+    return this._set("target" as any, target as any);
+  }
 }
 
 /**
