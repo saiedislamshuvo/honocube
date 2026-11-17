@@ -263,6 +263,8 @@ export type {
   BarcodeScannerDialogProps,
   VerificationItem,
   ScanVerificationWidgetProps,
+  RealtimeIndicatorProps,
+  RealtimeToastNotifierProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -412,4 +414,25 @@ export type {
   ImportInChunksOptions,
   ImportInChunksSummary,
 } from "./import/csv.js";
+
+// Realtime SSE / Event Bus Engine
+export {
+  createRealtimeClient,
+  setupRealtimeCacheSync,
+  RealtimeContext,
+  RealtimeProvider,
+  useRealtimeClient,
+  useRealtimeStatus,
+  useRealtimeSubscription,
+} from "./realtime/client.js";
+
+export type {
+  RealtimeConnectionStatus,
+  RealtimeEvent,
+  RealtimeClientOptions,
+  RealtimeEventListener,
+  RealtimeStatusListener,
+  RealtimeClient,
+  RealtimeProviderProps,
+} from "./realtime/client.js";
 

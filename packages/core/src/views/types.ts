@@ -1183,3 +1183,18 @@ export interface ScanVerificationWidgetProps {
   autoFocus?: boolean;
   className?: string;
 }
+
+export interface RealtimeIndicatorProps {
+  client?: any;
+  showLabel?: boolean;
+  onReconnect?: () => void;
+  className?: string;
+}
+
+export interface RealtimeToastNotifierProps {
+  client?: any;
+  resourceLabels?: Record<string, string>;
+  filter?: (event: any) => boolean;
+  formatMessage?: (event: any) => { title: string; description?: string } | null;
+}
+

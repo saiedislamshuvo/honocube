@@ -88,6 +88,8 @@ export {
   ImportButton,
   type ImportButtonProps,
 } from "./views/import-button.js";
+export { RealtimeIndicator } from "./views/realtime-indicator.js";
+export { RealtimeToastNotifier } from "./views/realtime-toast-notifier.js";
 
 // Programmatic PDF Export Engine & UI Primitives (Issue #133)
 export {

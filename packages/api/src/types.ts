@@ -170,6 +170,31 @@ export interface ResourceEvent<AppContext = any> {
   appContext: AppContext;
 }
 
+export interface RealtimeEvent<T = any> {
+  id: string;
+  type: "create" | "update" | "delete" | "batch-update" | "batch-delete" | "import" | "custom" | string;
+  resource: string;
+  data?: T;
+  ids?: (string | number)[];
+  tenantId?: string;
+  timestamp: number;
+  meta?: Record<string, unknown>;
+}
+
+export type EventBusSubscriber = (event: RealtimeEvent) => void;
+
+export interface EventBusSubscriptionFilter {
+  resource?: string | string[];
+  type?: string | string[];
+  tenantId?: string;
+}
+
+export interface EventBus {
+  publish(event: Omit<RealtimeEvent, "id" | "timestamp"> & Partial<Pick<RealtimeEvent, "id" | "timestamp">>): Promise<void> | void;
+  subscribe(filterOrChannel: string | EventBusSubscriptionFilter, subscriber: EventBusSubscriber): () => void;
+  subscriberCount(channel?: string): number;
+}
+
 export type TenantId = string | number;
 export type TenancyValue = TenantId | TenantId[] | null | undefined;
 
@@ -1222,6 +1247,11 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   audit?: AppAuditConfig<Env, AppContext>;
   outbox?: AppOutboxConfig<Env, AppContext>;
   webhooks?: AppWebhookConfig<Env, AppContext>;
+  realtime?: boolean | {
+    enabled?: boolean;
+    keepAliveIntervalMs?: number;
+  };
+  eventBus?: EventBus;
 }
 
 export interface ResourceConfig<
@@ -1259,6 +1289,10 @@ export interface ResourceConfig<
   aggregate?: boolean | ResourceAggregateConfig; 
   
   import?: ResourceImportConfig<TTable>;
+  realtime?: boolean | {
+    enabled?: boolean;
+    channel?: string;
+  };
   
   // Security
   permissions?: {
