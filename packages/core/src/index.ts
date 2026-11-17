@@ -275,6 +275,8 @@ export type {
   CustomFieldsFormSectionProps,
   AutomationRuleDialogProps,
   AutomationHistoryViewProps,
+  WebhookManagerDialogProps,
+  WebhookDeliveriesViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -536,6 +538,23 @@ export type {
   AutomationEngineOptions,
   AutomationEngine,
 } from "./automation/index.js";
+
+// Declarative Outbound Webhook Management & Delivery Logging (Issue #143)
+export {
+  createWebhookManager,
+  generateWebhookSecret,
+  isWebhookEventMatch,
+  signWebhookPayload,
+  verifyWebhookSignature,
+} from "./webhooks/index.js";
+
+export type {
+  WebhookEndpoint,
+  WebhookDeliveryRecord,
+  WebhookDeliveryFilter,
+  WebhookManagerOptions,
+  WebhookManager,
+} from "./webhooks/index.js";
 
 
 

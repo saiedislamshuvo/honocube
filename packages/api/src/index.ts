@@ -13,4 +13,5 @@ export * from "./notifications/rules.js";
 export * from "./notifications/engine.js";
 export * from "./custom-fields/store.js";
 export * from "./automation/engine.js";
+export * from "./webhooks/manager.js";
 export * from "./testing/index.js";

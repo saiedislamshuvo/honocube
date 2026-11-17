@@ -103,6 +103,8 @@ export { CustomFieldsManagerDialog } from "./views/custom-fields-manager-dialog.
 export { CustomFieldsFormSection } from "./views/custom-fields-form-section.js";
 export { AutomationRuleDialog } from "./views/automation-rule-dialog.js";
 export { AutomationHistoryView } from "./views/automation-history-view.js";
+export { WebhookManagerDialog } from "./views/webhook-manager-dialog.js";
+export { WebhookDeliveriesView } from "./views/webhook-deliveries-view.js";
 
 
 
