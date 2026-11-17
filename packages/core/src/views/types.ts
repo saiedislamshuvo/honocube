@@ -408,6 +408,37 @@ export interface MaskedNumericInputProps {
   className?: string;
 }
 
+export interface BarcodeFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  format?: "code128" | "code39" | "ean13" | "upca";
+  displayValue?: boolean;
+  width?: number;
+  height?: number;
+  hasError?: boolean;
+  className?: string;
+}
+
+export interface QRCodeFieldProps {
+  id?: string;
+  name?: string;
+  value?: string | null;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  placeholder?: string;
+  size?: number;
+  level?: "L" | "M" | "Q" | "H";
+  includeMargin?: boolean;
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

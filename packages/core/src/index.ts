@@ -32,6 +32,8 @@ export {
   IconFieldBuilder,
   TagsFieldBuilder,
   SlugFieldBuilder,
+  BarcodeFieldBuilder,
+  QRCodeFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -177,6 +179,8 @@ export type {
   FormPageProps,
   FormFieldProps,
   MaskedNumericInputProps,
+  BarcodeFieldProps,
+  QRCodeFieldProps,
   DateRangePickerProps,
   FloatingSaveBarProps,
   PhoneInputFieldProps,
@@ -252,6 +256,8 @@ export type {
   IIconFieldBuilder,
   ITagsFieldBuilder,
   ISlugFieldBuilder,
+  IBarcodeFieldBuilder,
+  IQRCodeFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -279,6 +285,8 @@ export type {
   IconFieldConfig,
   TagsFieldConfig,
   SlugFieldConfig,
+  BarcodeFieldConfig,
+  QRCodeFieldConfig,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";

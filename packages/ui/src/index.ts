@@ -6,6 +6,21 @@
 // Utilities
 export { cn } from "./lib/utils.js";
 
+// Visual Code & Identification Primitives
+export {
+  Barcode,
+  type BarcodeProps,
+  type BarcodeFormat,
+} from "./components/barcode.js";
+export {
+  QRCode,
+  type QRCodeProps,
+  type QrErrorCorrectionLevel,
+  type QRCodeImageSettings,
+} from "./components/qr-code.js";
+export { encodeBarcode, type EncodedBarcode } from "./lib/barcode-encoder.js";
+export { encodeQRCode, type QrMatrix } from "./lib/qrcode-encoder.js";
+
 // Action & Feedback Components
 export { Button, buttonVariants, type ButtonProps } from "./components/button.js";
 export { Badge, badgeVariants, type BadgeProps } from "./components/badge.js";

@@ -19,6 +19,8 @@ import type {
   IconFieldConfig,
   TagsFieldConfig,
   SlugFieldConfig,
+  BarcodeFieldConfig,
+  QRCodeFieldConfig,
   DynamicRule,
 } from "./fields.js";
 import type { CollectionConfig } from "./collection.js";
@@ -225,4 +227,25 @@ export interface ISlugFieldBuilder<TRecord = Record<string, unknown>>
   lowercase(enable?: boolean): this;
   locked(isLocked?: boolean): this;
   slugify(fn: (text: string) => string): this;
+}
+
+/**
+ * Fluent builder for scannable 1D barcode fields.
+ */
+export interface IBarcodeFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<BarcodeFieldConfig<TRecord>, string, TRecord> {
+  format(fmt: "code128" | "code39" | "ean13" | "upca"): this;
+  displayValue(display?: boolean): this;
+  width(barWidth: number): this;
+  height(barHeight: number): this;
+}
+
+/**
+ * Fluent builder for 2D QR code fields.
+ */
+export interface IQRCodeFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<QRCodeFieldConfig<TRecord>, string, TRecord> {
+  size(pixelSize: number): this;
+  level(ecl: "L" | "M" | "Q" | "H"): this;
+  includeMargin(margin?: boolean): this;
 }
