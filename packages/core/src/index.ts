@@ -282,6 +282,8 @@ export type {
   SidebarCustomizerProps,
   ImpersonationBannerProps,
   ImpersonationDialogProps,
+  InlineEntityCreationDialogProps,
+  ForeignKeySelectorProps,
 } from "./views/types.js";
 
 // Utilities & Formatting

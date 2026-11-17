@@ -94,6 +94,11 @@ export interface ISelectFieldBuilder<TValue = string, TRecord = Record<string, u
   options(options: Array<TValue | SelectOption<TValue>>): this;
   addOption(option: TValue | SelectOption<TValue>): this;
   getOptions(): Array<TValue | SelectOption<TValue>>;
+  createInline(
+    enabled?: boolean,
+    options?: { title?: string; description?: string; collection?: any }
+  ): this;
+  target(target: string): this;
 }
 
 /**

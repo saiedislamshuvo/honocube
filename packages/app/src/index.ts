@@ -110,6 +110,8 @@ export { SidebarCustomizer } from "./views/sidebar-customizer.js";
 export { NavigationMenuBuilderDialog } from "./views/navigation-menu-builder-dialog.js";
 export { ImpersonationBanner } from "./shell/impersonation-banner.js";
 export { ImpersonationDialog } from "./views/impersonation-dialog.js";
+export { InlineEntityCreationDialog } from "./views/inline-entity-creation-dialog.js";
+export { ForeignKeySelector } from "./views/foreign-key-selector.js";
 
 
 

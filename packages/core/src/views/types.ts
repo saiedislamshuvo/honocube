@@ -1379,6 +1379,25 @@ export interface ImpersonationDialogProps {
   isLoading?: boolean;
 }
 
+export interface InlineEntityCreationDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  target?: string;
+  collection?: Collection<any>;
+  title?: string;
+  description?: string;
+  initialName?: string;
+  onSuccess: (newRecord: Record<string, unknown>) => void;
+  onCancel?: () => void;
+  className?: string;
+}
+
+export interface ForeignKeySelectorProps extends AsyncComboboxProps {
+  label?: string;
+  description?: string;
+  required?: boolean;
+}
+
 
 
 

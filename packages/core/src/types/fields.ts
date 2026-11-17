@@ -90,6 +90,11 @@ export interface SelectFieldConfig<TValue = string, TRecord = Record<string, unk
   type: "select";
   options: Array<TValue | SelectOption<TValue>>;
   default?: TValue | (() => TValue);
+  createInline?: boolean;
+  createTitle?: string;
+  createDescription?: string;
+  createCollection?: any;
+  target?: string;
 }
 
 export interface JsonFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
