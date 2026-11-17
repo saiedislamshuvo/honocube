@@ -83,6 +83,7 @@ export interface DateFieldConfig<TRecord = Record<string, unknown>> extends Base
 export interface BooleanFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
   type: "boolean";
   default?: boolean | (() => boolean);
+  inlineToggle?: boolean;
 }
 
 export interface SelectFieldConfig<TValue = string, TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {

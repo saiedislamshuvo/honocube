@@ -66,6 +66,29 @@ export interface TableViewProps<TCollection extends Collection<any>> {
    * Custom message to show while loading. Defaults to "Loading..."
    */
   loadingText?: string;
+
+  /**
+   * Whether in-table instant boolean toggle switches are enabled. Defaults to true.
+   */
+  enableInlineToggle?: boolean;
+
+  /**
+   * Callback fired when a boolean field is toggled directly inside a table row.
+   */
+  onToggleField?: (
+    record: InferRecord<TCollection>,
+    fieldKey: string,
+    nextValue: boolean
+  ) => Promise<void> | void;
+
+  /**
+   * Callback fired when a boolean field is toggled in bulk across selected rows.
+   */
+  onBulkToggle?: (
+    selectedIds: Array<string | number>,
+    fieldKey: string,
+    value?: boolean
+  ) => Promise<void> | void;
 }
 
 export interface FormViewProps<TCollection extends Collection<any>> {
