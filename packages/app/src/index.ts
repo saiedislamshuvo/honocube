@@ -106,6 +106,8 @@ export { AutomationHistoryView } from "./views/automation-history-view.js";
 export { WebhookManagerDialog } from "./views/webhook-manager-dialog.js";
 export { WebhookDeliveriesView } from "./views/webhook-deliveries-view.js";
 export { AuditTrailView } from "./views/audit-trail-view.js";
+export { SidebarCustomizer } from "./views/sidebar-customizer.js";
+export { NavigationMenuBuilderDialog } from "./views/navigation-menu-builder-dialog.js";
 
 
 

@@ -9,6 +9,7 @@ import type { InAppNotification, NotificationRule } from "../notifications/rules
 import type { CustomFieldDefinition } from "../custom-fields/runtime.js";
 import type { AutomationRule, AutomationExecutionResult } from "../automation/index.js";
 import type { WebhookEndpoint, WebhookDeliveryRecord, AuditEntry } from "@honocube/api";
+import type { NavigationMenuConfig } from "../navigation/menu.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1330,6 +1331,24 @@ export interface AuditTrailViewProps {
   recordId?: string | number;
   onClearAudit?: () => void;
   isLoading?: boolean;
+  className?: string;
+}
+
+export interface NavigationMenuBuilderDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialConfig?: NavigationMenuConfig;
+  availableCollections?: Collection<any>[];
+  availableRoles?: string[];
+  onSaveConfig?: (config: NavigationMenuConfig) => void | Promise<void>;
+  isSaving?: boolean;
+}
+
+export interface SidebarCustomizerProps {
+  menuConfig: NavigationMenuConfig;
+  onChange: (config: NavigationMenuConfig) => void;
+  availableCollections?: Collection<any>[];
+  onReset?: () => void;
   className?: string;
 }
 
