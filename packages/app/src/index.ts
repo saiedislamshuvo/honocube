@@ -99,6 +99,9 @@ export {
 export { BulkMediaIngestButton } from "./views/bulk-media-ingest-button.js";
 export { NotificationBell } from "./views/notification-bell.js";
 export { NotificationRuleDialog } from "./views/notification-rule-dialog.js";
+export { CustomFieldsManagerDialog } from "./views/custom-fields-manager-dialog.js";
+export { CustomFieldsFormSection } from "./views/custom-fields-form-section.js";
+
 
 
 

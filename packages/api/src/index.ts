@@ -11,4 +11,5 @@ export * from "./utils/openapi.js";
 export * from "./realtime/event-bus.js";
 export * from "./notifications/rules.js";
 export * from "./notifications/engine.js";
+export * from "./custom-fields/store.js";
 export * from "./testing/index.js";
