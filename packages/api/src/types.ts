@@ -1299,6 +1299,13 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
     keepAliveIntervalMs?: number;
   };
   eventBus?: EventBus;
+  notifications?: {
+    enabled?: boolean;
+    rules?: any[];
+    store?: any;
+    channelHandlers?: Record<string, any>;
+  };
+  notificationEngine?: any;
 }
 
 export interface ResourceConfig<

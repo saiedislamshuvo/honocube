@@ -269,6 +269,8 @@ export type {
   MasterDataSyncDialogProps,
   BulkMediaIngestDialogProps,
   BulkMediaIngestButtonProps,
+  NotificationBellProps,
+  NotificationRuleDialogProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -475,5 +477,28 @@ export type {
   BulkMediaMatchResult,
   BulkMediaIngestOptions,
 } from "./media/zip-ingest.js";
+
+// Event-Driven Notification Rules Engine & Multi-Channel Dispatch (Issue #140)
+export {
+  getNestedValue,
+  interpolateTemplate,
+  evaluateCondition,
+  evaluateRule,
+  renderNotification,
+  formatRelativeTime,
+} from "./notifications/rules.js";
+
+export type {
+  NotificationSeverity,
+  NotificationChannelType,
+  ConditionOperator,
+  NotificationCondition,
+  NotificationChannelConfig,
+  NotificationTemplate,
+  NotificationRule,
+  InAppNotification,
+  DispatchedNotification,
+} from "./notifications/rules.js";
+
 
 

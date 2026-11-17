@@ -5,6 +5,7 @@ import type { FormMode, FormFieldState, ChildCollectionHelper, RevisionConflict 
 import type { FieldConfig, SubCollectionFieldConfig, DateRangeValue } from "../types/fields.js";
 import type { ViewType } from "../types/views.js";
 import type { AvailableTransition } from "../workflow/types.js";
+import type { InAppNotification, NotificationRule } from "../notifications/rules.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1247,6 +1248,25 @@ export interface BulkMediaIngestButtonProps {
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "default" | "sm" | "lg" | "icon";
 }
+
+export interface NotificationBellProps {
+  notifications?: InAppNotification[];
+  unreadCount?: number;
+  onMarkAsRead?: (id: string) => void;
+  onMarkAllAsRead?: () => void;
+  onNotificationClick?: (notification: InAppNotification) => void;
+  className?: string;
+}
+
+export interface NotificationRuleDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  rule?: Partial<NotificationRule>;
+  availableResources?: string[];
+  onSaveRule?: (rule: NotificationRule) => void | Promise<void>;
+  isSaving?: boolean;
+}
+
 
 
 
