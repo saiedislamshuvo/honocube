@@ -90,6 +90,8 @@ export {
 } from "./views/import-button.js";
 export { RealtimeIndicator } from "./views/realtime-indicator.js";
 export { RealtimeToastNotifier } from "./views/realtime-toast-notifier.js";
+export { CompanyHierarchyTree } from "./views/company-hierarchy-tree.js";
+export { MasterDataSyncDialog } from "./views/master-data-sync-dialog.js";
 
 // Programmatic PDF Export Engine & UI Primitives (Issue #133)
 export {

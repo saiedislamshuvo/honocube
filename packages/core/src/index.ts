@@ -265,6 +265,8 @@ export type {
   ScanVerificationWidgetProps,
   RealtimeIndicatorProps,
   RealtimeToastNotifierProps,
+  CompanyHierarchyTreeProps,
+  MasterDataSyncDialogProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -435,4 +437,20 @@ export type {
   RealtimeClient,
   RealtimeProviderProps,
 } from "./realtime/client.js";
+
+// Multi-Company Holding Hierarchy & Master Data (Issue #137)
+export {
+  buildCompanyTree,
+  getSubsidiaryIds,
+  getAncestorCompanyIds,
+  isDescendantCompany,
+  flattenCompanyTree,
+} from "./company/hierarchy.js";
+
+export type {
+  Company,
+  CompanyTreeNode,
+  MasterDataSyncOptions,
+  MasterDataSyncResult,
+} from "./company/hierarchy.js";
 

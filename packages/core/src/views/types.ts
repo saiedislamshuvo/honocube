@@ -1198,3 +1198,22 @@ export interface RealtimeToastNotifierProps {
   formatMessage?: (event: any) => { title: string; description?: string } | null;
 }
 
+export interface CompanyHierarchyTreeProps {
+  companies: any[];
+  activeCompanyId?: string;
+  onSelectCompany?: (company: any) => void;
+  onSyncMasterData?: (company: any) => void;
+  className?: string;
+}
+
+export interface MasterDataSyncDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sourceCompany?: any;
+  subsidiaries: any[];
+  onSync: (options: any) => Promise<any> | void;
+  isSyncing?: boolean;
+  resourceName?: string;
+}
+
+

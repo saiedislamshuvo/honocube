@@ -1374,6 +1374,7 @@ export function defineResource<
     tenantVal?: TenancyValue;
     tenantField: string;
     tenantCondition?: any;
+    writeTenantCondition?: any;
   }
 
   const resolveTenancyContext = async (
@@ -1432,7 +1433,52 @@ export function defineResource<
       );
     }
 
+    let readableTenants: any = tenantVal;
+    const hierarchy = globalConfig.tenancy.hierarchy;
+
+    if (!isEmpty && hierarchy) {
+      const inheritFromParent =
+        (typeof config.tenancy === "object" && (config.tenancy.inheritFromParent || config.tenancy.masterData)) ||
+        (hierarchy.allowHoldingInheritance && config.tenancy !== false);
+
+      const includeSubs = c.req.query("includeSubsidiaries") === "true";
+
+      const expandedTenants = new Set<string | number>(
+        Array.isArray(tenantVal) ? tenantVal : [tenantVal]
+      );
+
+      if (inheritFromParent && hierarchy.getParentId) {
+        const baseIds = Array.isArray(tenantVal) ? tenantVal : [tenantVal];
+        for (const tid of baseIds) {
+          const parents = await hierarchy.getParentId(tid, c, appContext);
+          if (parents) {
+            if (Array.isArray(parents)) {
+              for (const p of parents) expandedTenants.add(p);
+            } else {
+              expandedTenants.add(parents);
+            }
+          }
+        }
+      }
+
+      if (includeSubs && hierarchy.getSubsidiaryIds) {
+        const baseIds = Array.isArray(tenantVal) ? tenantVal : [tenantVal];
+        for (const tid of baseIds) {
+          const subs = await hierarchy.getSubsidiaryIds(tid, c, appContext);
+          if (subs && Array.isArray(subs)) {
+            for (const s of subs) expandedTenants.add(s);
+          }
+        }
+      }
+
+      const initialCount = Array.isArray(tenantVal) ? tenantVal.length : 1;
+      if (expandedTenants.size > initialCount) {
+        readableTenants = Array.from(expandedTenants);
+      }
+    }
+
     let tenantCondition: any = undefined;
+    let writeTenantCondition: any = undefined;
     if (!isEmpty) {
       const cols = adapter.getColumns(config.table as any) as any;
       const ops = adapter.getOperators();
@@ -1444,14 +1490,19 @@ export function defineResource<
           `Resource '${config.name}' table does not have tenant column '${tenantField}'. Set tenancy: false on the resource to skip tenancy.`
         );
       }
-      if (Array.isArray(tenantVal)) {
-        if (tenantVal.length === 1) {
-          tenantCondition = ops.eq(col, tenantVal[0]);
-        } else {
-          tenantCondition = ops.inArray(col, tenantVal);
-        }
+
+      // Read tenant condition (expanded with holding/subsidiaries if applicable)
+      if (Array.isArray(readableTenants)) {
+        tenantCondition = readableTenants.length === 1 ? ops.eq(col, readableTenants[0]) : ops.inArray(col, readableTenants);
       } else {
-        tenantCondition = ops.eq(col, tenantVal);
+        tenantCondition = ops.eq(col, readableTenants);
+      }
+
+      // Write tenant condition (strict isolation to prevent subsidiary modifying parent master records)
+      if (Array.isArray(tenantVal)) {
+        writeTenantCondition = tenantVal.length === 1 ? ops.eq(col, tenantVal[0]) : ops.inArray(col, tenantVal);
+      } else {
+        writeTenantCondition = ops.eq(col, tenantVal);
       }
     }
 
@@ -1461,6 +1512,7 @@ export function defineResource<
       tenantVal,
       tenantField,
       tenantCondition,
+      writeTenantCondition,
     };
   };
 
@@ -2291,8 +2343,8 @@ export function defineResource<
         const idCol = cols.id;
         const conditions: any[] = [ops.inArray(idCol, targetIds)];
 
-        if (tenancy.tenantCondition) {
-          conditions.push(tenancy.tenantCondition);
+        if (tenancy.writeTenantCondition || tenancy.tenantCondition) {
+          conditions.push(tenancy.writeTenantCondition || tenancy.tenantCondition);
         }
 
         if (scopedWhere) {
@@ -2467,8 +2519,8 @@ export function defineResource<
         const idCol = cols.id;
         const conditions: any[] = [ops.inArray(idCol, targetIds)];
 
-        if (tenancy.tenantCondition) {
-          conditions.push(tenancy.tenantCondition);
+        if (tenancy.writeTenantCondition || tenancy.tenantCondition) {
+          conditions.push(tenancy.writeTenantCondition || tenancy.tenantCondition);
         }
 
         if (scopedWhere) {
@@ -3129,6 +3181,158 @@ function buildDateBucketSql(
     });
   }
 
+  // Hierarchical Multi-Company Master Data Synchronization (Issue #137)
+  const isSyncDownstreamEnabled =
+    Boolean(globalConfig?.tenancy?.hierarchy) ||
+    Boolean(
+      typeof config.tenancy === "object" &&
+      (config.tenancy.allowDownstreamSync !== false || config.tenancy.inheritFromParent || config.tenancy.masterData)
+    );
+
+  if (isSyncDownstreamEnabled) {
+    app.post("/sync-downstream", async (c) => {
+      const adapter = getAdapter(c);
+      const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
+      await checkRateLimit(c, appContext);
+      await checkAccess(appContext, "update");
+
+      const tenancy = await resolveTenancyContext(c, appContext, adapter);
+      if (!tenancy.isTenancyActive || !tenancy.tenantVal || Array.isArray(tenancy.tenantVal)) {
+        throw new ApiError(400, "INVALID_TENANT", "A single active source tenant is required to synchronize downstream.");
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const {
+        recordIds,
+        targetTenantIds,
+        strategy = "overwrite",
+        matchField = "code",
+      } = body as {
+        recordIds?: (string | number)[];
+        targetTenantIds: (string | number)[];
+        strategy?: "overwrite" | "skip" | "clone";
+        matchField?: string;
+      };
+
+      if (!targetTenantIds || !Array.isArray(targetTenantIds) || targetTenantIds.length === 0) {
+        throw new ApiError(400, "VALIDATION_ERROR", "Field 'targetTenantIds' array is required.");
+      }
+
+      // If hierarchy subsidiary resolver is configured, validate target tenants
+      if (globalConfig?.tenancy?.hierarchy?.getSubsidiaryIds) {
+        const allowedSubs = await globalConfig.tenancy.hierarchy.getSubsidiaryIds(tenancy.tenantVal, c, appContext);
+        const allowedSubStrings = new Set(allowedSubs.map(String));
+        for (const tid of targetTenantIds) {
+          if (!allowedSubStrings.has(String(tid))) {
+            throw new ApiError(403, "FORBIDDEN", `Target tenant '${tid}' is not a subsidiary of company '${tenancy.tenantVal}'.`);
+          }
+        }
+      }
+
+      // 1. Fetch source records belonging strictly to current parent tenant
+      const cols = adapter.getColumns(config.table as any) as any;
+      const ops = adapter.getOperators();
+      const tenantCol = cols[tenancy.tenantField];
+
+      const sourceConditions: any[] = [ops.eq(tenantCol, tenancy.tenantVal)];
+      if (recordIds && recordIds.length > 0) {
+        sourceConditions.push(ops.inArray(cols.id, recordIds));
+      }
+
+      const sourceRecords: any[] = await adapter.findMany(config.table, {
+        where: () => ops.and(...sourceConditions),
+      });
+
+      if (sourceRecords.length === 0) {
+        return c.json({
+          success: true,
+          total: 0,
+          created: 0,
+          updated: 0,
+          skipped: 0,
+          targetTenantIds,
+        });
+      }
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      // 2. Execute synchronization across target subsidiary tenants
+      const matchCol = cols[matchField] ? matchField : (cols.name ? "name" : (cols.slug ? "slug" : "id"));
+
+      await runTransaction(c, async (tx) => {
+        for (const targetId of targetTenantIds) {
+          for (const src of sourceRecords) {
+            // Check for existing record in target tenant by matchCol
+            let existing: any = null;
+            if (cols[matchCol] && src[matchCol] !== undefined && src[matchCol] !== null) {
+              existing = await tx.findFirst(config.table, {
+                where: () => ops.and(
+                  ops.eq(tenantCol, targetId),
+                  ops.eq(cols[matchCol], src[matchCol])
+                ),
+              });
+            }
+
+            if (existing) {
+              if (strategy === "skip") {
+                skippedCount++;
+                continue;
+              }
+              if (strategy === "overwrite") {
+                const updatePayload: Record<string, any> = { ...src };
+                delete updatePayload.id;
+                delete updatePayload.createdAt;
+                delete updatePayload.updatedAt;
+                updatePayload[tenancy.tenantField] = targetId;
+
+                await tx.update(
+                  config.table,
+                  ops.and(
+                    ops.eq(cols.id, existing.id),
+                    ops.eq(tenantCol, targetId)
+                  ),
+                  updatePayload as any
+                );
+                updatedCount++;
+                continue;
+              }
+            }
+
+            // Create new record in target tenant
+            const insertPayload: Record<string, any> = { ...src };
+            delete insertPayload.id;
+            delete insertPayload.createdAt;
+            delete insertPayload.updatedAt;
+            insertPayload[tenancy.tenantField] = targetId;
+
+            await tx.insert(config.table, insertPayload as any);
+            createdCount++;
+          }
+        }
+      });
+
+      await emitEvent(appContext, "sync-downstream" as any, {
+        sourceTenantId: tenancy.tenantVal,
+        targetTenantIds,
+        total: sourceRecords.length,
+        created: createdCount,
+        updated: updatedCount,
+        skipped: skippedCount,
+      });
+
+      return c.json({
+        success: true,
+        total: sourceRecords.length,
+        created: createdCount,
+        updated: updatedCount,
+        skipped: skippedCount,
+        targetTenantIds,
+      });
+    });
+  }
+
   if (methods.has("detail")) {
     app.get("/:id", async (c) => {
       const adapter = getAdapter(c);
@@ -3594,7 +3798,7 @@ function buildDateBucketSql(
       // The scope and soft-delete filters are part of the lookup, so a row
       // outside the caller's scope is reported as not found instead of
       // confirming that it exists.
-      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.tenantCondition);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.writeTenantCondition || tenancy.tenantCondition);
       const ops = adapter.getOperators();
 
       // We need to fetch the existing record first for Row-Level Security
@@ -4211,7 +4415,7 @@ function buildDateBucketSql(
       const field = c.req.param("field");
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
-      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.tenantCondition);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.writeTenantCondition || tenancy.tenantCondition);
 
       const existingRecord = await adapter.findFirst(config.table, {
         where: recordPredicate,
@@ -4277,7 +4481,7 @@ function buildDateBucketSql(
       // The scope and soft-delete filters are part of the lookup, so a row
       // outside the caller's scope is reported as not found instead of
       // confirming that it exists.
-      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.tenantCondition);
+      const recordPredicate = buildRecordPredicate(id, appContext, adapter, tenancy.writeTenantCondition || tenancy.tenantCondition);
 
       const existingRecord = await adapter.findFirst(config.table, {
         where: recordPredicate,
@@ -4563,7 +4767,7 @@ function buildDateBucketSql(
         // The soft-delete filter and the row-level scope — the same two
         // filters the read paths apply. A row that does not match them is not
         // the caller's to write.
-        const constraintConditions = buildConstraintConditions(appContext, adapter, tenancy.tenantCondition);
+        const constraintConditions = buildConstraintConditions(appContext, adapter, tenancy.writeTenantCondition || tenancy.tenantCondition);
 
         // The conditions that match the lookup keys of the payload.
         const buildLookupConditions = (cCols: any, ops: any) => {
