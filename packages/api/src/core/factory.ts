@@ -10,6 +10,7 @@ import { createNotificationEngine } from "../notifications/engine.js";
 import { createCustomFieldsStore, validateCustomFields } from "../custom-fields/store.js";
 import { createAutomationEngine } from "../automation/engine.js";
 import { createWebhookManager, type WebhookManager, type WebhookEndpoint } from "../webhooks/manager.js";
+import { createAuditManager, type AuditManager } from "../audit/manager.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -328,7 +329,12 @@ export function defineResource<
   const isAuditEnabled = Boolean(
     config.audit === true ||
     (typeof config.audit === "object" && config.audit.enabled !== false) ||
-    (config.audit === undefined && Boolean(globalConfig?.audit?.table || globalConfig?.audit?.store))
+    (config.audit === undefined &&
+      (Boolean(globalConfig?.audit?.table || globalConfig?.audit?.store) ||
+       Boolean((globalConfig as any)?.auditManager) ||
+       Boolean((globalConfig?.audit as any)?.manager) ||
+       (globalConfig as any)?.audit === true ||
+       Boolean((globalConfig?.audit as any)?.enabled !== false)))
   );
 
   const auditConfigObj = typeof config.audit === "object" ? config.audit : undefined;
@@ -344,7 +350,15 @@ export function defineResource<
     ]
   );
 
-  const shouldAuditAction = (action: AuditAction) => isAuditEnabled && allowedAuditActions.has(action);
+  const shouldAuditAction = (action: AuditAction) => {
+    const isExplicitlyDisabled =
+      config.audit === false ||
+      (typeof config.audit === "object" && config.audit.enabled === false);
+    if (isExplicitlyDisabled) return false;
+
+    const enabled = isAuditEnabled || Boolean((config as any)?.auditManager);
+    return enabled && allowedAuditActions.has(action);
+  };
 
   const auditExcludeFields = new Set<string>([
     ...(globalConfig?.audit?.excludeFields ?? []),
@@ -378,6 +392,17 @@ export function defineResource<
   const dispatchAudit = async (entry: AuditEntry<AppContext>, c: Context, appContext: AppContext) => {
     const auditPromise = (async () => {
       try {
+        const mgr =
+          (config as any)?.auditManager ||
+          (c as any)?.get?.("auditManager") ||
+          (globalConfig as any)?.auditManager ||
+          (globalConfig?.audit as any)?.manager ||
+          (appContext as any)?.auditManager;
+
+        if (mgr && typeof mgr.record === "function") {
+          mgr.record(entry);
+        }
+
         if (globalConfig?.audit?.store) {
           await globalConfig.audit.store(entry, c as any, appContext);
         }
@@ -413,7 +438,12 @@ export function defineResource<
     if (mode === "sync") {
       await auditPromise;
     } else {
-      const executionCtx = (c as any).executionCtx;
+      let executionCtx: any;
+      try {
+        executionCtx = (c as any).executionCtx;
+      } catch {
+        // Hono throws if executionCtx is not present in the runtime
+      }
       if (executionCtx && typeof executionCtx.waitUntil === "function") {
         executionCtx.waitUntil(auditPromise);
       } else {
@@ -692,7 +722,12 @@ export function defineResource<
     if (mode === "sync") {
       await dispatchPromise;
     } else {
-      const executionCtx = (c as any).executionCtx;
+      let executionCtx: any;
+      try {
+        executionCtx = (c as any).executionCtx;
+      } catch {
+        // Hono throws if executionCtx is not present in the runtime
+      }
       if (executionCtx && typeof executionCtx.waitUntil === "function") {
         executionCtx.waitUntil(dispatchPromise);
       } else {
@@ -5881,6 +5916,99 @@ export function defineApi<
     });
   }
 
+  // Comprehensive Activity Logging & Mutation Audit Trail (Issue #144)
+  const auditManagerOpt = (versionOrOptions as any)?.auditManager;
+  const auditConfig = (versionOrOptions as any)?.audit;
+  const shouldEnableAudit = Boolean(
+    auditManagerOpt ||
+    auditConfig !== false
+  );
+
+  let auditManager: AuditManager | undefined = auditManagerOpt;
+  if (!auditManager && shouldEnableAudit) {
+    auditManager = createAuditManager({
+      maxLogSize: auditConfig?.maxLogSize,
+    });
+  }
+
+  if (auditManager) {
+    (api as any).auditManager = auditManager;
+
+    // Attach auditManager to all resource apps & configs so mutations are recorded
+    for (const resourceApp of Object.values(resources)) {
+      (resourceApp as any).auditManager = auditManager;
+      const resConfig = (resourceApp as any)[RESOURCE_CONFIG];
+      if (resConfig) {
+        (resConfig as any).auditManager = auditManager;
+      }
+    }
+
+    // GET /audit-logs
+    api.get("/audit-logs", (c) => {
+      const resource = c.req.query("resource");
+      const recordId = c.req.query("recordId");
+      const action = c.req.query("action");
+      const actorId = c.req.query("actorId");
+      const tenantId = (c as any).get?.("tenantId") || c.req.query("tenantId");
+      const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 50;
+      const entries = auditManager!.getEntries({
+        resource,
+        recordId,
+        action,
+        actorId,
+        tenantId,
+        limit,
+      });
+      return c.json({ data: entries });
+    });
+
+    // GET /audit-logs/resource/:resource/:recordId
+    api.get("/audit-logs/resource/:resource/:recordId", (c) => {
+      const resource = c.req.param("resource");
+      const recordId = c.req.param("recordId");
+      const trail = auditManager!.getRecordTrail(resource, recordId);
+      return c.json({ data: trail });
+    });
+
+    // GET /audit-logs/:id
+    api.get("/audit-logs/:id", (c) => {
+      const id = c.req.param("id");
+      const entry = auditManager!.getEntry(id);
+      if (!entry) {
+        return c.json({ error: "Audit log entry not found" }, 404);
+      }
+      return c.json({ data: entry });
+    });
+
+    // POST /audit-logs
+    api.post("/audit-logs", async (c) => {
+      const body = await c.req.json();
+      if (!body.resource || !body.action) {
+        return c.json({ error: "resource and action are required" }, 400);
+      }
+      const tenantId = (c as any).get?.("tenantId") || body.tenantId;
+      const ip =
+        c.req.header("x-forwarded-for") ||
+        c.req.header("cf-connecting-ip") ||
+        null;
+      const userAgent = c.req.header("user-agent") || null;
+      const recorded = auditManager!.record({
+        recordId: "manual",
+        ...body,
+        tenantId,
+        ip: body.ip ?? ip,
+        userAgent: body.userAgent ?? userAgent,
+      });
+      return c.json({ data: recorded }, 201);
+    });
+
+    // POST /audit-logs/clear
+    api.post("/audit-logs/clear", (c) => {
+      auditManager!.clear();
+      return c.json({ success: true });
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -5902,6 +6030,9 @@ export function defineApi<
     }
     if (webhookManager) {
       (versionedApi as any).webhookManager = webhookManager;
+    }
+    if (auditManager) {
+      (versionedApi as any).auditManager = auditManager;
     }
     return versionedApi as any;
   }

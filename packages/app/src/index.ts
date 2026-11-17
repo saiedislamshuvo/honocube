@@ -105,6 +105,7 @@ export { AutomationRuleDialog } from "./views/automation-rule-dialog.js";
 export { AutomationHistoryView } from "./views/automation-history-view.js";
 export { WebhookManagerDialog } from "./views/webhook-manager-dialog.js";
 export { WebhookDeliveriesView } from "./views/webhook-deliveries-view.js";
+export { AuditTrailView } from "./views/audit-trail-view.js";
 
 
 
