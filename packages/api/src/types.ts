@@ -95,6 +95,8 @@ export interface ResourceHooks<
   afterDelete?: (id: string | number, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
   
   // Batch Hooks
+  beforeBatchCreate?: (records: TInsert[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<TInsert[] | void> | TInsert[] | void;
+  afterBatchCreate?: (records: TSelect[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
   beforeBatchUpdate?: (ids: (string | number)[], data: Partial<TInsert>, c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<{ ids: (string | number)[], data: Partial<TInsert> } | void> | { ids: (string | number)[], data: Partial<TInsert> } | void;
   afterBatchUpdate?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext) => Promise<void> | void;
   beforeBatchDelete?: (ids: (string | number)[], c: Context<{ Bindings: Env }>, tx: DatabaseAdapter<any, any, any>, appContext: AppContext, batchStmts?: any[]) => Promise<(string | number)[] | void> | (string | number)[] | void;
@@ -1395,6 +1397,64 @@ export interface AppImpersonationConfig<
   ) => void | Promise<void>;
 }
 
+export interface ResourceVirtualTableConfig {
+  /** Name of the FTS5 virtual table (e.g., 'posts_fts') */
+  tableName: string;
+
+  /**
+   * How the virtual table is kept in sync with the source table:
+   * - "hooks": Managed automatically by @honocube/api afterCreate/afterUpdate/afterDelete hooks
+   * - "triggers": Managed externally by database triggers in migrations
+   */
+  sync?: "hooks" | "triggers";
+
+  /** Enable BM25 relevance ranking (default: true) */
+  ranking?: boolean;
+
+  /** Column weights for BM25 ranking (e.g., { title: 5.0, content: 1.0 }) */
+  weights?: Record<string, number>;
+
+  /** Tokenizer to use (e.g., 'porter unicode61', 'unicode61') */
+  tokenizer?: string;
+}
+
+export interface ResourceTsvectorConfig {
+  /** Column containing the tsvector (default: 'search_vector' or dynamically generated) */
+  column?: string;
+  /** Language configuration for to_tsquery / websearch_to_tsquery (default: 'english') */
+  language?: string;
+  /** Ranking function: 'ts_rank' | 'ts_rank_cd' (default: 'ts_rank') */
+  rankingFunction?: "ts_rank" | "ts_rank_cd";
+}
+
+export interface ResourceSearchConfig<TSelect = any> {
+  /** Fields on the main table to include in search */
+  fields?: (keyof TSelect | string)[];
+
+  /** Related tables / child records to search across */
+  relations?: string[];
+
+  /**
+   * Search strategy:
+   * - "auto": Detects dialect (d1/sqlite -> fts5 if configured, pg -> tsvector, mysql -> fulltext, fallback -> like)
+   * - "fts5": Uses SQLite/D1 FTS5 virtual table
+   * - "tsvector": Uses PostgreSQL tsvector & GIN index
+   * - "fulltext": Uses MySQL fulltext index
+   * - "like": Substring matching (default fallback)
+   */
+  strategy?: "auto" | "fts5" | "tsvector" | "fulltext" | "like";
+
+  /**
+   * FTS5 / Virtual Table configuration (for Cloudflare D1 & SQLite)
+   */
+  virtualTable?: ResourceVirtualTableConfig;
+
+  /**
+   * PostgreSQL tsvector configuration
+   */
+  tsvector?: ResourceTsvectorConfig;
+}
+
 export interface ResourceConfig<
   TTable = unknown,
   TSelect = InferSelect<TTable>,
@@ -1503,10 +1563,7 @@ export interface ResourceConfig<
   scope?: (cols: any, ops: any, appContext: AppContext) => any;
 
   // New Search & Filter Configuration
-  search?: {
-    fields?: (keyof TSelect | string)[];
-    relations?: string[];
-  };
+  search?: ResourceSearchConfig<TSelect>;
 
   filter?: {
     allow?: (keyof TSelect | string)[];

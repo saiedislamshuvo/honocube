@@ -15,6 +15,14 @@ import { createImpersonationManager, type ImpersonationManager } from "../impers
 import { createDomainManager, type DomainManager } from "../domains/manager.js";
 import { createBackupManager, type BackupManager } from "../backup/manager.js";
 import { createCurrencyManager, type CurrencyManager } from "../currency/manager.js";
+import {
+  sanitizeFts5Query,
+  resolveSearchStrategy,
+  buildFts5OrderExpression,
+  buildFts5Subquery,
+  buildTsvectorCondition,
+  syncVirtualTableRecord,
+} from "../search/engine.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -2127,19 +2135,66 @@ export function defineResource<
       }
 
       const q = queryParams.q;
+      const dialect: "postgresql" | "mysql" | "sqlite" = (adapter.getDialect?.() as any) ?? "sqlite";
+      const searchStrategy = resolveSearchStrategy(config.search, dialect);
+      const isFtsActive = !!(q && config.search && (searchStrategy === "fts5" || searchStrategy === "tsvector"));
+      const isRelevanceSort = queryParams.sort === "relevance";
+
+      if (q && config.search && searchStrategy === "fts5" && config.search.virtualTable?.tableName) {
+        const sanitizedQ = sanitizeFts5Query(q);
+        const shouldRank = config.search.virtualTable.ranking !== false;
+        if (isRelevanceSort || (!queryParams.sort && !config.defaultSort && shouldRank)) {
+          const cols = adapter.getColumns(config.table) as Record<string, any>;
+          const sqlTag = adapter.getSql();
+          const bm25Expr = buildFts5OrderExpression(
+            config.search.virtualTable.tableName,
+            config.search.virtualTable.weights,
+            (config.search.fields || []) as string[],
+            sanitizedQ,
+            cols.id,
+            sqlTag
+          );
+          if (bm25Expr) {
+            sqlOrderBy = { raw: bm25Expr, direction: "asc" };
+          }
+        }
+      }
 
       // 1. Resolve 'with' object (Explicit only)
       const withTree = resolveWith("list");
 
       // 2. Build Search Subqueries
-      const searchSubqueries: any[] = [];
+      const buildSearchSubqueries = (forceLike = false) => {
+        const subqueries: any[] = [];
+        if (!q || !config.search) return subqueries;
 
-      if (q && config.search) {
+        const currentStrategy = forceLike ? "like" : searchStrategy;
         const ops = adapter.getOperators();
+        const sqlTag = adapter.getSql();
+        const cols = adapter.getColumns(config.table) as Record<string, any>;
 
-        // Search local fields
-        if (config.search.fields) {
-          const searchConds = [ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`)))];
+        if (currentStrategy === "fts5" && config.search.virtualTable?.tableName) {
+          const sanitizedQ = sanitizeFts5Query(q);
+          if (sanitizedQ) {
+            subqueries.push(
+              buildFts5Subquery(
+                config.search.virtualTable.tableName,
+                sanitizedQ,
+                config.search.virtualTable.weights,
+                (config.search.fields || []) as string[],
+                sqlTag
+              )
+            );
+          }
+        } else if (currentStrategy === "tsvector") {
+          const tsCondition = buildTsvectorCondition(
+            config.search.tsvector,
+            (config.search.fields || []) as string[],
+            q,
+            cols,
+            sqlTag
+          );
+          const searchConds = [tsCondition];
           if (tenancy.tenantCondition) {
             searchConds.push(tenancy.tenantCondition);
           }
@@ -2147,7 +2202,19 @@ export function defineResource<
             .select({ id: adapter.getColumn(config.table as any, 'id') })
             .from(config.table)
             .where(ops.and(...searchConds));
-          searchSubqueries.push(localSubquery);
+          subqueries.push(localSubquery);
+        } else {
+          if (config.search.fields && config.search.fields.length > 0) {
+            const searchConds = [ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`)))];
+            if (tenancy.tenantCondition) {
+              searchConds.push(tenancy.tenantCondition);
+            }
+            const localSubquery = adapter.getDb()
+              .select({ id: adapter.getColumn(config.table as any, 'id') })
+              .from(config.table)
+              .where(ops.and(...searchConds));
+            subqueries.push(localSubquery);
+          }
         }
 
         // Search relations
@@ -2161,7 +2228,7 @@ export function defineResource<
                 .from(config.table)
                 .innerJoin(oneRel.table, ops.eq(adapter.getColumn(oneRel.table, oneRel.referenceKey), adapter.getColumn(config.table as any, oneRel.foreignKey)))
                 .where(ops.or(...oneRel.search.map(f => ops.like(adapter.getColumn(oneRel.table, f as string), `%${q}%`))));
-              searchSubqueries.push(relSubquery);
+              subqueries.push(relSubquery);
             }
 
             // Check 'many' relations
@@ -2171,7 +2238,7 @@ export function defineResource<
                 .select({ parentId: adapter.getColumn(manyRel.table, manyRel.foreignKey) })
                 .from(manyRel.table)
                 .where(ops.or(...manyRel.search.map(f => ops.like(adapter.getColumn(manyRel.table, f as string), `%${q}%`))));
-              searchSubqueries.push(relSubquery);
+              subqueries.push(relSubquery);
             }
 
             // Check 'pivot' relations
@@ -2182,138 +2249,174 @@ export function defineResource<
                 .from(pivotRel.table)
                 .innerJoin(pivotRel.targetTable, ops.eq(adapter.getColumn(pivotRel.targetTable, pivotRel.targetReferenceKey), adapter.getColumn(pivotRel.table, pivotRel.referenceKey)))
                 .where(ops.or(...pivotRel.search.map(f => ops.like(adapter.getColumn(pivotRel.targetTable, f as string), `%${q}%`))));
-              searchSubqueries.push(relSubquery);
+              subqueries.push(relSubquery);
             }
           }
         }
-      }
 
-      const baseWhere = (cols: any, ops: any) => {
-        const { and, eq, like, gt, gte, lt, lte, isNull, or } = ops;
-        const conditions: any[] = [];
-
-        // Apply Tenancy Condition
-        if (tenancy.tenantCondition) {
-          conditions.push(tenancy.tenantCondition);
-        }
-
-        // Apply Soft Delete (Mandatory)
-        if (config.softDelete) {
-          conditions.push(isNull(cols[config.softDelete]));
-        }
-
-        // Apply Scope (Mandatory)
-        if (config.scope) {
-          const scoped = config.scope(cols, ops, appContext);
-          if (scoped) conditions.push(scoped);
-        }
-
-        // Apply Search (via Subqueries to avoid parameter limits)
-        if (searchSubqueries.length > 0) {
-          const sqlTag = adapter.getSql();
-          conditions.push(or(...searchSubqueries.map(sq => sqlTag`${cols.id} IN (${sq})`)));
-        } else if (q && config.search) {
-          conditions.push(eq(cols.id, -1));
-        }
-
-        // Direct Filters
-        const allowedFilters = config.filter?.allow || [];
-        for (const [key, value] of Object.entries(queryParams)) {
-          if (['limit', 'page', 'q', 'sort', 'order', 'cursor', 'after', 'before', 'direction'].includes(key)) continue;
-          if (value === "" || value == null) continue;
-
-          const rangeMatch = key.match(/^(.+)__(gte|lte|gt|lt|like)$/);
-          let field: string = key;
-          let op = eq;
-
-          if (rangeMatch) {
-            const [, f, suffix] = rangeMatch;
-            field = f!;
-            if (suffix === 'gte') op = gte;
-            else if (suffix === 'lte') op = lte;
-            else if (suffix === 'gt') op = gt;
-            else if (suffix === 'lt') op = lt;
-            else if (suffix === 'like') op = like;
-          }
-
-          if (allowedFilters.length > 0 && !allowedFilters.includes(field as string)) {
-             continue;
-          }
-
-          if (cols[field]) {
-            const finalValue = op === like ? `%${value}%` : value;
-            conditions.push(op(cols[field], finalValue));
-          }
-        }
-
-        return conditions.length > 0 ? and(...conditions) : undefined;
+        return subqueries;
       };
 
-      const dataWhere = (cols: any, ops: any) => {
-        const base = baseWhere(cols, ops);
-        if (!cursorObj) return base;
+      const buildBaseWhere = (forceLike = false) => {
+        const subqueries = buildSearchSubqueries(forceLike);
+        return (cols: any, ops: any) => {
+          const { and, eq, like, gt, gte, lt, lte, isNull, or } = ops;
+          const conditions: any[] = [];
 
-        const isForward = direction === "next";
-        const isDesc = sortDirection === "desc";
-        let keysetCond: any;
-
-        if (!isComposite) {
-          const cursorId = cursorObj.id;
-          if (cursorId == null) {
-            throw new ApiError(400, "INVALID_CURSOR", "Cursor is missing required 'id' field.");
-          }
-          if (isForward) {
-            keysetCond = isDesc ? ops.lt(cols.id, cursorId) : ops.gt(cols.id, cursorId);
-          } else {
-            keysetCond = isDesc ? ops.gt(cols.id, cursorId) : ops.lt(cols.id, cursorId);
-          }
-        } else {
-          const cursorVal = cursorObj[sortField];
-          const cursorId = cursorObj.id;
-          if (cursorVal === undefined || cursorId == null) {
-            throw new ApiError(400, "INVALID_CURSOR", `Cursor is missing required '${sortField}' or 'id' field.`);
+          // Apply Tenancy Condition
+          if (tenancy.tenantCondition) {
+            conditions.push(tenancy.tenantCondition);
           }
 
-          if (isForward) {
-            keysetCond = isDesc
-              ? ops.or(
-                  ops.lt(cols[sortField], cursorVal),
-                  ops.and(ops.eq(cols[sortField], cursorVal), ops.lt(cols.id, cursorId))
-                )
-              : ops.or(
-                  ops.gt(cols[sortField], cursorVal),
-                  ops.and(ops.eq(cols[sortField], cursorVal), ops.gt(cols.id, cursorId))
-                );
-          } else {
-            keysetCond = isDesc
-              ? ops.or(
-                  ops.gt(cols[sortField], cursorVal),
-                  ops.and(ops.eq(cols[sortField], cursorVal), ops.gt(cols.id, cursorId))
-                )
-              : ops.or(
-                  ops.lt(cols[sortField], cursorVal),
-                  ops.and(ops.eq(cols[sortField], cursorVal), ops.lt(cols.id, cursorId))
-                );
+          // Apply Soft Delete (Mandatory)
+          if (config.softDelete) {
+            conditions.push(isNull(cols[config.softDelete]));
           }
-        }
 
-        return base ? ops.and(base, keysetCond) : keysetCond;
+          // Apply Scope (Mandatory)
+          if (config.scope) {
+            const scoped = config.scope(cols, ops, appContext);
+            if (scoped) conditions.push(scoped);
+          }
+
+          // Apply Search (via Subqueries to avoid parameter limits)
+          if (subqueries.length > 0) {
+            const sqlTag = adapter.getSql();
+            conditions.push(or(...subqueries.map(sq => sqlTag`${cols.id} IN (${sq})`)));
+          } else if (q && config.search) {
+            conditions.push(eq(cols.id, -1));
+          }
+
+          // Direct Filters
+          const allowedFilters = config.filter?.allow || [];
+          for (const [key, value] of Object.entries(queryParams)) {
+            if (['limit', 'page', 'q', 'sort', 'order', 'cursor', 'after', 'before', 'direction'].includes(key)) continue;
+            if (value === "" || value == null) continue;
+
+            const rangeMatch = key.match(/^(.+)__(gte|lte|gt|lt|like)$/);
+            let field: string = key;
+            let op = eq;
+
+            if (rangeMatch) {
+              const [, f, suffix] = rangeMatch;
+              field = f!;
+              if (suffix === 'gte') op = gte;
+              else if (suffix === 'lte') op = lte;
+              else if (suffix === 'gt') op = gt;
+              else if (suffix === 'lt') op = lt;
+              else if (suffix === 'like') op = like;
+            }
+
+            if (allowedFilters.length > 0 && !allowedFilters.includes(field as string)) {
+               continue;
+            }
+
+            if (cols[field]) {
+              const finalValue = op === like ? `%${value}%` : value;
+              conditions.push(op(cols[field], finalValue));
+            }
+          }
+
+          return conditions.length > 0 ? and(...conditions) : undefined;
+        };
       };
+
+      const buildDataWhere = (forceLike = false) => {
+        const base = buildBaseWhere(forceLike);
+        return (cols: any, ops: any) => {
+          const baseCond = base(cols, ops);
+          if (!cursorObj) return baseCond;
+
+          const isForward = direction === "next";
+          const isDesc = sortDirection === "desc";
+          let keysetCond: any;
+
+          if (!isComposite) {
+            const cursorId = cursorObj.id;
+            if (cursorId == null) {
+              throw new ApiError(400, "INVALID_CURSOR", "Cursor is missing required 'id' field.");
+            }
+            if (isForward) {
+              keysetCond = isDesc ? ops.lt(cols.id, cursorId) : ops.gt(cols.id, cursorId);
+            } else {
+              keysetCond = isDesc ? ops.gt(cols.id, cursorId) : ops.lt(cols.id, cursorId);
+            }
+          } else {
+            const cursorVal = cursorObj[sortField];
+            const cursorId = cursorObj.id;
+            if (cursorVal === undefined || cursorId == null) {
+              throw new ApiError(400, "INVALID_CURSOR", `Cursor is missing required '${sortField}' or 'id' field.`);
+            }
+
+            if (isForward) {
+              keysetCond = isDesc
+                ? ops.or(
+                    ops.lt(cols[sortField], cursorVal),
+                    ops.and(ops.eq(cols[sortField], cursorVal), ops.lt(cols.id, cursorId))
+                  )
+                : ops.or(
+                    ops.gt(cols[sortField], cursorVal),
+                    ops.and(ops.eq(cols[sortField], cursorVal), ops.gt(cols.id, cursorId))
+                  );
+            } else {
+              keysetCond = isDesc
+                ? ops.or(
+                    ops.gt(cols[sortField], cursorVal),
+                    ops.and(ops.eq(cols[sortField], cursorVal), ops.gt(cols.id, cursorId))
+                  )
+                : ops.or(
+                    ops.lt(cols[sortField], cursorVal),
+                    ops.and(ops.eq(cols[sortField], cursorVal), ops.lt(cols.id, cursorId))
+                  );
+            }
+          }
+
+          return baseCond ? ops.and(baseCond, keysetCond) : keysetCond;
+        };
+      };
+
+      const baseWhere = buildBaseWhere(false);
+      const dataWhere = buildDataWhere(false);
 
       const queryKey = config.queryKey ?? config.name;
       const fetchLimit = isCursorRequest ? limit + 1 : limit;
 
-      const [rawRows, total] = await Promise.all([
-        adapter.findMany(config.table, {
-          limit: fetchLimit,
-          offset,
-          orderBy: sqlOrderBy,
-          where: cursorObj ? dataWhere : baseWhere,
-          with: withTree,
-          queryKey
-        }),
-        adapter.count(config.table, baseWhere)
-      ]);
+      let rawRows: any[];
+      let total: number;
+
+      try {
+        [rawRows, total] = await Promise.all([
+          adapter.findMany(config.table, {
+            limit: fetchLimit,
+            offset,
+            orderBy: sqlOrderBy,
+            where: cursorObj ? dataWhere : baseWhere,
+            with: withTree,
+            queryKey
+          }),
+          adapter.count(config.table, baseWhere)
+        ]);
+      } catch (err: any) {
+        if (isFtsActive) {
+          console.warn(`[HonoCube Search] Full-text search failed (${err.message}), falling back to LIKE search.`);
+          const fallbackBaseWhere = buildBaseWhere(true);
+          const fallbackDataWhere = buildDataWhere(true);
+          const fallbackOrderBy = config.defaultSort ?? { field: 'id', direction: 'desc' };
+          [rawRows, total] = await Promise.all([
+            adapter.findMany(config.table, {
+              limit: fetchLimit,
+              offset,
+              orderBy: fallbackOrderBy,
+              where: cursorObj ? fallbackDataWhere : fallbackBaseWhere,
+              with: withTree,
+              queryKey
+            }),
+            adapter.count(config.table, fallbackBaseWhere)
+          ]);
+        } else {
+          throw err;
+        }
+      }
 
       let hasNext = false;
       let hasPrev = false;
@@ -2694,6 +2797,12 @@ export function defineResource<
           await tx.getDb().delete(config.table).where(ops.and(...conditions));
         }
 
+        if (config.search?.virtualTable?.sync === "hooks") {
+          for (const tid of targetIds) {
+            await syncVirtualTableRecord("delete", { id: tid }, config.search.virtualTable, (config.search.fields || []) as string[], tx);
+          }
+        }
+
         if (config.hooks?.afterBatchDelete) {
           await config.hooks.afterBatchDelete(targetIds, c, tx, appContext);
         }
@@ -2825,11 +2934,34 @@ function buildDateBucketSql(
 
       // 2. Build Search Subqueries if q is provided
       const q = queryParams.q;
-      const searchSubqueries: any[] = [];
-      if (q && config.search) {
-        // Search local fields
-        if (config.search.fields) {
-          const searchConds = [ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`)))];
+      const searchStrategy = resolveSearchStrategy(config.search, dialect);
+
+      const buildAggSearchSubqueries = () => {
+        const subqueries: any[] = [];
+        if (!q || !config.search) return subqueries;
+
+        if (searchStrategy === "fts5" && config.search.virtualTable?.tableName) {
+          const sanitizedQ = sanitizeFts5Query(q);
+          if (sanitizedQ) {
+            subqueries.push(
+              buildFts5Subquery(
+                config.search.virtualTable.tableName,
+                sanitizedQ,
+                config.search.virtualTable.weights,
+                (config.search.fields || []) as string[],
+                sqlTag
+              )
+            );
+          }
+        } else if (searchStrategy === "tsvector") {
+          const tsCondition = buildTsvectorCondition(
+            config.search.tsvector,
+            (config.search.fields || []) as string[],
+            q,
+            cols,
+            sqlTag
+          );
+          const searchConds = [tsCondition];
           if (tenancy.tenantCondition) {
             searchConds.push(tenancy.tenantCondition);
           }
@@ -2837,8 +2969,21 @@ function buildDateBucketSql(
             .select({ id: adapter.getColumn(config.table as any, 'id') })
             .from(config.table)
             .where(ops.and(...searchConds));
-          searchSubqueries.push(localSubquery);
+          subqueries.push(localSubquery);
+        } else {
+          if (config.search.fields && config.search.fields.length > 0) {
+            const searchConds = [ops.or(...config.search.fields.map(f => ops.like(adapter.getColumn(config.table as any, f as string), `%${q}%`)))];
+            if (tenancy.tenantCondition) {
+              searchConds.push(tenancy.tenantCondition);
+            }
+            const localSubquery = adapter.getDb()
+              .select({ id: adapter.getColumn(config.table as any, 'id') })
+              .from(config.table)
+              .where(ops.and(...searchConds));
+            subqueries.push(localSubquery);
+          }
         }
+
         // Search relations
         if (config.search.relations) {
           for (const relName of config.search.relations) {
@@ -2849,7 +2994,7 @@ function buildDateBucketSql(
                 .from(config.table)
                 .innerJoin(oneRel.table, ops.eq(adapter.getColumn(oneRel.table, oneRel.referenceKey), adapter.getColumn(config.table as any, oneRel.foreignKey)))
                 .where(ops.or(...oneRel.search.map(f => ops.like(adapter.getColumn(oneRel.table, f as string), `%${q}%`))));
-              searchSubqueries.push(relSubquery);
+              subqueries.push(relSubquery);
             }
             const manyRel = config.relations?.many?.find(r => r.name === relName);
             if (manyRel && manyRel.search) {
@@ -2857,7 +3002,7 @@ function buildDateBucketSql(
                 .select({ parentId: adapter.getColumn(manyRel.table, manyRel.foreignKey) })
                 .from(manyRel.table)
                 .where(ops.or(...manyRel.search.map(f => ops.like(adapter.getColumn(manyRel.table, f as string), `%${q}%`))));
-              searchSubqueries.push(relSubquery);
+              subqueries.push(relSubquery);
             }
             const pivotRel = config.relations?.pivots?.find(r => r.name === relName);
             if (pivotRel && pivotRel.search && pivotRel.targetTable) {
@@ -2866,11 +3011,15 @@ function buildDateBucketSql(
                 .from(pivotRel.table)
                 .innerJoin(pivotRel.targetTable, ops.eq(adapter.getColumn(pivotRel.targetTable, pivotRel.targetReferenceKey), adapter.getColumn(pivotRel.table, pivotRel.referenceKey)))
                 .where(ops.or(...pivotRel.search.map(f => ops.like(adapter.getColumn(pivotRel.targetTable, f as string), `%${q}%`))));
-              searchSubqueries.push(relSubquery);
+              subqueries.push(relSubquery);
             }
           }
         }
-      }
+
+        return subqueries;
+      };
+
+      const searchSubqueries: any[] = buildAggSearchSubqueries();
 
       // 3. Build WHERE conditions
       const conditions: any[] = [];
@@ -3826,6 +3975,10 @@ function buildDateBucketSql(
             createdOutboxEntry.payload.data = inserted;
           }
 
+          if (config.search?.virtualTable?.sync === "hooks") {
+            await syncVirtualTableRecord("create", inserted, config.search.virtualTable, (config.search.fields || []) as string[], tx);
+          }
+
           if (config.hooks?.afterCreate) {
             await config.hooks.afterCreate(inserted as TSelect, c, tx, appContext);
           }
@@ -3872,6 +4025,10 @@ function buildDateBucketSql(
               tenancy.isTenancyActive ? tenancy.tenantVal : null
             );
             await persistOutboxEntry(createdOutboxEntry, tx, c, appContext);
+          }
+
+          if (config.search?.virtualTable?.sync === "hooks") {
+            await syncVirtualTableRecord("create", inserted, config.search.virtualTable, (config.search.fields || []) as string[], tx);
           }
 
           if (config.hooks?.afterCreate) {
@@ -4368,6 +4525,10 @@ function buildDateBucketSql(
             });
           }
 
+          if (config.search?.virtualTable?.sync === "hooks") {
+            await syncVirtualTableRecord("update", updated, config.search.virtualTable, (config.search.fields || []) as string[], tx);
+          }
+
           if (config.hooks?.afterUpdate) {
             await config.hooks.afterUpdate(updated as TSelect, c, tx, appContext);
           }
@@ -4470,6 +4631,10 @@ function buildDateBucketSql(
             }
             updatedOutboxEntry = createOutboxEntry(outboxEventImperative, id, payloadData, tenancy.isTenancyActive ? tenancy.tenantVal : null);
             await persistOutboxEntry(updatedOutboxEntry, tx, c, appContext);
+          }
+
+          if (config.search?.virtualTable?.sync === "hooks") {
+            await syncVirtualTableRecord("update", updated, config.search.virtualTable, (config.search.fields || []) as string[], tx);
           }
 
           if (config.hooks?.afterUpdate) {
@@ -4698,6 +4863,10 @@ function buildDateBucketSql(
           await tx.update(config.table, id, { [config.softDelete]: new Date().toISOString() } as any, recordPredicate);
         } else {
           await tx.delete(config.table, id, true, recordPredicate);
+        }
+
+        if (config.search?.virtualTable?.sync === "hooks") {
+          await syncVirtualTableRecord("delete", { id }, config.search.virtualTable, (config.search.fields || []) as string[], tx);
         }
 
         if (config.hooks?.afterDelete) {
@@ -5106,6 +5275,9 @@ function buildDateBucketSql(
                     }
                  } else {
                     const inserted: any = await tx.insert(config.table, validatedRow);
+                    if (config.search?.virtualTable?.sync === "hooks") {
+                      await syncVirtualTableRecord("create", inserted, config.search.virtualTable, (config.search.fields || []) as string[], tx);
+                    }
                     if (config.relations) {
                        if (config.relations.many) {
                          for (const rel of config.relations.many) {
@@ -5221,8 +5393,11 @@ function buildDateBucketSql(
                  } else {
                     const updateQuery: any = buildUpdateStatement();
                     const res = await updateQuery;
-                    const updatedRec = Array.isArray(res) ? res[0] : res;
+                    const updatedRec = Array.isArray(res) ? res[0] : (res ?? { ...existing, ...validatedRow });
                     if (versionControl && !updatedRec) throw new ApiError(409, "OCC_FAILED", `OCC failed at row ${i}.`);
+                    if (config.search?.virtualTable?.sync === "hooks") {
+                      await syncVirtualTableRecord("update", updatedRec, config.search.virtualTable, (config.search.fields || []) as string[], tx);
+                    }
                     
                     if (config.relations) {
                        if (config.relations.many) {
