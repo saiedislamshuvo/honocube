@@ -13,6 +13,7 @@ import { createWebhookManager, type WebhookManager, type WebhookEndpoint } from 
 import { createAuditManager, type AuditManager } from "../audit/manager.js";
 import { createImpersonationManager, type ImpersonationManager } from "../impersonation/manager.js";
 import { createDomainManager, type DomainManager } from "../domains/manager.js";
+import { createBackupManager, type BackupManager } from "../backup/manager.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -125,9 +126,20 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
     }
   }
 
+  // Setup backup manager if backup config or backupManager provided
+  const backupOpt = appConfig.backups || appConfig.backupManager;
+  if (backupOpt && !appConfig.backupManager) {
+    if (typeof backupOpt === "object" && "createBackup" in backupOpt) {
+      appConfig.backupManager = backupOpt as BackupManager;
+    } else {
+      appConfig.backupManager = createBackupManager(backupOpt as any);
+    }
+  }
+
   return {
     eventBus: appConfig.eventBus!,
     domainManager: appConfig.domainManager,
+    backupManager: appConfig.backupManager,
 
     defineResource: <
       TTable,
@@ -153,10 +165,14 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
         if (!(finalOpts as any).domainManager && appConfig.domainManager) {
           (finalOpts as any).domainManager = appConfig.domainManager;
         }
+        if (!(finalOpts as any).backupManager && appConfig.backupManager) {
+          (finalOpts as any).backupManager = appConfig.backupManager;
+        }
       } else if (!versionOrOptions) {
         finalOpts = {
           eventBus: appConfig.eventBus,
           domainManager: appConfig.domainManager,
+          backupManager: appConfig.backupManager,
         } as any as V;
       }
       return defineApi<Env, TResources, V>(resources, finalOpts);
@@ -6355,6 +6371,155 @@ export function defineApi<
     });
   }
 
+  // Database & Asset Backup Management (Issue #151)
+  const backupManagerOpt =
+    (versionOrOptions as any)?.backupManager;
+  const backupConfig =
+    (versionOrOptions as any)?.backups;
+
+  const shouldEnableBackups = Boolean(
+    backupManagerOpt ||
+    (backupConfig && backupConfig !== false)
+  );
+
+  let backupManager: BackupManager | undefined =
+    backupManagerOpt ||
+    (typeof backupConfig === "object" && "createBackup" in backupConfig
+      ? (backupConfig as BackupManager)
+      : undefined);
+
+  if (!backupManager && shouldEnableBackups) {
+    backupManager = createBackupManager(
+      typeof backupConfig === "object" ? backupConfig : {}
+    );
+  }
+
+  if (backupManager) {
+    (api as any).backupManager = backupManager;
+
+    // GET /backups
+    api.get("/backups", async (c) => {
+      const type = c.req.query("type") as any;
+      const status = c.req.query("status") as any;
+      const data = backupManager!.listBackups({ type, status });
+      return c.json({ data, total: data.length });
+    });
+
+    // POST /backups
+    api.post("/backups", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      if (backupConfig?.authorize) {
+        const ok = await backupConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to manage backups." }, 403);
+        }
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      try {
+        const snapshot = await backupManager!.createBackup({
+          name: body.name,
+          type: body.type,
+          description: body.description,
+          trigger: body.trigger || "manual",
+          metadata: body.metadata,
+        });
+        return c.json({ data: snapshot }, 201);
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to create backup." }, 400);
+      }
+    });
+
+    // GET /backups/schedule
+    api.get("/backups/schedule", async (c) => {
+      return c.json({ data: backupManager!.getSchedule() });
+    });
+
+    // POST /backups/schedule
+    api.post("/backups/schedule", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      if (backupConfig?.authorize) {
+        const ok = await backupConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to update backup schedule." }, 403);
+        }
+      }
+      const body = await c.req.json().catch(() => ({}));
+      const updated = backupManager!.updateSchedule(body);
+      return c.json({ data: updated });
+    });
+
+    // GET /backups/:id
+    api.get("/backups/:id", async (c) => {
+      const id = c.req.param("id");
+      const snapshot = backupManager!.getBackup(id);
+      if (!snapshot) {
+        return c.json({ error: `Backup snapshot not found: ${id}` }, 404);
+      }
+      return c.json({ data: snapshot });
+    });
+
+    // POST /backups/:id/restore
+    api.post("/backups/:id/restore", async (c) => {
+      const id = c.req.param("id");
+      const appContext = (c as any).get?.("appContext") || {};
+      if (backupConfig?.authorize) {
+        const ok = await backupConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to restore backups." }, 403);
+        }
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      try {
+        const result = await backupManager!.restoreBackup({
+          snapshotId: id,
+          confirmation: body.confirmation || body.confirmText || "",
+          createPreRestoreSnapshot: body.createPreRestoreSnapshot !== false,
+        });
+        return c.json({ data: result });
+      } catch (err: any) {
+        const status = err?.message?.includes("not found") ? 404 : 400;
+        return c.json({ error: err?.message || "Failed to restore backup." }, status);
+      }
+    });
+
+    // DELETE /backups/:id
+    api.delete("/backups/:id", async (c) => {
+      const id = c.req.param("id");
+      const appContext = (c as any).get?.("appContext") || {};
+      if (backupConfig?.authorize) {
+        const ok = await backupConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to delete backup." }, 403);
+        }
+      }
+      const deleted = backupManager!.deleteBackup(id);
+      if (!deleted) {
+        return c.json({ error: `Backup snapshot not found: ${id}` }, 404);
+      }
+      return c.json({ success: true });
+    });
+
+    // GET /backups/:id/download
+    api.get("/backups/:id/download", async (c) => {
+      const id = c.req.param("id");
+      const snapshot = backupManager!.getBackup(id);
+      if (!snapshot) {
+        return c.json({ error: `Backup snapshot not found: ${id}` }, 404);
+      }
+      return c.json({
+        data: {
+          id: snapshot.id,
+          name: snapshot.name,
+          downloadUrl: snapshot.downloadUrl || `/backups/${snapshot.id}/download`,
+          sizeBytes: snapshot.sizeBytes,
+          checksum: snapshot.checksum,
+        },
+      });
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -6385,6 +6550,9 @@ export function defineApi<
     }
     if (domainManager) {
       (versionedApi as any).domainManager = domainManager;
+    }
+    if (backupManager) {
+      (versionedApi as any).backupManager = backupManager;
     }
     return versionedApi as any;
   }

@@ -289,6 +289,10 @@ export type {
   TokenPickerProps,
   CustomDomainDialogProps,
   DomainSettingsViewProps,
+  CreateBackupDialogProps,
+  RestoreBackupDialogProps,
+  BackupScheduleDialogProps,
+  BackupManagerViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -645,6 +649,28 @@ export type {
   DomainResolution,
   DomainManager,
 } from "./domains/types.js";
+
+// Database and Asset Backup Management & One-Click Restore (Issue #151)
+export {
+  formatBytes,
+  validateRestoreConfirmation,
+  createMockBackupSnapshot,
+  DEFAULT_BACKUP_SCHEDULE,
+} from "./backup/types.js";
+
+export type {
+  BackupType,
+  BackupStatus,
+  BackupTrigger,
+  BackupFrequency,
+  BackupSnapshot,
+  BackupScheduleConfig,
+  RestoreOptions,
+  RestoreResult,
+  CreateBackupOptions,
+  BackupManagerConfig,
+} from "./backup/types.js";
+
 
 
 

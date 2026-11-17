@@ -117,6 +117,10 @@ export { EmailTemplateEditorDialog } from "./views/email-template-editor-dialog.
 export { EmailTemplatesManager } from "./views/email-templates-manager.js";
 export { CustomDomainDialog } from "./views/custom-domain-dialog.js";
 export { DomainSettingsView } from "./views/domain-settings-view.js";
+export { CreateBackupDialog } from "./views/create-backup-dialog.js";
+export { RestoreBackupDialog } from "./views/restore-backup-dialog.js";
+export { BackupScheduleDialog } from "./views/backup-schedule-dialog.js";
+export { BackupManagerView } from "./views/backup-manager-view.js";
 
 
 

@@ -18,6 +18,12 @@ import type {
   EmailTokenDefinition,
   RenderedEmail,
 } from "../email/templates.js";
+import type {
+  BackupSnapshot,
+  BackupScheduleConfig,
+  BackupType,
+  RestoreOptions,
+} from "../backup/types.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1456,6 +1462,45 @@ export interface DomainSettingsViewProps {
   onRemoveDomain?: (domainId: string) => void | Promise<void>;
   className?: string;
 }
+
+export interface CreateBackupDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate?: (options: { name: string; type: BackupType; description?: string }) => void | Promise<void>;
+  isCreating?: boolean;
+  className?: string;
+}
+
+export interface RestoreBackupDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  snapshot?: BackupSnapshot | null;
+  onRestore?: (options: RestoreOptions) => void | Promise<void>;
+  isRestoring?: boolean;
+  className?: string;
+}
+
+export interface BackupScheduleDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  schedule?: BackupScheduleConfig;
+  onSave?: (schedule: BackupScheduleConfig) => void | Promise<void>;
+  isSaving?: boolean;
+  className?: string;
+}
+
+export interface BackupManagerViewProps {
+  snapshots?: BackupSnapshot[];
+  schedule?: BackupScheduleConfig;
+  onCreateBackup?: (options: { name: string; type: BackupType; description?: string }) => void | Promise<void>;
+  onRestoreBackup?: (options: RestoreOptions) => void | Promise<void>;
+  onDeleteBackup?: (snapshotId: string) => void | Promise<void>;
+  onDownloadBackup?: (snapshot: BackupSnapshot) => void | Promise<void>;
+  onSaveSchedule?: (schedule: BackupScheduleConfig) => void | Promise<void>;
+  isLoading?: boolean;
+  className?: string;
+}
+
 
 
 
