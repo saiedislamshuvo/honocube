@@ -23,6 +23,7 @@ import type {
   QRCodeFieldConfig,
   SignatureFieldConfig,
   RichTextFieldConfig,
+  RepeaterFieldConfig,
   RichTextToolbarTool,
   DynamicRule,
 } from "./fields.js";
@@ -283,4 +284,22 @@ export interface IRichTextFieldBuilder<TRecord = Record<string, unknown>>
   minHeight(pixels: number): this;
   maxHeight(pixels: number): this;
   format(fmt: "html" | "markdown" | "json"): this;
+}
+
+/**
+ * Fluent builder for dynamic repeated field groups and embedded item arrays.
+ */
+export interface IRepeaterFieldBuilder<TRecord = Record<string, unknown>>
+  extends IFieldBuilder<RepeaterFieldConfig<TRecord>, any[], TRecord> {
+  fields(fields: Record<string, any>): this;
+  schema(schema: Record<string, any>): this;
+  minItems(min: number): this;
+  maxItems(max: number): this;
+  layout(layout: "table" | "cards" | "stack"): this;
+  addButtonText(text: string): this;
+  itemLabel(label: string): this;
+  collapsible(collapsible?: boolean): this;
+  defaultCollapsed(collapsed?: boolean): this;
+  allowReorder(allow?: boolean): this;
+  allowClone(allow?: boolean): this;
 }

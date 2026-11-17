@@ -29,6 +29,7 @@ import { QRCodeField } from "./qr-code-field.js";
 import { SignaturePad } from "./signature-pad.js";
 import { RichTextEditor } from "./rich-text-editor.js";
 import { AsyncCombobox } from "./async-combobox.js";
+import { RepeaterField } from "./repeater-field.js";
 
 interface DatePickerFieldProps {
   id: string;
@@ -513,6 +514,33 @@ export function FormField({
                 minHeight={rtConfig.minHeight}
                 maxHeight={rtConfig.maxHeight}
                 format={rtConfig.format}
+                hasError={Boolean(errorMessage)}
+              />
+            );
+          }
+
+          case "repeater": {
+            const repConfig = field as any;
+            return (
+              <RepeaterField
+                id={name}
+                name={name}
+                value={Array.isArray(fieldState.value) ? fieldState.value : []}
+                onChange={onChange}
+                fields={repConfig.fields}
+                schema={repConfig.schema}
+                label={field.label}
+                description={field.description}
+                minItems={repConfig.minItems}
+                maxItems={repConfig.maxItems}
+                layout={repConfig.layout}
+                addButtonText={repConfig.addButtonText}
+                itemLabel={repConfig.itemLabel}
+                collapsible={repConfig.collapsible}
+                defaultCollapsed={repConfig.defaultCollapsed}
+                allowReorder={repConfig.allowReorder}
+                allowClone={repConfig.allowClone}
+                disabled={isDisabled}
                 hasError={Boolean(errorMessage)}
               />
             );

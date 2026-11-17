@@ -25,7 +25,8 @@ export type BaseFieldType =
   | "barcode"
   | "qrcode"
   | "signature"
-  | "richtext";
+  | "richtext"
+  | "repeater";
 
 export interface FieldCapabilityContext<TRecord = Record<string, unknown>> {
   record: TRecord;
@@ -282,6 +283,22 @@ export interface RichTextFieldConfig<TRecord = Record<string, unknown>> extends 
   format?: "html" | "markdown" | "json";
 }
 
+export interface RepeaterFieldConfig<TRecord = Record<string, unknown>> extends BaseFieldConfig<TRecord> {
+  type: "repeater";
+  fields?: Record<string, any>;
+  schema?: Record<string, any>;
+  minItems?: number;
+  maxItems?: number;
+  layout?: "table" | "cards" | "stack";
+  addButtonText?: string;
+  itemLabel?: string;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+  allowReorder?: boolean;
+  allowClone?: boolean;
+  default?: any[] | (() => any[]);
+}
+
 export type FieldConfig<TRecord = Record<string, unknown>> =
   | TextFieldConfig<TRecord>
   | NumberFieldConfig<TRecord>
@@ -303,10 +320,13 @@ export type FieldConfig<TRecord = Record<string, unknown>> =
   | BarcodeFieldConfig<TRecord>
   | QRCodeFieldConfig<TRecord>
   | SignatureFieldConfig<TRecord>
-  | RichTextFieldConfig<TRecord>;
+  | RichTextFieldConfig<TRecord>
+  | RepeaterFieldConfig<TRecord>;
 
 export type InferFieldValue<TField> = TField extends { build(): infer TBuilt }
   ? InferFieldValue<TBuilt>
+  : TField extends { type: "repeater" }
+  ? Record<string, any>[]
   : TField extends { type: "daterange" }
   ? DateRangeValue
   : TField extends { type: "tags" }

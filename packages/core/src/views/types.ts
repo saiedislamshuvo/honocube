@@ -522,6 +522,30 @@ export interface AsyncComboboxProps {
   onCreate?: (nameOrQuery: string) => Promise<ComboboxOption | Record<string, unknown> | null | void>;
 }
 
+export interface RepeaterFieldProps {
+  id?: string;
+  name: string;
+  value?: any[];
+  onChange: (value: any[]) => void;
+  fields?: Record<string, any>;
+  schema?: Record<string, any>;
+  label?: string;
+  description?: string;
+  minItems?: number;
+  maxItems?: number;
+  layout?: "table" | "cards" | "stack";
+  addButtonText?: string;
+  itemLabel?: string;
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+  allowReorder?: boolean;
+  allowClone?: boolean;
+  disabled?: boolean;
+  readOnly?: boolean;
+  hasError?: boolean;
+  className?: string;
+}
+
 export interface ChildTableProps {
   /**
    * Field key name.

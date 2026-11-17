@@ -24,6 +24,7 @@ import type {
   SignatureFieldConfig,
   RichTextFieldConfig,
   RichTextToolbarTool,
+  RepeaterFieldConfig,
   FieldConfig,
   DynamicRule,
 } from "../types/fields.js";
@@ -51,6 +52,7 @@ import type {
   IQRCodeFieldBuilder,
   ISignatureFieldBuilder,
   IRichTextFieldBuilder,
+  IRepeaterFieldBuilder,
 } from "../types/builder.js";
 
 /**
@@ -617,6 +619,57 @@ export class RichTextFieldBuilder<TRecord = Record<string, unknown>>
 }
 
 /**
+ * Dynamic repeated field groups builder.
+ */
+export class RepeaterFieldBuilder<TRecord = Record<string, unknown>>
+  extends BaseFieldBuilder<RepeaterFieldConfig<TRecord>, any[], TRecord>
+  implements IRepeaterFieldBuilder<TRecord> {
+  fields(fields: Record<string, any>): this {
+    return this._set("fields" as any, fields as any);
+  }
+
+  schema(schema: Record<string, any>): this {
+    return this._set("schema" as any, schema as any);
+  }
+
+  minItems(min: number): this {
+    return this._set("minItems" as any, min as any);
+  }
+
+  maxItems(max: number): this {
+    return this._set("maxItems" as any, max as any);
+  }
+
+  layout(layout: "table" | "cards" | "stack"): this {
+    return this._set("layout" as any, layout as any);
+  }
+
+  addButtonText(text: string): this {
+    return this._set("addButtonText" as any, text as any);
+  }
+
+  itemLabel(label: string): this {
+    return this._set("itemLabel" as any, label as any);
+  }
+
+  collapsible(collapsible: boolean = true): this {
+    return this._set("collapsible" as any, collapsible as any);
+  }
+
+  defaultCollapsed(collapsed: boolean = true): this {
+    return this._set("defaultCollapsed" as any, collapsed as any);
+  }
+
+  allowReorder(allow: boolean = true): this {
+    return this._set("allowReorder" as any, allow as any);
+  }
+
+  allowClone(allow: boolean = true): this {
+    return this._set("allowClone" as any, allow as any);
+  }
+}
+
+/**
  * Duck-type check if a value is an instance of a FieldBuilder.
  */
 export function isFieldBuilder(value: unknown): value is IFieldBuilder<any, any, any> {
@@ -1156,6 +1209,44 @@ export const f = Object.assign(createFieldBuilder, {
     label?: string
   ): RichTextFieldBuilder {
     return (this as any).richText(labelOrConfig, label);
+  },
+
+  /**
+   * Fluent builder for dynamic repeated field groups and embedded array documents.
+   */
+  repeater(
+    labelOrConfigOrFields?: string | Partial<RepeaterFieldConfig> | Record<string, any>,
+    fieldsOrLabel?: Record<string, any> | string
+  ): RepeaterFieldBuilder {
+    let cfg: RepeaterFieldConfig = {
+      type: "repeater",
+      layout: "cards",
+      allowReorder: true,
+      allowClone: true,
+      collapsible: true,
+    };
+    if (typeof labelOrConfigOrFields === "string") {
+      cfg.label = labelOrConfigOrFields;
+      if (fieldsOrLabel && typeof fieldsOrLabel === "object") {
+        cfg.fields = fieldsOrLabel;
+      }
+    } else if (labelOrConfigOrFields && typeof labelOrConfigOrFields === "object") {
+      if (
+        (labelOrConfigOrFields as any).type === "repeater" ||
+        "fields" in labelOrConfigOrFields ||
+        "minItems" in labelOrConfigOrFields ||
+        "layout" in labelOrConfigOrFields
+      ) {
+        cfg = { ...cfg, ...(labelOrConfigOrFields as any) };
+      } else {
+        // Direct field map provided: f.repeater({ title: f.text() })
+        cfg.fields = labelOrConfigOrFields;
+        if (typeof fieldsOrLabel === "string") {
+          cfg.label = fieldsOrLabel;
+        }
+      }
+    }
+    return new RepeaterFieldBuilder(cfg);
   },
 
   /**
