@@ -2,6 +2,7 @@ import type React from "react";
 import type { AppInstance, ShellElementPosition } from "../types/app.js";
 import type { HonoCubeTheme } from "../theme/theme-contract.js";
 import type { NavigationMenuConfig } from "../navigation/menu.js";
+import type { ImpersonationSession } from "../impersonation/types.js";
 
 export interface ShellTenant {
   id: string;
@@ -11,10 +12,13 @@ export interface ShellTenant {
 }
 
 export interface ShellUser {
+  id?: string | number;
   name: string;
   email?: string;
   avatar?: string;
   role?: string;
+  roles?: string[];
+  isSuperadmin?: boolean;
 }
 
 export interface BreadcrumbItemData {
@@ -70,6 +74,13 @@ export interface WorkspaceSidebarProps {
   app: AppInstance;
   pathname?: string;
   menuConfig?: NavigationMenuConfig;
+  impersonation?: ImpersonationSession | null;
+  onStartImpersonation?: (params: {
+    userId?: string | number;
+    tenantId?: string | number;
+    reason?: string;
+  }) => void | Promise<void>;
+  onStopImpersonation?: () => void | Promise<void>;
   collapsed?: boolean;
   onCollapseChange?: (collapsed: boolean) => void;
   onNavigate?: (href: string) => void;
@@ -90,6 +101,13 @@ export interface WorkspaceSidebarProps {
 export interface WorkspaceTopbarProps {
   app: AppInstance;
   pathname?: string;
+  impersonation?: ImpersonationSession | null;
+  onStartImpersonation?: (params: {
+    userId?: string | number;
+    tenantId?: string | number;
+    reason?: string;
+  }) => void | Promise<void>;
+  onStopImpersonation?: () => void | Promise<void>;
   tenants?: ShellTenant[];
   activeTenantId?: string;
   onTenantChange?: (tenantId: string) => void;
@@ -114,6 +132,13 @@ export interface WorkspaceShellProps {
   app: AppInstance;
   children: React.ReactNode;
   pathname?: string;
+  impersonation?: ImpersonationSession | null;
+  onStartImpersonation?: (params: {
+    userId?: string | number;
+    tenantId?: string | number;
+    reason?: string;
+  }) => void | Promise<void>;
+  onStopImpersonation?: () => void | Promise<void>;
   tenants?: ShellTenant[];
   activeTenantId?: string;
   onTenantChange?: (tenantId: string) => void;

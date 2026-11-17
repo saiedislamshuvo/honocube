@@ -108,6 +108,8 @@ export { WebhookDeliveriesView } from "./views/webhook-deliveries-view.js";
 export { AuditTrailView } from "./views/audit-trail-view.js";
 export { SidebarCustomizer } from "./views/sidebar-customizer.js";
 export { NavigationMenuBuilderDialog } from "./views/navigation-menu-builder-dialog.js";
+export { ImpersonationBanner } from "./shell/impersonation-banner.js";
+export { ImpersonationDialog } from "./views/impersonation-dialog.js";
 
 
 

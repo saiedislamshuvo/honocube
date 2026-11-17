@@ -10,6 +10,8 @@ import type { CustomFieldDefinition } from "../custom-fields/runtime.js";
 import type { AutomationRule, AutomationExecutionResult } from "../automation/index.js";
 import type { WebhookEndpoint, WebhookDeliveryRecord, AuditEntry } from "@honocube/api";
 import type { NavigationMenuConfig } from "../navigation/menu.js";
+import type { ImpersonationSession } from "../impersonation/types.js";
+import type { ShellTenant } from "../shell/types.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1350,6 +1352,31 @@ export interface SidebarCustomizerProps {
   availableCollections?: Collection<any>[];
   onReset?: () => void;
   className?: string;
+}
+
+export interface ImpersonationBannerProps {
+  session: ImpersonationSession;
+  onStopImpersonation?: () => void | Promise<void>;
+  className?: string;
+}
+
+export interface ImpersonationDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tenants?: ShellTenant[];
+  users?: Array<{
+    id: string | number;
+    name: string;
+    email?: string;
+    role?: string;
+    tenantId?: string | number;
+  }>;
+  onImpersonate: (params: {
+    userId?: string | number;
+    tenantId?: string | number;
+    reason?: string;
+  }) => void | Promise<void>;
+  isLoading?: boolean;
 }
 
 

@@ -280,6 +280,8 @@ export type {
   AuditTrailViewProps,
   NavigationMenuBuilderDialogProps,
   SidebarCustomizerProps,
+  ImpersonationBannerProps,
+  ImpersonationDialogProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -584,6 +586,18 @@ export type {
   NavigationMenuGroupConfig,
   NavigationMenuConfig,
 } from "./navigation/menu.js";
+
+// Superadmin User & Tenant Impersonation (Issue #146)
+export {
+  isImpersonating,
+  formatImpersonationTitle,
+} from "./impersonation/types.js";
+
+export type {
+  ImpersonationUser,
+  ImpersonationSession,
+  ImpersonationState,
+} from "./impersonation/types.js";
 
 
 
