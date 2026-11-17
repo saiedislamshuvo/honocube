@@ -112,6 +112,9 @@ export { ImpersonationBanner } from "./shell/impersonation-banner.js";
 export { ImpersonationDialog } from "./views/impersonation-dialog.js";
 export { InlineEntityCreationDialog } from "./views/inline-entity-creation-dialog.js";
 export { ForeignKeySelector } from "./views/foreign-key-selector.js";
+export { TokenPicker } from "./views/token-picker.js";
+export { EmailTemplateEditorDialog } from "./views/email-template-editor-dialog.js";
+export { EmailTemplatesManager } from "./views/email-templates-manager.js";
 
 
 

@@ -12,6 +12,12 @@ import type { WebhookEndpoint, WebhookDeliveryRecord, AuditEntry } from "@honocu
 import type { NavigationMenuConfig } from "../navigation/menu.js";
 import type { ImpersonationSession } from "../impersonation/types.js";
 import type { ShellTenant } from "../shell/types.js";
+import type {
+  EmailTemplate,
+  EmailLayout,
+  EmailTokenDefinition,
+  RenderedEmail,
+} from "../email/templates.js";
 
 export interface TableViewProps<TCollection extends Collection<any>> {
   /**
@@ -1397,6 +1403,36 @@ export interface ForeignKeySelectorProps extends AsyncComboboxProps {
   description?: string;
   required?: boolean;
 }
+
+export interface EmailTemplateEditorDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  template?: Partial<EmailTemplate>;
+  layouts?: EmailLayout[];
+  availableTokens?: EmailTokenDefinition[];
+  onSave?: (template: EmailTemplate) => void | Promise<void>;
+  onSendTest?: (to: string, rendered: RenderedEmail) => void | Promise<void>;
+  sampleData?: Record<string, any>;
+  className?: string;
+}
+
+export interface EmailTemplatesManagerProps {
+  templates?: EmailTemplate[];
+  layouts?: EmailLayout[];
+  availableTokens?: EmailTokenDefinition[];
+  onSaveTemplate?: (template: EmailTemplate) => void | Promise<void>;
+  onDeleteTemplate?: (templateId: string) => void | Promise<void>;
+  onSendTest?: (to: string, rendered: RenderedEmail) => void | Promise<void>;
+  className?: string;
+}
+
+export interface TokenPickerProps {
+  tokens?: EmailTokenDefinition[];
+  onSelectToken: (token: string) => void;
+  className?: string;
+  buttonLabel?: string;
+}
+
 
 
 

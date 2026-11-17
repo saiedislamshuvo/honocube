@@ -284,6 +284,9 @@ export type {
   ImpersonationDialogProps,
   InlineEntityCreationDialogProps,
   ForeignKeySelectorProps,
+  EmailTemplateEditorDialogProps,
+  EmailTemplatesManagerProps,
+  TokenPickerProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -600,6 +603,30 @@ export type {
   ImpersonationSession,
   ImpersonationState,
 } from "./impersonation/types.js";
+
+// Customizable Transactional Email Templates & Dynamic Tokens (Issue #149)
+export {
+  extractTokens,
+  validateTemplateSyntax,
+  htmlToPlainText,
+  renderEmailContent,
+  wrapInEmailLayout,
+  renderEmailTemplate,
+  STANDARD_EMAIL_TOKENS,
+  DEFAULT_EMAIL_LAYOUT,
+  DEFAULT_EMAIL_TEMPLATES,
+} from "./email/templates.js";
+
+export type {
+  EmailTemplateCategory,
+  EmailTokenDefinition,
+  EmailTemplateLocaleOverride,
+  EmailTemplate,
+  EmailLayout,
+  RenderedEmail,
+  EmailRenderOptions,
+} from "./email/templates.js";
+
 
 
 
