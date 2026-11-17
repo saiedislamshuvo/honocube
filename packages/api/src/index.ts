@@ -17,4 +17,5 @@ export * from "./webhooks/manager.js";
 export * from "./audit/manager.js";
 export * from "./impersonation/manager.js";
 export * from "./domains/manager.js";
+export * from "./backup/manager.js";
 export * from "./testing/index.js";
