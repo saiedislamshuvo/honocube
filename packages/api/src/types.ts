@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler, Hono } from "hono";
 import type { MergeSchemaPath, Schema } from "hono/types";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 import type { ImpersonationManager, ImpersonationSession } from "./impersonation/manager.js";
+import type { DomainManager, DomainMapping, DomainType } from "./domains/manager.js";
 
 export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 412 | 422 | 429 | 500;
 
@@ -245,7 +246,7 @@ export interface TenancyConfig<
    * - An array of strings/numbers (holding company / multiple orgs)
    * - `null` / `undefined` (unauthenticated / missing tenant)
    */
-  resolve: (
+  resolve?: (
     c: Context<{ Bindings: Env }>,
     appContext: AppContext
   ) => Promise<TenancyValue> | TenancyValue;
@@ -275,6 +276,12 @@ export interface TenancyConfig<
    * Multi-company holding hierarchy and parent-subsidiary relationship resolver.
    */
   hierarchy?: TenancyHierarchyConfig<Env, AppContext>;
+
+  /**
+   * Domain manager or domain configuration for host-based multi-tenant routing.
+   */
+  domains?: AppDomainConfig<Env, AppContext> | DomainManager;
+  domainManager?: DomainManager;
 }
 
 export interface ResourceTenancyConfig {
@@ -1322,6 +1329,28 @@ export interface AppConfig<Env extends Record<string, unknown> = Record<string, 
   automationEngine?: any;
   impersonation?: AppImpersonationConfig<Env, AppContext>;
   impersonationManager?: ImpersonationManager;
+  domains?: AppDomainConfig<Env, AppContext> | DomainManager;
+  domainManager?: DomainManager;
+}
+
+export interface AppDomainConfig<
+  Env extends Record<string, unknown> = Record<string, unknown>,
+  AppContext = any
+> {
+  enabled?: boolean;
+  rootDomain?: string;
+  cnameTarget?: string;
+  reservedSubdomains?: string[];
+  initialDomains?: DomainMapping[];
+  verifyDns?: (
+    domain: string,
+    token: string,
+    type: DomainType
+  ) => Promise<{ verified: boolean; error?: string }> | { verified: boolean; error?: string };
+  authorize?: (
+    c: Context<{ Bindings: Env }>,
+    appContext: AppContext
+  ) => boolean | Promise<boolean>;
 }
 
 export interface AppImpersonationConfig<

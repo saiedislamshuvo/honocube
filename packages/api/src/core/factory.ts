@@ -12,6 +12,7 @@ import { createAutomationEngine } from "../automation/engine.js";
 import { createWebhookManager, type WebhookManager, type WebhookEndpoint } from "../webhooks/manager.js";
 import { createAuditManager, type AuditManager } from "../audit/manager.js";
 import { createImpersonationManager, type ImpersonationManager } from "../impersonation/manager.js";
+import { createDomainManager, type DomainManager } from "../domains/manager.js";
 import { ApiOptions, OpenApiDocsConfig, ResourceApp, ApiApp, ExtractVersion, InferSelect, InferInsert } from "../types.js";
 import { DatabaseAdapter, DatabaseStrategy } from "../adapters/base.js";
 import {
@@ -110,8 +111,23 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
     appConfig.eventBus = createEventBus();
   }
 
+  // Setup domain manager if domain config or domainManager provided
+  const domainOpt =
+    appConfig.domains ||
+    appConfig.domainManager ||
+    appConfig.tenancy?.domains ||
+    appConfig.tenancy?.domainManager;
+  if (domainOpt && !appConfig.domainManager) {
+    if (typeof domainOpt === "object" && "registerDomain" in domainOpt) {
+      appConfig.domainManager = domainOpt as DomainManager;
+    } else {
+      appConfig.domainManager = createDomainManager(domainOpt as any);
+    }
+  }
+
   return {
     eventBus: appConfig.eventBus!,
+    domainManager: appConfig.domainManager,
 
     defineResource: <
       TTable,
@@ -130,11 +146,18 @@ export function createApp<Env extends Record<string, unknown> = Record<string, u
     ) => {
       let finalOpts = versionOrOptions;
       if (typeof versionOrOptions === "object" && versionOrOptions !== null) {
-        if (!(versionOrOptions as any).eventBus && appConfig.eventBus) {
-          finalOpts = { ...(versionOrOptions as any), eventBus: appConfig.eventBus } as V;
+        finalOpts = { ...(versionOrOptions as any) };
+        if (!(finalOpts as any).eventBus && appConfig.eventBus) {
+          (finalOpts as any).eventBus = appConfig.eventBus;
         }
-      } else if (!versionOrOptions && appConfig.eventBus) {
-        finalOpts = { eventBus: appConfig.eventBus } as any as V;
+        if (!(finalOpts as any).domainManager && appConfig.domainManager) {
+          (finalOpts as any).domainManager = appConfig.domainManager;
+        }
+      } else if (!versionOrOptions) {
+        finalOpts = {
+          eventBus: appConfig.eventBus,
+          domainManager: appConfig.domainManager,
+        } as any as V;
       }
       return defineApi<Env, TResources, V>(resources, finalOpts);
     }
@@ -1474,7 +1497,22 @@ export function defineResource<
       };
     }
 
-    let tenantVal = await globalConfig.tenancy.resolve(c, appContext);
+    let tenantVal = globalConfig.tenancy.resolve
+      ? await globalConfig.tenancy.resolve(c, appContext)
+      : undefined;
+
+    // Host-Based Custom Domain & Subdomain Resolution (Issue #150)
+    const domainManager =
+      (config as any)?.domainManager ||
+      (globalConfig as any)?.domainManager ||
+      (globalConfig?.tenancy as any)?.domainManager;
+    if ((tenantVal === undefined || tenantVal === null) && domainManager) {
+      const host = c.req.header("x-forwarded-host") || c.req.header("host") || "";
+      const domainResolution = await domainManager.resolveTenantFromHost(host);
+      if (domainResolution?.tenantId !== null && domainResolution?.tenantId !== undefined) {
+        tenantVal = domainResolution.tenantId;
+      }
+    }
 
     // Superadmin Impersonation Tenant Override (Issue #146)
     const impersonationManager =
@@ -6179,6 +6217,144 @@ export function defineApi<
     });
   }
 
+  // Custom Domain & Subdomain Routing (Issue #150)
+  const domainManagerOpt =
+    (versionOrOptions as any)?.domainManager ||
+    (versionOrOptions as any)?.tenancy?.domainManager ||
+    (versionOrOptions as any)?.tenancy?.domains?.domainManager;
+  const domainConfig =
+    (versionOrOptions as any)?.domains ||
+    (versionOrOptions as any)?.tenancy?.domains;
+
+  const shouldEnableDomains = Boolean(
+    domainManagerOpt ||
+    (domainConfig && domainConfig !== false)
+  );
+
+  let domainManager: DomainManager | undefined =
+    domainManagerOpt ||
+    (typeof domainConfig === "object" && "registerDomain" in domainConfig
+      ? (domainConfig as DomainManager)
+      : undefined);
+
+  if (!domainManager && shouldEnableDomains) {
+    domainManager = createDomainManager({
+      rootDomain: domainConfig?.rootDomain,
+      cnameTarget: domainConfig?.cnameTarget,
+      reservedSubdomains: domainConfig?.reservedSubdomains,
+      initialDomains: domainConfig?.initialDomains,
+      verifyDns: domainConfig?.verifyDns,
+      authorize: domainConfig?.authorize,
+    });
+  }
+
+  if (domainManager) {
+    (api as any).domainManager = domainManager;
+    for (const [, resourceApp] of Object.entries(resources)) {
+      if (resourceApp && typeof resourceApp === "object") {
+        (resourceApp as any).domainManager = domainManager;
+        const resConfig = (resourceApp as any)[RESOURCE_CONFIG];
+        if (resConfig) {
+          (resConfig as any).domainManager = domainManager;
+        }
+      }
+    }
+
+    // GET /domains
+    api.get("/domains", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      const tenantVal = await ((versionOrOptions as any)?.tenancy?.resolve?.(c, appContext) ?? c.req.query("tenantId"));
+      const tenantId =
+        typeof tenantVal === "object" && tenantVal !== null && !Array.isArray(tenantVal)
+          ? (tenantVal as any).id
+          : tenantVal;
+      return c.json({ data: domainManager!.listDomains(tenantId as any) });
+    });
+
+    // POST /domains
+    api.post("/domains", async (c) => {
+      const appContext = (c as any).get?.("appContext") || {};
+      if (domainConfig?.authorize) {
+        const ok = await domainConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to manage custom domains." }, 403);
+        }
+      }
+
+      const body = await c.req.json().catch(() => ({}));
+      const rawDomain = body.domain || body.hostname;
+      if (!rawDomain) {
+        return c.json({ error: "Field 'domain' is required." }, 400);
+      }
+
+      const resolvedTenant = await ((versionOrOptions as any)?.tenancy?.resolve?.(c, appContext) ?? body.tenantId);
+      const tenantId = body.tenantId || resolvedTenant;
+      if (!tenantId) {
+        return c.json({ error: "Tenant identifier is required to register a domain." }, 400);
+      }
+
+      try {
+        const mapping = domainManager!.registerDomain({
+          tenantId,
+          domain: rawDomain,
+          isPrimary: body.isPrimary,
+          type: body.type,
+        });
+        return c.json({ data: mapping }, 201);
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to register domain." }, 400);
+      }
+    });
+
+    // POST /domains/:id/verify
+    api.post("/domains/:id/verify", async (c) => {
+      const id = c.req.param("id");
+      try {
+        const res = await domainManager!.verifyDomain(id);
+        return c.json({
+          verified: res.verified,
+          data: res.mapping,
+          error: res.error,
+        });
+      } catch (err: any) {
+        return c.json({ error: err?.message || "Failed to verify domain." }, 404);
+      }
+    });
+
+    // POST /domains/:id/primary
+    api.post("/domains/:id/primary", async (c) => {
+      const id = c.req.param("id");
+      const appContext = (c as any).get?.("appContext") || {};
+      const tenantId = await ((versionOrOptions as any)?.tenancy?.resolve?.(c, appContext) ?? c.req.query("tenantId"));
+      const mapping = domainManager!.setPrimaryDomain(tenantId as any, id);
+      if (!mapping) {
+        return c.json({ error: "Domain not found for this tenant." }, 404);
+      }
+      return c.json({ data: mapping });
+    });
+
+    // DELETE /domains/:id
+    api.delete("/domains/:id", async (c) => {
+      const id = c.req.param("id");
+      const appContext = (c as any).get?.("appContext") || {};
+      if (domainConfig?.authorize) {
+        const ok = await domainConfig.authorize(c, appContext);
+        if (!ok) {
+          return c.json({ error: "Unauthorized to delete domain." }, 403);
+        }
+      }
+      const removed = domainManager!.removeDomain(id);
+      return c.json({ success: removed });
+    });
+
+    // GET /domains/resolve
+    api.get("/domains/resolve", async (c) => {
+      const host = c.req.query("host") || c.req.header("host") || "";
+      const resolution = await domainManager!.resolveTenantFromHost(host);
+      return c.json({ data: resolution });
+    });
+  }
+
   const apiConfig = { resources, version };
 
   if (version) {
@@ -6206,6 +6382,9 @@ export function defineApi<
     }
     if (impersonationManager) {
       (versionedApi as any).impersonationManager = impersonationManager;
+    }
+    if (domainManager) {
+      (versionedApi as any).domainManager = domainManager;
     }
     return versionedApi as any;
   }
