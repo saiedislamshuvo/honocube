@@ -293,6 +293,9 @@ export type {
   RestoreBackupDialogProps,
   BackupScheduleDialogProps,
   BackupManagerViewProps,
+  CurrencyConverterWidgetProps,
+  ExchangeRateDialogProps,
+  CurrencySettingsViewProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -670,6 +673,26 @@ export type {
   CreateBackupOptions,
   BackupManagerConfig,
 } from "./backup/types.js";
+
+// Multi-Currency Management & Foreign Exchange Rate Conversion (Issue #152)
+export {
+  STANDARD_CURRENCIES,
+  DEFAULT_BASE_CURRENCY,
+  DEFAULT_EXCHANGE_RATES,
+  getCurrencyDefinition,
+  formatMoney,
+  convertCurrency,
+} from "./currency/types.js";
+
+export type {
+  CurrencyDefinition,
+  ExchangeRate,
+  MoneyValue,
+  CurrencyFormatOptions,
+  ConversionResult,
+  CurrencyManagerConfig,
+} from "./currency/types.js";
+
 
 
 

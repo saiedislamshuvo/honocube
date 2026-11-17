@@ -121,6 +121,9 @@ export { CreateBackupDialog } from "./views/create-backup-dialog.js";
 export { RestoreBackupDialog } from "./views/restore-backup-dialog.js";
 export { BackupScheduleDialog } from "./views/backup-schedule-dialog.js";
 export { BackupManagerView } from "./views/backup-manager-view.js";
+export { CurrencyConverterWidget } from "./views/currency-converter-widget.js";
+export { ExchangeRateDialog } from "./views/exchange-rate-dialog.js";
+export { CurrencySettingsView } from "./views/currency-settings-view.js";
 
 
 
