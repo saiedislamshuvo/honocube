@@ -1216,4 +1216,37 @@ export interface MasterDataSyncDialogProps {
   resourceName?: string;
 }
 
+export interface BulkMediaIngestDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  collectionName?: string;
+  records: any[];
+  identifierFields?: string[];
+  mediaFields?: string[];
+  defaultIdentifierField?: string;
+  defaultMediaField?: string;
+  onIngest?: (result: {
+    matches: any[];
+    strategy: "replace" | "append" | "skip";
+    targetField: string;
+    identifierField: string;
+  }) => Promise<any> | void;
+  isIngesting?: boolean;
+}
+
+export interface BulkMediaIngestButtonProps {
+  records: any[];
+  collectionName?: string;
+  identifierFields?: string[];
+  mediaFields?: string[];
+  defaultIdentifierField?: string;
+  defaultMediaField?: string;
+  onIngest?: (result: any) => Promise<any> | void;
+  label?: string;
+  className?: string;
+  variant?: "default" | "outline" | "secondary" | "ghost";
+  size?: "default" | "sm" | "lg" | "icon";
+}
+
+
 

@@ -267,6 +267,8 @@ export type {
   RealtimeToastNotifierProps,
   CompanyHierarchyTreeProps,
   MasterDataSyncDialogProps,
+  BulkMediaIngestDialogProps,
+  BulkMediaIngestButtonProps,
 } from "./views/types.js";
 
 // Utilities & Formatting
@@ -453,4 +455,25 @@ export type {
   MasterDataSyncOptions,
   MasterDataSyncResult,
 } from "./company/hierarchy.js";
+
+// Bulk ZIP Media Ingestion (Issue #139)
+export {
+  getMimeTypeFromFilename,
+  extractIdentifierFromFilename,
+  decompressDeflateRaw,
+  extractZipArchive,
+  matchMediaToRecords,
+  createMockZipArchive,
+} from "./media/zip-ingest.js";
+
+export type {
+  ZipArchiveEntry,
+  IngestedMediaEntry,
+  IdentifierPattern,
+  IdentifierExtractOptions,
+  MediaRecordMatch,
+  BulkMediaMatchResult,
+  BulkMediaIngestOptions,
+} from "./media/zip-ingest.js";
+
 

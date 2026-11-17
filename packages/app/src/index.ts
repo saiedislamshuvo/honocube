@@ -92,6 +92,12 @@ export { RealtimeIndicator } from "./views/realtime-indicator.js";
 export { RealtimeToastNotifier } from "./views/realtime-toast-notifier.js";
 export { CompanyHierarchyTree } from "./views/company-hierarchy-tree.js";
 export { MasterDataSyncDialog } from "./views/master-data-sync-dialog.js";
+export {
+  BulkMediaIngestDialog,
+  type BulkMediaStep,
+} from "./views/bulk-media-ingest-dialog.js";
+export { BulkMediaIngestButton } from "./views/bulk-media-ingest-button.js";
+
 
 // Programmatic PDF Export Engine & UI Primitives (Issue #133)
 export {
