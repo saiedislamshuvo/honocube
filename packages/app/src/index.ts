@@ -79,6 +79,25 @@ export {
 export { PrintDocument } from "./views/print-document.js";
 export { PrintDocumentDialog } from "./views/print-document-dialog.js";
 
+// Programmatic PDF Export Engine & UI Primitives (Issue #133)
+export {
+  PdfDocument,
+  PdfPage,
+  PAGE_SIZES,
+  STANDARD_FONTS,
+  measureTextWidth,
+  escapePdfString,
+  truncateText,
+  hexToRgb,
+  uint8ArrayToBase64,
+  downloadBlob,
+  downloadPdf,
+  exportTableToPdf,
+  exportDocumentToPdf,
+} from "./pdf/pdf-engine.js";
+export { ExportPdfButton } from "./views/export-pdf-button.js";
+export { PdfPreviewDialog } from "./views/pdf-preview-dialog.js";
+
 // Interactive Analytics & Chart Primitives
 export {
   LineChart,

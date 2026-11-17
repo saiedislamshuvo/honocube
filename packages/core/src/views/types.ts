@@ -1028,10 +1028,94 @@ export interface PrintDocumentProps {
   className?: string;
   showPrintButton?: boolean;
   onPrint?: () => void;
+  showPdfExport?: boolean;
+  onExportPdf?: () => void;
 }
 
 export interface PrintDocumentDialogProps extends PrintDocumentProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger?: React.ReactNode;
+}
+
+// ---------------------------------------------------------------------------
+// Client-side PDF Export Engine & Document Types (Issue #133)
+// ---------------------------------------------------------------------------
+
+export type PdfPaperSize = "a4" | "letter" | "legal" | "receipt80mm";
+export type PdfOrientation = "portrait" | "landscape";
+export type PdfFont =
+  | "Helvetica"
+  | "Helvetica-Bold"
+  | "Helvetica-Oblique"
+  | "Courier"
+  | "Courier-Bold"
+  | "Times-Roman"
+  | "Times-Bold";
+
+export type PdfRgbColor = [number, number, number];
+
+export interface PdfMargin {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}
+
+export interface PdfTableColumn {
+  key: string;
+  header: string;
+  width?: number;
+  align?: "left" | "center" | "right";
+}
+
+export interface PdfTableOptions {
+  title?: string;
+  subtitle?: string;
+  columns: PdfTableColumn[];
+  data: Array<Record<string, unknown>>;
+  paperSize?: PdfPaperSize;
+  orientation?: PdfOrientation;
+  margins?: PdfMargin | number;
+  showPageNumbers?: boolean;
+  showTimestamp?: boolean;
+  filename?: string;
+  headerBgColor?: PdfRgbColor;
+  headerTextColor?: PdfRgbColor;
+  alternateRowColor?: PdfRgbColor;
+  borderColor?: PdfRgbColor;
+}
+
+export interface PdfDocumentOptions {
+  paperSize?: PdfPaperSize;
+  orientation?: PdfOrientation;
+  margins?: PdfMargin | number;
+  metadata?: {
+    title?: string;
+    author?: string;
+    subject?: string;
+    keywords?: string;
+  };
+}
+
+export interface ExportPdfButtonProps {
+  onExport?: () => Promise<void> | void;
+  filename?: string;
+  label?: string;
+  variant?: "default" | "secondary" | "outline" | "ghost";
+  size?: "default" | "sm" | "lg" | "icon";
+  className?: string;
+  disabled?: boolean;
+  iconOnly?: boolean;
+}
+
+export interface PdfPreviewDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pdfDataUri?: string;
+  pdfBlob?: Blob;
+  filename?: string;
+  title?: string;
+  trigger?: React.ReactNode;
+  onDownload?: () => void;
 }
