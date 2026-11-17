@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler, Hono } from "hono";
 import type { MergeSchemaPath, Schema } from "hono/types";
 import type { DatabaseAdapter, DatabaseStrategy } from "./adapters/base.js";
 
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500;
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 412 | 422 | 429 | 500;
 
 /**
  * The Standard Schema interface (version 1).
@@ -1294,8 +1294,8 @@ export interface ResourceConfig<
     updatedAt?: string; // Default: 'updatedAt'
   };
   
-  versionControl?: {
-    field: string;
+  versionControl?: boolean | {
+    field?: string;
     strategy?: "optimistic";
   };
 

@@ -1,7 +1,7 @@
 import type React from "react";
 import type { Collection, InferRecord, BulkAction } from "../types/collection.js";
 import type { CollectionListOptions } from "../table/types.js";
-import type { FormMode, FormFieldState, ChildCollectionHelper } from "../form/types.js";
+import type { FormMode, FormFieldState, ChildCollectionHelper, RevisionConflict } from "../form/types.js";
 import type { FieldConfig, SubCollectionFieldConfig, DateRangeValue } from "../types/fields.js";
 import type { ViewType } from "../types/views.js";
 import type { AvailableTransition } from "../workflow/types.js";
@@ -190,6 +190,17 @@ export interface FormViewProps<TCollection extends Collection<any>> {
    * Defaults to true.
    */
   unsavedChangesGuard?: boolean;
+
+  /**
+   * Callback invoked when an optimistic concurrency control (OCC) or revision conflict is detected.
+   */
+  onConflict?: (conflict: RevisionConflict<InferRecord<TCollection>>) => void | Promise<void>;
+
+  /**
+   * Whether to display the revision conflict resolution dialog automatically when a conflict occurs.
+   * Defaults to true.
+   */
+  revisionConflictDialog?: boolean;
 }
 
 export interface FloatingSaveBarProps {

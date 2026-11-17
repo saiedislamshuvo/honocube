@@ -289,6 +289,18 @@ export function defineResource<
     return typeof adapter === 'function' ? adapter(c) : adapter;
   };
 
+  const versionControl: { field: string; strategy: "optimistic" } | undefined =
+    config.versionControl === true
+      ? { field: "version", strategy: "optimistic" }
+      : typeof config.versionControl === "object" && config.versionControl !== null
+      ? {
+          field: (config.versionControl as any).field || "version",
+          strategy: (config.versionControl as any).strategy ?? "optimistic",
+        }
+      : undefined;
+
+  (config as any).versionControl = versionControl;
+
   const methods = new Set(config.methods ?? ["list", "detail", "create", "update", "delete"]);
   // Audit Configuration Resolution
   const isAuditEnabled = Boolean(
@@ -3027,7 +3039,7 @@ function buildDateBucketSql(
       const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
-      const id = c.req.param("id");
+      const id = c.req.param("id")!;
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
       
@@ -3085,6 +3097,23 @@ function buildDateBucketSql(
         success: true,
         data: await finalize(resultRow as TSelect, appContext, config, c, "detail")
       };
+
+      if (versionControl) {
+        const vField = versionControl.field;
+        const currentVersion = (resultRow as any)?.[vField];
+        if (currentVersion !== undefined && currentVersion !== null) {
+          const etag = `W/"${currentVersion}"`;
+          c.header("ETag", etag);
+
+          const ifNoneMatch = c.req.header("If-None-Match") || c.req.header("if-none-match");
+          if (ifNoneMatch) {
+            const cleanHeader = ifNoneMatch.replace(/^W\//, "").replace(/"/g, "").trim();
+            if (cleanHeader === String(currentVersion) || ifNoneMatch === etag || ifNoneMatch === `"${currentVersion}"`) {
+              return c.body(null, 304);
+            }
+          }
+        }
+      }
 
       if (cacheKey) {
         await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
@@ -3158,6 +3187,23 @@ function buildDateBucketSql(
           success: true,
           data: await finalize(resultRow as TSelect, appContext, config, c, "detail")
         };
+
+        if (versionControl) {
+          const vField = versionControl.field;
+          const currentVersion = (resultRow as any)?.[vField];
+          if (currentVersion !== undefined && currentVersion !== null) {
+            const etag = `W/"${currentVersion}"`;
+            c.header("ETag", etag);
+
+            const ifNoneMatch = c.req.header("If-None-Match") || c.req.header("if-none-match");
+            if (ifNoneMatch) {
+              const cleanHeader = ifNoneMatch.replace(/^W\//, "").replace(/"/g, "").trim();
+              if (cleanHeader === String(currentVersion) || ifNoneMatch === etag || ifNoneMatch === `"${currentVersion}"`) {
+                return c.body(null, 304);
+              }
+            }
+          }
+        }
 
         if (cacheKey) {
           await globalConfig!.cache!.set(cacheKey, response, config.cache?.ttl);
@@ -3441,12 +3487,12 @@ function buildDateBucketSql(
   }
 
   if (methods.has("update")) {
-    app.patch("/:id", async (c) => {
+    const handleUpdate = async (c: Context<{ Bindings: Env }>) => {
       const adapter = getAdapter(c);
       const strategy = resolveStrategy(adapter);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
-      const id = c.req.param("id");
+      const id = c.req.param("id")!;
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
@@ -3467,6 +3513,45 @@ function buildDateBucketSql(
       await checkWorkflowParentLock(adapter, existingRecord);
 
       let body = await c.req.json();
+
+      // Optimistic Concurrency Control (OCC) & Precondition Verification
+      if (versionControl) {
+        const vField = versionControl.field;
+        const currentVersion = (existingRecord as any)[vField];
+
+        // 1. Check If-Match HTTP Header
+        const ifMatchRaw = c.req.header("If-Match") || c.req.header("if-match");
+        let parsedIfMatch: any = undefined;
+        if (ifMatchRaw) {
+          const cleaned = ifMatchRaw.replace(/^W\//, "").replace(/^"/, "").replace(/"$/, "").trim();
+          parsedIfMatch = typeof currentVersion === "number" && !isNaN(Number(cleaned)) ? Number(cleaned) : cleaned;
+
+          if (String(currentVersion) !== String(parsedIfMatch)) {
+            throw new ApiError(412, "PRECONDITION_FAILED", "Record has been modified by another actor.", {
+              currentVersion,
+              expectedVersion: parsedIfMatch,
+              currentRecord: existingRecord,
+            });
+          }
+
+          // If the caller supplied If-Match header and omitted version in body, seed body version
+          if (body[vField] === undefined) {
+            body[vField] = parsedIfMatch;
+          }
+        }
+
+        // 2. Check Payload Version (if provided)
+        const payloadVersion = body[vField];
+        if (payloadVersion !== undefined) {
+          if (String(currentVersion) !== String(payloadVersion)) {
+            throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.", {
+              currentVersion,
+              expectedVersion: payloadVersion,
+              currentRecord: existingRecord,
+            });
+          }
+        }
+      }
 
       // Sanitize write payload (FLAC)
       body = await sanitizeWritePayload(body, appContext, existingRecord);
@@ -3709,25 +3794,25 @@ function buildDateBucketSql(
           validated[ts.updated] = new Date().toISOString();
         }
 
+        let expectedVersion: any;
+        if (versionControl) {
+          const vField = versionControl.field;
+          expectedVersion = data[vField];
+          if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
+          validated[vField] = expectedVersion + 1;
+        }
+
         if (strategy === "batch") {
           // 1. Add Parent Statement (if there are fields to update)
           const hasParentFields = Object.keys(validated).length > 0;
           if (hasParentFields) {
-            let expectedVersion: any;
-            if (config.versionControl) {
-              const vField = config.versionControl.field;
-              expectedVersion = data[vField];
-              if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
-              validated[vField] = expectedVersion + 1;
-            }
-
             let parentStmt: any = tx.updateStmt(config.table, id, validated);
 
             // The scope and soft-delete filters are part of the write itself,
             // so a row that stopped matching them after the lookup is not
             // written either.
-            if (config.versionControl) {
-               const vField = config.versionControl.field;
+            if (versionControl) {
+               const vField = versionControl.field;
                const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
                parentStmt = parentStmt.where(updateCondition);
             } else {
@@ -3827,8 +3912,12 @@ function buildDateBucketSql(
             updated = existingRecord;
           }
 
-          if (config.versionControl && !updated) {
-            throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
+          if (versionControl && !updated) {
+            throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.", {
+              currentVersion: (existingRecord as any)[versionControl.field],
+              expectedVersion,
+              currentRecord: existingRecord,
+            });
           }
 
           if (config.hooks?.afterUpdate) {
@@ -3841,21 +3930,13 @@ function buildDateBucketSql(
           // 1. Update Parent
           let updated: any;
           if (Object.keys(validated).length > 0) {
-            let expectedVersion: any;
-            if (config.versionControl) {
-              const vField = config.versionControl.field;
-              expectedVersion = data[vField];
-              if (expectedVersion === undefined) throw new ApiError(400, "MISSING_VERSION", `Version control field '${vField}' is required for update.`);
-              validated[vField] = expectedVersion + 1;
-            }
-
             let updateQuery: any = tx.updateStmt(config.table, id, validated);
 
             // The scope and soft-delete filters are part of the write itself,
             // so a row that stopped matching them after the lookup is not
             // written either.
-            if (config.versionControl) {
-               const vField = config.versionControl.field;
+            if (versionControl) {
+               const vField = versionControl.field;
                const updateCondition = ops.and(recordPredicate, ops.eq(adapter.getColumn(config.table as any, vField), expectedVersion));
                updateQuery = updateQuery.where(updateCondition);
             } else {
@@ -3865,8 +3946,12 @@ function buildDateBucketSql(
             const results = await updateQuery;
             updated = Array.isArray(results) ? results[0] : results;
             
-            if (config.versionControl && !updated) {
-              throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.");
+            if (versionControl && !updated) {
+              throw new ApiError(409, "OCC_FAILED", "Optimistic concurrency control failed. The record was modified by another transaction.", {
+                currentVersion: (existingRecord as any)[versionControl.field],
+                expectedVersion,
+                currentRecord: existingRecord,
+              });
             } else if (!updated) {
               throw ApiError.notFound();
             }
@@ -4006,17 +4091,28 @@ function buildDateBucketSql(
         }, c, appContext);
       }
 
+      if (versionControl) {
+        const vField = versionControl.field;
+        const updatedVersion = (finalRecord as any)?.[vField];
+        if (updatedVersion !== undefined && updatedVersion !== null) {
+          c.header("ETag", `W/"${updatedVersion}"`);
+        }
+      }
+
       return c.json({
         success: true,
         data: await finalize(finalRecord as TSelect, appContext, config, c, "detail")
       });
-    });
+    };
+
+    app.patch("/:id", handleUpdate);
+    app.put("/:id", handleUpdate);
 
     app.post("/:id/toggle/:field", async (c) => {
       const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
-      const id = c.req.param("id");
+      const id = c.req.param("id")!;
       const field = c.req.param("field");
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
@@ -4079,7 +4175,7 @@ function buildDateBucketSql(
       const adapter = getAdapter(c);
       const appContext = (globalConfig?.getContext ? await globalConfig.getContext(c) : {}) as AppContext;
       await checkRateLimit(c, appContext);
-      const id = c.req.param("id");
+      const id = c.req.param("id")!;
 
       const tenancy = await resolveTenancyContext(c, appContext, adapter);
 
@@ -4093,6 +4189,24 @@ function buildDateBucketSql(
       });
 
       if (!existingRecord) throw ApiError.notFound();
+
+      // Optimistic Concurrency Control (OCC) If-Match Header Verification
+      if (versionControl) {
+        const vField = versionControl.field;
+        const currentVersion = (existingRecord as any)[vField];
+        const ifMatchRaw = c.req.header("If-Match") || c.req.header("if-match");
+        if (ifMatchRaw) {
+          const cleaned = ifMatchRaw.replace(/^W\//, "").replace(/^"/, "").replace(/"$/, "").trim();
+          const parsedIfMatch = typeof currentVersion === "number" && !isNaN(Number(cleaned)) ? Number(cleaned) : cleaned;
+          if (String(currentVersion) !== String(parsedIfMatch)) {
+            throw new ApiError(412, "PRECONDITION_FAILED", "Record has been modified by another actor.", {
+              currentVersion,
+              expectedVersion: parsedIfMatch,
+              currentRecord: existingRecord,
+            });
+          }
+        }
+      }
 
       await checkAccess(appContext, "delete", existingRecord);
       await checkWorkflowParentLock(adapter, existingRecord);
@@ -4477,8 +4591,8 @@ function buildDateBucketSql(
               }
 
               let expectedVersion: any;
-              if (config.versionControl) {
-                 const vField = config.versionControl.field;
+              if (versionControl) {
+                 const vField = versionControl.field;
                  expectedVersion = rawRow[vField];
                  if (expectedVersion === undefined) {
                     results.errors.push({ index: i, error: `Version control field '${vField}' is required for update.` });
@@ -4498,8 +4612,8 @@ function buildDateBucketSql(
                  // that stops matching between the lookup and the write is
                  // not written.
                  const updateConditions: any[] = [ops.eq(idCol, existing.id as any)];
-                 if (config.versionControl) {
-                    const vField = config.versionControl.field;
+                 if (versionControl) {
+                    const vField = versionControl.field;
                     updateConditions.push(ops.eq(tx.getColumn(config.table as any, vField), expectedVersion));
                  }
                  if (constraintConditions.length > 0) {
@@ -4539,7 +4653,7 @@ function buildDateBucketSql(
                     const updateQuery: any = buildUpdateStatement();
                     const res = await updateQuery;
                     const updatedRec = Array.isArray(res) ? res[0] : res;
-                    if (config.versionControl && !updatedRec) throw new ApiError(409, "OCC_FAILED", `OCC failed at row ${i}.`);
+                    if (versionControl && !updatedRec) throw new ApiError(409, "OCC_FAILED", `OCC failed at row ${i}.`);
                     
                     if (config.relations) {
                        if (config.relations.many) {

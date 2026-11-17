@@ -101,6 +101,7 @@ export interface CollectionConfig<
   workflow?: WorkflowConfig<InferRecord<TFields>>;
   sidePanel?: SidePanelConfig;
   presentation?: PresentationConfig;
+  versionControl?: boolean | { field?: string; strategy?: "optimistic" };
   actions?: DocumentAction<InferRecord<TFields>>[];
   bulkActions?: BulkAction[];
 }
@@ -132,6 +133,7 @@ export interface BaseDerivedCollectionConfig<
   workflow?: WorkflowConfig<any>;
   sidePanel?: SidePanelConfig;
   presentation?: PresentationConfig;
+  versionControl?: boolean | { field?: string; strategy?: "optimistic" };
   actions?: DocumentAction<any>[];
   bulkActions?: BulkAction[];
 }

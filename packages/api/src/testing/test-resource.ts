@@ -46,6 +46,12 @@ function buildResourceTestCases(
   const config: ResourceConfig<any, any, any> | undefined = (resourceApp as any)[RESOURCE_CONFIG];
   const resourceName = config?.name ?? "Resource";
   const methods = new Set(config?.methods ?? ["list", "detail", "create", "update", "delete"]);
+  const versionControlField =
+    typeof config?.versionControl === "object" && config.versionControl !== null
+      ? config.versionControl.field
+      : config?.versionControl === true
+      ? "version"
+      : undefined;
 
   let createdId: string | number | null = params.fixtures.existingId ?? null;
   let secondId: string | number | null = null;
@@ -225,7 +231,7 @@ function buildResourceTestCases(
         assert(json?.success === true, "PATCH /:id envelope should have success: true");
 
         for (const [key, expectedValue] of Object.entries(params.fixtures.update)) {
-          if (config?.versionControl?.field && key === config.versionControl.field) {
+          if (versionControlField && key === versionControlField) {
             assertEqual(
               json?.data?.[key],
               Number(expectedValue) + 1,
@@ -245,10 +251,10 @@ function buildResourceTestCases(
     // 7. PATCH /:id (Optimistic Concurrency Control)
     {
       name: `PATCH ${pathPrefix}/:id - enforces optimistic concurrency control (OCC)`,
-      skip: !methods.has("update") || !config?.versionControl?.field,
+      skip: !methods.has("update") || !versionControlField,
       fn: async () => {
         assert(createdId !== null, "Cannot test OCC without a valid record ID");
-        const versionField = config!.versionControl!.field;
+        const versionField = versionControlField!;
         const { status, json } = await req(`/${createdId}`, {
           method: "PATCH",
           body: JSON.stringify({

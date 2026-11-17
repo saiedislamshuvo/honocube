@@ -1,6 +1,9 @@
 import type { FormApi } from "@tanstack/react-form";
 import type { Collection, InferRecord } from "../types/collection.js";
 import type { UseWorkflowReturn } from "../workflow/types.js";
+import type { RevisionConflict, ConflictResolutionAction } from "../concurrency/types.js";
+
+export type { RevisionConflict, ConflictResolutionAction };
 
 export interface FieldCapabilityState {
   visible: boolean;
@@ -134,6 +137,11 @@ export interface CollectionFormOptions<TCollection extends Collection<any>> {
   onError?: (error: Error) => void;
 
   /**
+   * Callback invoked when an optimistic concurrency control (OCC) or revision conflict is detected.
+   */
+  onConflict?: (conflict: RevisionConflict<InferRecord<TCollection>>) => void | Promise<void>;
+
+  /**
    * Custom validator or Standard Schema validator.
    */
   validator?:
@@ -226,4 +234,17 @@ export interface CollectionFormReturn<TCollection extends Collection<any>> {
    * Resets form to initial or loaded server values.
    */
   reset: () => void;
+
+  /**
+   * Active revision conflict details if an OCC conflict occurred on save.
+   */
+  conflict: RevisionConflict<InferRecord<TCollection>> | null;
+
+  /**
+   * Resolves an active revision conflict.
+   */
+  resolveConflict: (
+    action: ConflictResolutionAction,
+    mergedValues?: Partial<InferRecord<TCollection>>
+  ) => Promise<void>;
 }
