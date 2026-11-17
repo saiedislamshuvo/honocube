@@ -12,6 +12,7 @@ import type {
   CalendarViewConfig,
   GanttViewConfig,
   TreeViewConfig,
+  SpreadsheetViewConfig,
   SelectableFieldKeys,
   DateFieldKeys,
   ViewType,
@@ -95,6 +96,7 @@ export interface CollectionConfig<
   calendar?: CalendarViewConfig<Extract<keyof TFields, string>, DateFieldKeys<TFields>>;
   gantt?: GanttViewConfig<Extract<keyof TFields, string>, DateFieldKeys<TFields>>;
   tree?: TreeViewConfig<Extract<keyof TFields, string>>;
+  spreadsheet?: SpreadsheetViewConfig<Extract<keyof TFields, string>>;
   defaultView?: ViewType;
   workflow?: WorkflowConfig<InferRecord<TFields>>;
   sidePanel?: SidePanelConfig;

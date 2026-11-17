@@ -890,3 +890,45 @@ export interface AnalyticsChartCardProps {
   timeRangeOptions?: Array<{ label: string; value: string }>;
   className?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Spreadsheet Grid View Types
+// ---------------------------------------------------------------------------
+
+export interface SpreadsheetCellChange {
+  rowIndex: number;
+  colIndex: number;
+  columnKey: string;
+  oldValue: unknown;
+  newValue: unknown;
+}
+
+export interface SpreadsheetColumn {
+  key: string;
+  label: string;
+  type?: "text" | "number" | "boolean" | "select" | "date" | "currency";
+  width?: number | string;
+  readOnly?: boolean;
+  options?: Array<{ label: string; value: string | number }>;
+  format?: (val: unknown) => string;
+  formula?: (row: Record<string, unknown>, allRows: Record<string, unknown>[]) => unknown;
+  summary?: "sum" | "avg" | "count" | "min" | "max" | ((values: unknown[]) => unknown);
+  defaultValue?: unknown;
+}
+
+export interface SpreadsheetViewProps<TCollection extends Collection<any> = Collection<any>> {
+  collection?: TCollection;
+  data?: Array<InferRecord<TCollection>>;
+  initialData?: Array<Record<string, unknown>>;
+  columns?: SpreadsheetColumn[];
+  onDataChange?: (data: Record<string, unknown>[], changes: SpreadsheetCellChange[]) => void;
+  onSave?: (data: Record<string, unknown>[]) => Promise<void> | void;
+  readOnly?: boolean;
+  allowAddRows?: boolean;
+  allowDeleteRows?: boolean;
+  showFormulaBar?: boolean;
+  showSummaryRow?: boolean;
+  showToolbar?: boolean;
+  className?: string;
+  emptyText?: string;
+}

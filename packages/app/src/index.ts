@@ -67,6 +67,15 @@ export { WorkflowActionBar } from "./views/workflow-action-bar.js";
 export { DocumentHeader } from "./views/document-header.js";
 export { SidePanel } from "./views/side-panel.js";
 export { MetricCard, AnalyticsChartCard } from "./views/analytics-cards.js";
+export {
+  SpreadsheetView,
+  SpreadsheetGrid,
+  colIndexToLetter,
+  letterToColIndex,
+  coordToCellRef,
+  cellRefToCoord,
+  evaluateFormula,
+} from "./views/spreadsheet-view.js";
 
 // Interactive Analytics & Chart Primitives
 export {

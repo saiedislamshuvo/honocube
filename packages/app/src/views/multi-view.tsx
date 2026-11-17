@@ -11,6 +11,7 @@ import { CalendarView } from "./calendar-view.js";
 import { ListView } from "./list-view.js";
 import { GridView } from "./grid-view.js";
 import { TreeView } from "./tree-view.js";
+import { SpreadsheetView } from "./spreadsheet-view.js";
 import { useAppTheme } from "../theme/theme-provider.js";
 
 export function CollectionMultiView<TCollection extends Collection<any>>({
@@ -33,6 +34,7 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
     if (collection.list) views.push("list");
     if (collection.grid) views.push("grid");
     if (collection.tree) views.push("tree");
+    if (collection.spreadsheet) views.push("spreadsheet");
 
     return views;
   }, [collection, propAvailableViews]);
@@ -52,6 +54,7 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
   const ListComponent = appTheme?.components?.views?.list || ListView;
   const GridComponent = appTheme?.components?.views?.grid || GridView;
   const TreeComponent = appTheme?.components?.views?.tree || TreeView;
+  const SpreadsheetComponent = appTheme?.components?.views?.spreadsheet || SpreadsheetView;
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -117,6 +120,13 @@ export function CollectionMultiView<TCollection extends Collection<any>>({
               <TreeComponent
                 collection={collection}
                 onNodeClick={handleRecordClick ? (rec) => handleRecordClick(rec) : undefined}
+              />
+            );
+
+          case "spreadsheet":
+            return (
+              <SpreadsheetComponent
+                collection={collection}
               />
             );
 
