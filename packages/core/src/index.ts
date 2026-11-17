@@ -35,6 +35,7 @@ export {
   BarcodeFieldBuilder,
   QRCodeFieldBuilder,
   SignatureFieldBuilder,
+  RichTextFieldBuilder,
 } from "./core/builder.js";
 export {
   fromResource,
@@ -183,6 +184,7 @@ export type {
   BarcodeFieldProps,
   QRCodeFieldProps,
   SignaturePadProps,
+  RichTextEditorProps,
   DateRangePickerProps,
   FloatingSaveBarProps,
   PhoneInputFieldProps,
@@ -261,6 +263,7 @@ export type {
   IBarcodeFieldBuilder,
   IQRCodeFieldBuilder,
   ISignatureFieldBuilder,
+  IRichTextFieldBuilder,
 } from "./types/builder.js";
 
 export type {
@@ -291,6 +294,8 @@ export type {
   BarcodeFieldConfig,
   QRCodeFieldConfig,
   SignatureFieldConfig,
+  RichTextFieldConfig,
+  RichTextToolbarTool,
   FieldConfig,
   InferFieldValue,
 } from "./types/fields.js";
